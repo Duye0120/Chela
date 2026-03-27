@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>时间卡片</title>
+    <style>
+      :root {
+        --bg-start: #fff7e8;
+        --bg-end: #f3f8ff;
+        --panel: rgba(255, 255, 255, 0.9);
+        --panel-border: rgba(18, 35, 61, 0.1);
+        --text-main: #1b2433;
+        --text-subtle: #5e6b80;
+        --accent: #ff7a00;
+        --accent-deep: #c95c00;
+        --chip: #eef4ff;
+        --shadow: 0 18px 44px rgba(27, 36, 51, 0.12);
+        color: var(--text-main);
+        font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 18px;
+        background:
+          radial-gradient(circle at 12% 18%, rgba(255, 122, 0, 0.22), transparent 28%),
+          radial-gradient(circle at 84% 8%, rgba(63, 123, 255, 0.16), transparent 26%),
+          linear-gradient(180deg, var(--bg-start), var(--bg-end));
+      }
+
+      main {
+        position: relative;
+        width: 100%;
+        max-width: 440px;
+        margin: 0 auto;
+        padding: 22px;
+        border-radius: 24px;
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        animation: float-in 260ms ease-out;
+      }
+
+      main::after {
+        content: "";
+        position: absolute;
+        inset: auto -40px -70px auto;
+        width: 180px;
+        height: 180px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255, 122, 0, 0.24), transparent 68%);
+        pointer-events: none;
+      }
+
+      .stack {
+        display: grid;
+        gap: 14px;
+      }
+
+      .eyebrow {
+        margin: 0;
+        color: var(--accent-deep);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 30px;
+        line-height: 1.08;
+      }
+
+      .subtitle,
+      .meta,
+      .iso {
+        margin: 0;
+        color: var(--text-subtle);
+      }
+
+      .time-panel {
+        display: grid;
+        gap: 8px;
+        padding: 16px;
+        border-radius: 20px;
+        background: linear-gradient(135deg, rgba(255, 122, 0, 0.14), rgba(63, 123, 255, 0.08));
+        border: 1px solid rgba(255, 255, 255, 0.6);
+      }
+
+      .time-value {
+        margin: 0;
+        font-size: 34px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: var(--chip);
+        color: #244267;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      button {
+        flex: 1;
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 14px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 160ms ease, opacity 160ms ease, box-shadow 160ms ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      .primary {
+        color: white;
+        background: linear-gradient(135deg, var(--accent), #ff9b3d);
+        box-shadow: 0 10px 22px rgba(255, 122, 0, 0.26);
+      }
+
+      .secondary {
+        color: var(--text-main);
+        background: rgba(18, 35, 61, 0.06);
+      }
+
+      @keyframes float-in {
+        from {
+          opacity: 0;
+          transform: translateY(10px) scale(0.98);
+        }
+
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stack">
+      <p class="eyebrow">First Pi Agent</p>
+      <h1 id="title">时间卡片</h1>
+      <p class="subtitle" id="subtitle">等待 ChatGPT 调用工具中…</p>
+
+      <section class="time-panel">
+        <p class="time-value" id="time-value">--:--:--</p>
+        <div class="chips">
+          <span class="chip" id="timezone-chip">时区：--</span>
+          <span class="chip" id="refresh-chip">尚未刷新</span>
+        </div>
+      </section>
+
+      <p class="iso" id="iso-value">ISO：--</p>
+      <div class="actions">
+        <button class="primary" id="refresh-button" type="button">刷新时间</button>
+        <button class="secondary" id="explain-button" type="button">让 ChatGPT 解释</button>
+      </div>
+      <p class="meta" id="meta">Runtime：bridge only</p>
+    </main>
+
+    <script type="module">
+      const TOOL_NAME = "show_time_card";
+      const titleEl = document.querySelector("#title");
+      const subtitleEl = document.querySelector("#subtitle");
+      const timeValueEl = document.querySelector("#time-value");
+      const timezoneChipEl = document.querySelector("#timezone-chip");
+      const refreshChipEl = document.querySelector("#refresh-chip");
+      const isoValueEl = document.querySelector("#iso-value");
+      const metaEl = document.querySelector("#meta");
+      const refreshButtonEl = document.querySelector("#refresh-button");
+      const explainButtonEl = document.querySelector("#explain-button");
+
+      let toolOutput = window.openai?.toolOutput ?? null;
+      let rpcId = 0;
+      const pendingRequests = new Map();
+
+      const render = () => {
+        titleEl.textContent = toolOutput?.title ?? "时间卡片";
+        subtitleEl.textContent = toolOutput?.subtitle ?? "等待 ChatGPT 调用工具中…";
+        timeValueEl.textContent = toolOutput?.localTime ?? "--:--:--";
+        timezoneChipEl.textContent = "时区：" + (toolOutput?.timeZone ?? "--");
+        refreshChipEl.textContent = toolOutput?.refreshedAt ?? "尚未刷新";
+        isoValueEl.textContent = "ISO：" + (toolOutput?.isoTime ?? "--");
+
+        const mode = window.openai ? "bridge + window.openai" : "bridge only";
+        const theme = window.openai?.theme ?? "unknown";
+        const locale = window.openai?.locale ?? navigator.language ?? "unknown";
+        metaEl.textContent = `Runtime：${mode} | Theme：${theme} | Locale：${locale}`;
+
+        if (window.openai?.notifyIntrinsicHeight) {
+          window.openai.notifyIntrinsicHeight();
+        }
+      };
+
+      const rpcNotify = (method, params) => {
+        window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*");
+      };
+
+      const rpcRequest = (method, params) =>
+        new Promise((resolve, reject) => {
+          const id = ++rpcId;
+          pendingRequests.set(id, { resolve, reject });
+          window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+        });
+
+      window.addEventListener(
+        "message",
+        (event) => {
+          if (event.source !== window.parent) {
+            return;
+          }
+
+          const message = event.data;
+          if (!message || message.jsonrpc !== "2.0") {
+            return;
+          }
+
+          if (typeof message.id === "number") {
+            const pending = pendingRequests.get(message.id);
+            if (!pending) {
+              return;
+            }
+
+            pendingRequests.delete(message.id);
+            if (message.error) {
+              pending.reject(message.error);
+              return;
+            }
+
+            pending.resolve(message.result);
+            return;
+          }
+
+          if (message.method === "ui/notifications/tool-result") {
+            toolOutput = message.params?.structuredContent ?? toolOutput;
+            render();
+          }
+        },
+        { passive: true },
+      );
+
+      const initializeBridge = async () => {
+        await rpcRequest("ui/initialize", {
+          appInfo: { name: "first-pi-time-widget", version: "1.0.0" },
+          appCapabilities: {},
+          protocolVersion: "2026-01-26",
+        });
+        rpcNotify("ui/notifications/initialized", {});
+      };
+
+      const bridgeReady = initializeBridge();
+
+      refreshButtonEl.addEventListener("click", async () => {
+        await bridgeReady;
+
+        const response = await rpcRequest("tools/call", {
+          name: TOOL_NAME,
+          arguments: {
+            note: "这次刷新来自 widget 按钮。",
+          },
+        });
+
+        toolOutput = response?.structuredContent ?? toolOutput;
+        render();
+      });
+
+      explainButtonEl.addEventListener("click", async () => {
+        await bridgeReady;
+
+        rpcNotify("ui/message", {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "请解释这个 ChatGPT App 的工作方式，并顺便说明当前时间所属时区。",
+            },
+          ],
+        });
+      });
+
+      render();
+    </script>
+  </body>
+</html>

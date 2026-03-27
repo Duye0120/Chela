@@ -9,8 +9,13 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "verbatimModuleSyntax": true,
-    "types": ["node"],
-    "noEmitOnError": true
+    "types": ["node", "electron"],
+    "noEmitOnError": true,
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["src/shared/*"]
+    }
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/renderer/**/*"]
 }

@@ -3,22 +3,43 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "main": "out/main/index.js",
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "tsx src/main.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/main.js"
+    "dev": "electron-vite dev",
+    "demo:cli": "tsx src/main.ts",
+    "mcp:dev": "tsx watch src/chatgpt/server.ts",
+    "mcp:start": "tsx src/chatgpt/server.ts",
+    "build": "electron-vite build",
+    "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
+    "start": "electron-vite preview"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.9",
+    "@heroicons/react": "^2.2.0",
     "@mariozechner/pi-agent-core": "0.56.2",
     "@mariozechner/pi-ai": "0.56.2",
-    "dotenv": "^17.3.1"
+    "@modelcontextprotocol/ext-apps": "^1.0.1",
+    "@modelcontextprotocol/sdk": "^1.20.2",
+    "dotenv": "^17.3.1",
+    "electron": "^41.1.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "autoprefixer": "^10.4.27",
+    "electron-vite": "^5.0.0",
+    "postcss": "^8.5.8",
+    "tailwindcss": "3.4.17",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vite": "^7.3.1"
   }
 }

@@ -1,0 +1,88 @@
+import { AdjustmentsHorizontalIcon, BoltIcon, Cog6ToothIcon, PlusIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
+import type { ChatSessionSummary } from "@shared/contracts";
+import { formatRelativeTime } from "@renderer/lib/session";
+
+type SidebarProps = {
+  summaries: ChatSessionSummary[];
+  activeSessionId: string | null;
+  onSelectSession: (sessionId: string) => void;
+  onNewSession: () => void;
+};
+
+export function Sidebar({ summaries, activeSessionId, onSelectSession, onNewSession }: SidebarProps) {
+  return (
+    <aside className="flex h-full flex-col border-r border-black/6 bg-[#eef2f8]">
+      <div className="px-3 pb-4 pt-3">
+        <div className="space-y-1">
+          {[
+            { label: "新线程", icon: PlusIcon, active: true, onClick: onNewSession },
+            { label: "技能", icon: Squares2X2Icon },
+            { label: "自动化", icon: BoltIcon },
+          ].map(({ label, icon: Icon, active, onClick }) => (
+            <button
+              key={label}
+              type="button"
+              onClick={onClick}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ${
+                active
+                  ? "bg-white text-shell-200 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
+                  : "text-shell-400 hover:bg-white/70 hover:text-shell-200"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-black/5 px-4 pb-2 pt-4">
+        <div className="flex items-center justify-between">
+          <p className="text-xs uppercase tracking-[0.24em] text-shell-500">线程</p>
+          <div className="flex items-center gap-1 text-shell-500">
+            <button type="button" className="rounded-lg p-1 transition hover:bg-white/70 hover:text-shell-200">
+              <AdjustmentsHorizontalIcon className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 space-y-2 overflow-y-auto px-3 pb-4">
+        {summaries.map((summary) => {
+          const active = summary.id === activeSessionId;
+
+          return (
+            <button
+              key={summary.id}
+              type="button"
+              onClick={() => onSelectSession(summary.id)}
+              className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
+                active
+                  ? "border-accent-400/25 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
+                  : "border-transparent bg-transparent hover:border-black/6 hover:bg-white/72"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-shell-200">{summary.title}</p>
+                  <p className="mt-1 text-xs text-shell-500">{summary.messageCount} 条消息</p>
+                </div>
+                <span className="shrink-0 text-[11px] text-shell-500">{formatRelativeTime(summary.updatedAt)}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-auto border-t border-black/5 px-3 py-3">
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-shell-400 transition hover:bg-white/72 hover:text-shell-200"
+        >
+          <Cog6ToothIcon className="h-4 w-4" />
+          设置
+        </button>
+      </div>
+    </aside>
+  );
+}

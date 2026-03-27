@@ -1,0 +1,16 @@
+export const IPC_CHANNELS = {
+  filesPick: "files:pick",
+  filesReadPreview: "files:read-preview",
+  sessionsList: "sessions:list",
+  sessionsLoad: "sessions:load",
+  sessionsSave: "sessions:save",
+  sessionsCreate: "sessions:create",
+  chatSend: "chat:send",
+  uiGetState: "ui:get-state",
+  uiSetRightPanelOpen: "ui:set-right-panel-open",
+  windowGetState: "window:get-state",
+  windowMinimize: "window:minimize",
+  windowToggleMaximize: "window:toggle-maximize",
+  windowClose: "window:close",
+  windowStateChanged: "window:state-changed",
+} as const;
