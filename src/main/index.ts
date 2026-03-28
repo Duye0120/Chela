@@ -35,7 +35,7 @@ function createMainWindow() {
     minWidth: 1120,
     minHeight: 720,
     frame: false,
-    backgroundColor: "#0b0d12",
+    backgroundColor: "#e8ecf2",
     title: "first_pi_agent",
     webPreferences: {
       preload: getPreloadPath(),

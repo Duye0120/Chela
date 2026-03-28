@@ -12,7 +12,7 @@ type SidebarProps = {
 
 export function Sidebar({ summaries, activeSessionId, onSelectSession, onNewSession }: SidebarProps) {
   return (
-    <aside className="flex h-full flex-col border-r border-black/6 bg-[#eef2f8]">
+    <aside className="flex h-full flex-col bg-transparent">
       <div className="px-3 pb-4 pt-3">
         <div className="space-y-1">
           {[
@@ -26,8 +26,8 @@ export function Sidebar({ summaries, activeSessionId, onSelectSession, onNewSess
               variant="ghost"
               className={`flex w-full justify-start gap-3 rounded-xl px-3 py-2 text-left text-sm transition ${
                 active
-                  ? "bg-white text-shell-200 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
-                  : "text-shell-400 hover:bg-white/70 hover:text-shell-200"
+                  ? "bg-white/70 text-shell-200 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
+                  : "text-shell-400 hover:bg-white/50 hover:text-shell-200"
               }`}
             >
               <Icon className="h-4 w-4" />
@@ -59,8 +59,8 @@ export function Sidebar({ summaries, activeSessionId, onSelectSession, onNewSess
               variant="ghost"
               className={`h-auto w-full justify-start rounded-xl border px-3 py-2.5 text-left transition ${
                 active
-                  ? "border-accent-400/25 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
-                  : "border-transparent bg-transparent hover:border-black/6 hover:bg-white/72"
+                  ? "border-accent-400/25 bg-white/70 shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
+                  : "border-transparent bg-transparent hover:border-black/6 hover:bg-white/50"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -76,7 +76,7 @@ export function Sidebar({ summaries, activeSessionId, onSelectSession, onNewSess
       </div>
 
       <div className="mt-auto border-t border-black/5 px-3 py-3">
-        <Button variant="ghost" className="flex w-full justify-start gap-3 rounded-xl px-3 py-2 text-left text-sm text-shell-400">
+        <Button variant="ghost" className="flex w-full justify-start gap-3 rounded-xl px-3 py-2 text-left text-sm text-shell-400 hover:bg-white/50">
           <Cog6ToothIcon className="h-4 w-4" />
           设置
         </Button>

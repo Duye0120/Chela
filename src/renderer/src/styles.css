@@ -4,7 +4,7 @@
 :root {
   color-scheme: light;
   font-family: "Segoe UI Variable", "PingFang SC", "Microsoft YaHei UI", sans-serif;
-  background: #f7f7f4;
+  background: #e8ecf2;
 }
 
 html,
@@ -17,9 +17,7 @@ body,
 body {
   overflow: hidden;
   color: #121b24;
-  background:
-    radial-gradient(circle at top, rgba(103, 148, 214, 0.08), transparent 24%),
-    linear-gradient(180deg, #fbfbf8 0%, #f6f7f4 100%);
+  background: #e8ecf2;
 }
 
 * {
@@ -59,19 +57,14 @@ input {
 @layer components {
   .titlebar-control {
     display: flex;
-    height: 2.25rem;
-    width: 2.25rem;
+    height: 2.5rem;
+    width: 2.75rem;
     align-items: center;
     justify-content: center;
     color: #6f8096;
     transition:
       background-color 160ms ease,
       color 160ms ease;
-  }
-
-  .titlebar-control:hover {
-    background: rgba(47, 118, 210, 0.08);
-    color: #121b24;
   }
 
   .composer-ghost-button {
@@ -120,5 +113,20 @@ input {
     border: 1px solid rgba(15, 23, 42, 0.08);
     background: rgba(255, 255, 255, 0.78);
     color: #526171;
+  }
+
+  .floating-workspace {
+    position: relative;
+  }
+
+  .floating-workspace::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.75) inset,
+      0 24px 60px rgba(86, 100, 129, 0.1);
+    pointer-events: none;
   }
 }

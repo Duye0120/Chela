@@ -37,7 +37,7 @@ export function Composer({
 
   return (
     <section className="px-8 pb-6 pt-2">
-      <div className="mx-auto max-w-4xl rounded-[30px] border border-black/8 bg-white/92 px-5 py-4 shadow-[0_16px_44px_rgba(99,117,145,0.16)]">
+      <div className="mx-auto max-w-4xl rounded-xl border border-black/8 bg-white px-5 py-4 shadow-[0_4px_14px_rgba(99,117,145,0.06)]">
         {attachments.length > 0 ? (
           <div className="mb-3 flex flex-wrap gap-2">
             {attachments.map((attachment) => (
@@ -73,7 +73,7 @@ export function Composer({
               onSend();
             }
           }}
-          placeholder="给 first_pi_agent 发一条消息，或者附加一些本地文件…"
+          placeholder="向 first_pi_agent 提问，@ 添加文件，/ 输入命令…"
           variant="secondary"
           className="w-full border-none bg-transparent text-[15px] leading-8 text-shell-100 shadow-none outline-none placeholder:text-shell-500"
         />

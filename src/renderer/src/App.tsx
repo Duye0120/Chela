@@ -1,5 +1,6 @@
-import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDownIcon } from "@heroicons/react/24/outline";
+import { startTransition, useCallback, useEffect, useState } from "react";
+import { RectangleGroupIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { Button } from "@heroui/react";
 import type { ChatMessage, ChatSession, ChatSessionSummary, SelectedFile, WindowFrameState } from "@shared/contracts";
 import { Composer } from "@renderer/components/Composer";
 import { ContextPanel } from "@renderer/components/ContextPanel";
@@ -282,17 +283,9 @@ export default function App() {
     void desktopApi?.ui.setRightPanelOpen(nextOpen);
   }, [desktopApi, rightPanelOpen]);
 
-  const topSummary = useMemo(() => {
-    if (!activeSession) {
-      return "准备启动工作线程";
-    }
-
-    return `${activeSession.messages.length} 条消息 · ${activeSession.attachments.length} 个附件等待发送`;
-  }, [activeSession]);
-
   if (booting) {
     return (
-      <main className="grid h-screen place-items-center bg-shell-950 text-shell-300">
+      <main className="grid h-screen place-items-center bg-[#e8ecf2] text-shell-300">
         <div className="rounded-[28px] border border-black/8 bg-white/82 px-8 py-7 shadow-glow">
           <p className="text-xs uppercase tracking-[0.24em] text-shell-500">Booting</p>
           <h1 className="mt-3 text-2xl font-semibold text-shell-100">正在拉起桌面聊天壳…</h1>
@@ -304,7 +297,7 @@ export default function App() {
 
   if (bootError) {
     return (
-      <main className="grid h-screen place-items-center bg-shell-950 px-8 text-shell-300">
+      <main className="grid h-screen place-items-center bg-[#e8ecf2] px-8 text-shell-300">
         <div className="max-w-2xl rounded-[28px] border border-rose-400/25 bg-rose-50 px-8 py-7 shadow-glow">
           <p className="text-xs uppercase tracking-[0.24em] text-rose-200">Renderer Error</p>
           <h1 className="mt-3 text-2xl font-semibold text-shell-100">界面初始化失败</h1>
@@ -316,18 +309,14 @@ export default function App() {
   }
 
   return (
-    <main className="grid h-screen grid-rows-[auto_1fr] bg-shell-950 text-shell-100">
+    <main className="flex h-screen flex-col bg-[#e8ecf2] text-shell-100">
       <TitleBar
-        sessionTitle={activeSession?.title ?? "新的工作线程"}
         isMaximized={frameState.isMaximized}
-        rightPanelOpen={rightPanelOpen}
-        onToggleRightPanel={toggleRightPanel}
         onMinimize={() => desktopApi?.window.minimize()}
         onToggleMaximize={() => desktopApi?.window.toggleMaximize()}
         onClose={() => desktopApi?.window.close()}
       />
-
-      <div className={`grid min-h-0 ${rightPanelOpen ? "grid-cols-[220px_minmax(0,1fr)_300px]" : "grid-cols-[220px_minmax(0,1fr)]"}`}>
+      <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)]">
         <Sidebar
           summaries={summaries}
           activeSessionId={activeSessionId}
@@ -335,42 +324,57 @@ export default function App() {
           onNewSession={createNewSession}
         />
 
-        <section className="flex min-h-0 flex-col bg-[#fbfbf8]">
-          <div className="border-b border-black/6 px-10 py-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 text-xs text-shell-500">
-                  <span>聊天</span>
-                  <ChevronDownIcon className="h-3.5 w-3.5" />
+        <section className="flex min-h-0 flex-col overflow-hidden">
+          <div className="floating-workspace flex min-h-0 flex-1 flex-col overflow-hidden rounded-tl-2xl border-l border-black/8 bg-white">
+            <div className="flex items-center justify-between border-b border-black/6 px-5 py-3">
+              <h1 className="text-sm font-medium text-shell-300">{activeSession?.title ?? "新线程"}</h1>
+              <Button
+                isIconOnly
+                variant="ghost"
+                onClick={toggleRightPanel}
+                className="heroui-ghost-button h-8 min-w-8 rounded-lg"
+                aria-label={rightPanelOpen ? "收起右侧上下文" : "展开右侧上下文"}
+              >
+                <RectangleGroupIcon className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className={`grid min-h-0 flex-1 ${rightPanelOpen ? "grid-cols-[minmax(0,1fr)_300px]" : "grid-cols-[minmax(0,1fr)]"}`}>
+              <section className="flex min-h-0 flex-col bg-transparent">
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <MessageList messages={activeSession?.messages ?? []} />
                 </div>
-                <h1 className="mt-2 text-lg font-semibold text-shell-100">{activeSession?.title ?? "新的工作线程"}</h1>
-                <p className="mt-1 text-sm text-shell-500">{topSummary}</p>
-              </div>
-              <div className="hidden items-center gap-2 lg:flex">
-                <span className="rounded-full border border-black/8 bg-white px-3 py-1 text-xs text-shell-500">
-                  在线
-                </span>
-              </div>
+
+                <Composer
+                  draft={activeSession?.draft ?? ""}
+                  attachments={activeSession?.attachments ?? []}
+                  isSending={isSending}
+                  isPickingFiles={isPickingFiles}
+                  onDraftChange={updateDraft}
+                  onAttachFiles={attachFiles}
+                  onRemoveAttachment={removeAttachment}
+                  onSend={() => void sendMessage()}
+                />
+              </section>
+
+              {rightPanelOpen ? <ContextPanel open={rightPanelOpen} session={activeSession} /> : null}
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <MessageList messages={activeSession?.messages ?? []} />
+          <div className="flex h-24 items-start justify-between border-l border-t border-black/8 bg-white px-5 py-4 text-shell-500">
+            <div>
+              <p className="text-sm font-medium text-shell-300">Terminal</p>
+              <p className="mt-1 text-xs">预留区域，后续接真实终端输出。</p>
+            </div>
+            <button
+              type="button"
+              className="rounded-lg p-1 text-shell-500 transition hover:bg-black/5 hover:text-shell-200"
+              aria-label="关闭终端占位"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
           </div>
-
-          <Composer
-            draft={activeSession?.draft ?? ""}
-            attachments={activeSession?.attachments ?? []}
-            isSending={isSending}
-            isPickingFiles={isPickingFiles}
-            onDraftChange={updateDraft}
-            onAttachFiles={attachFiles}
-            onRemoveAttachment={removeAttachment}
-            onSend={() => void sendMessage()}
-          />
         </section>
-
-        {rightPanelOpen ? <ContextPanel open={rightPanelOpen} session={activeSession} /> : null}
       </div>
     </main>
   );

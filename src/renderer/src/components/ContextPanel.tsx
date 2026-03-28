@@ -55,7 +55,7 @@ export function ContextPanel({ open, session }: ContextPanelProps) {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 16 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="h-full border-l border-black/6 bg-[#f4f7fb] px-4 py-4"
+          className="h-full border-l border-black/6 bg-[#f5f7fb]/88 px-4 py-4 backdrop-blur-sm"
         >
         <div className="mb-4">
           <p className="text-xs uppercase tracking-[0.24em] text-shell-500">Context</p>

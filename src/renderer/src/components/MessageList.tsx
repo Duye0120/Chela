@@ -1,3 +1,4 @@
+import { ChevronDownIcon, CloudIcon } from "@heroicons/react/24/outline";
 import type { ChatMessage } from "@shared/contracts";
 import { formatTime } from "@renderer/lib/session";
 
@@ -8,27 +9,19 @@ type MessageListProps = {
 export function MessageList({ messages }: MessageListProps) {
   if (messages.length === 0) {
     return (
-      <section className="px-12 py-10">
-        <div className="mx-auto max-w-4xl">
-          <p className="text-xs uppercase tracking-[0.28em] text-shell-500">Chat</p>
-          <h2 className="mt-4 text-[34px] font-semibold tracking-[-0.03em] text-shell-100">新的聊天</h2>
-          <div className="mt-8 space-y-7 text-[15px] leading-8 text-shell-300">
-            <p>这里现在是一个更偏聊天体验的工作台，不再强调开发或工作区概念，只保留你喜欢的那种界面气质。</p>
-            <div>
-              <p className="mb-2 font-medium text-shell-200">你可以直接开始聊天：</p>
-              <ul className="space-y-2 pl-5 text-shell-300">
-                <li>• 支持多会话切换</li>
-                <li>• 支持本地附件与预览</li>
-                <li>• 支持草稿恢复与历史保留</li>
-              </ul>
-            </div>
-            <div className="rounded-3xl border border-black/6 bg-white/78 p-5 shadow-[0_8px_24px_rgba(90,109,139,0.08)]">
-              <p className="text-sm leading-7 text-shell-300">从左上角点一次“新线程”就够了，其他多余入口我已经继续收掉。</p>
-            </div>
-            <div className="rounded-3xl border border-black/6 bg-white/78 p-5 shadow-[0_8px_24px_rgba(90,109,139,0.08)]">
-              <p className="text-sm leading-7 text-shell-300">如果你后面想继续往图片里那个感觉靠，我会优先继续收窄顶部工具条、弱化右侧面板、再压低左侧信息密度。</p>
-            </div>
+      <section className="flex min-h-full flex-col items-center justify-center px-12 py-10">
+        <div className="flex max-w-4xl flex-col items-center text-center">
+          <div className="grid h-16 w-16 place-items-center rounded-full border border-black/6 bg-[#f3f6fb] text-shell-500">
+            <CloudIcon className="h-8 w-8" />
           </div>
+          <h2 className="mt-6 text-[34px] font-semibold tracking-[-0.03em] text-shell-100">Let&apos;s build</h2>
+          <button
+            type="button"
+            className="mt-4 inline-flex items-center gap-1 rounded-full border border-black/8 bg-white/80 px-3 py-1.5 text-sm text-shell-500"
+          >
+            first_pi_agent
+            <ChevronDownIcon className="h-4 w-4" />
+          </button>
         </div>
       </section>
     );
