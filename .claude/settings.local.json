@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(ls:*)",
+      "Read(//c/Users/Administrator/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.6/skills/brainstorming/**)",
+      "Bash(bash scripts/start-server.sh --project-dir \"D:/a_github/first_pi_agent\")"
+    ]
+  }
+}
