@@ -1,5 +1,5 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
-import { RectangleGroupIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { RectangleGroupIcon } from "@heroicons/react/24/outline";
 import { Button } from "@heroui/react";
 import type { ChatMessage, ChatSession, ChatSessionSummary, ModelSelection, SelectedFile, Settings, ThinkingLevel, WindowFrameState } from "@shared/contracts";
 import { Composer } from "@renderer/components/Composer";
@@ -8,6 +8,7 @@ import { MessageList } from "@renderer/components/MessageList";
 import { Sidebar } from "@renderer/components/Sidebar";
 import { TitleBar } from "@renderer/components/TitleBar";
 import { SettingsModal } from "@renderer/components/SettingsModal";
+import { TerminalDrawer } from "@renderer/components/TerminalDrawer";
 import { deriveSessionTitle, mergeAttachments, upsertSummary } from "@renderer/lib/session";
 import { useAgentEvents } from "@renderer/hooks/useAgentEvents";
 
@@ -40,6 +41,7 @@ export default function App() {
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [frameState, setFrameState] = useState<WindowFrameState>({ isMaximized: false });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
   const [currentModel, setCurrentModel] = useState<ModelSelection>({ provider: "anthropic", model: "claude-sonnet-4-20250514" });
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("off");
 
@@ -136,7 +138,19 @@ export default function App() {
       setFrameState(state);
     });
 
-    return cleanup;
+    // Cmd/Ctrl+J to toggle terminal
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "j") {
+        e.preventDefault();
+        setTerminalOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      cleanup();
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, [bootApp, desktopApi]);
 
   const createNewSession = useCallback(async () => {
@@ -406,19 +420,10 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex h-24 items-start justify-between border-l border-t border-black/8 bg-white px-5 py-4 text-shell-500">
-            <div>
-              <p className="text-sm font-medium text-shell-300">Terminal</p>
-              <p className="mt-1 text-xs">预留区域，后续接真实终端输出。</p>
-            </div>
-            <button
-              type="button"
-              className="rounded-lg p-1 text-shell-500 transition hover:bg-black/5 hover:text-shell-200"
-              aria-label="关闭终端占位"
-            >
-              <XMarkIcon className="h-4 w-4" />
-            </button>
-          </div>
+          <TerminalDrawer
+            open={terminalOpen}
+            onToggle={() => setTerminalOpen((prev) => !prev)}
+          />
         </section>
       </div>
 

@@ -10,6 +10,7 @@ import { initAgent, promptAgent, cancelAgent, getCurrentHandle } from "./agent.j
 import { getSettings, updateSettings } from "./settings.js";
 import { getMaskedCredentials, setCredential, deleteCredential, testCredential } from "./credentials.js";
 import { getSoulFilesStatus } from "./soul.js";
+import { setTerminalWindow, createTerminal, writeTerminal, resizeTerminal, destroyTerminal, destroyAllTerminals } from "./terminal.js";
 
 let mainWindow: BrowserWindow | null = null;
 let adapter: ElectronAdapter | null = null;
@@ -84,7 +85,7 @@ function registerIpcHandlers() {
     let handle = getCurrentHandle();
     if (!handle || handle.sessionId !== input.sessionId) {
       const session = await loadSession(input.sessionId);
-      handle = initAgent(input.sessionId, adapter, session?.messages ?? []);
+      handle = await initAgent(input.sessionId, adapter, session?.messages ?? []);
     }
 
     try {
@@ -141,6 +142,16 @@ function registerIpcHandlers() {
     return getSoulFilesStatus(settings.workspace);
   });
 
+  // Terminal
+  ipcMain.handle(IPC_CHANNELS.terminalCreate, async (_event, options?: { cwd?: string }) =>
+    createTerminal(options));
+  ipcMain.handle(IPC_CHANNELS.terminalWrite, async (_event, id: string, data: string) =>
+    writeTerminal(id, data));
+  ipcMain.handle(IPC_CHANNELS.terminalResize, async (_event, id: string, cols: number, rows: number) =>
+    resizeTerminal(id, cols, rows));
+  ipcMain.handle(IPC_CHANNELS.terminalDestroy, async (_event, id: string) =>
+    destroyTerminal(id));
+
   ipcMain.handle(IPC_CHANNELS.uiGetState, async () => getUiState());
   ipcMain.handle(IPC_CHANNELS.uiSetRightPanelOpen, async (_event, open: boolean) => setRightPanelOpen(open));
 
@@ -164,6 +175,7 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   createMainWindow();
   adapter = new ElectronAdapter(mainWindow!);
+  setTerminalWindow(mainWindow!);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -173,6 +185,7 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  destroyAllTerminals();
   if (process.platform !== "darwin") {
     app.quit();
   }

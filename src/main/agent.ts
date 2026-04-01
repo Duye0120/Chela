@@ -6,6 +6,9 @@ import { getSettings } from "./settings.js";
 import { getApiKey } from "./credentials.js";
 import { getBuiltinTools } from "./tools/index.js";
 import { buildSoulPromptSection } from "./soul.js";
+import { loadMcpConfig, getActiveServers } from "../mcp/config.js";
+import { connectMcpServer, getConnections, disconnectAllMcpServers } from "../mcp/client.js";
+import { getAllMcpTools } from "../mcp/adapter.js";
 
 export interface AgentHandle {
   agent: Agent;
@@ -18,11 +21,11 @@ let currentHandle: AgentHandle | null = null;
 /**
  * Create and initialize an Agent instance for a session.
  */
-export function initAgent(
+export async function initAgent(
   sessionId: string,
   adapter: ElectronAdapter,
   existingMessages?: any[],
-): AgentHandle {
+): Promise<AgentHandle> {
   // Destroy previous agent if exists
   if (currentHandle) {
     destroyAgent(currentHandle);
@@ -42,12 +45,26 @@ export function initAgent(
     model = getModel("anthropic" as any, "claude-sonnet-4-20250514" as any);
   }
 
+  // Load MCP tools
+  const builtinTools = getBuiltinTools(adapter.workspacePath);
+  let mcpTools: any[] = [];
+  try {
+    const mcpConfig = loadMcpConfig(adapter.workspacePath);
+    const servers = getActiveServers(mcpConfig);
+    for (const [name, cfg] of servers) {
+      try {
+        await connectMcpServer(name, cfg);
+      } catch { /* skip failing servers */ }
+    }
+    mcpTools = await getAllMcpTools(getConnections());
+  } catch { /* MCP init failure is non-fatal */ }
+
   const agent = new Agent({
     initialState: {
       systemPrompt: buildSystemPrompt(adapter.workspacePath),
       model,
       thinkingLevel: settings.thinkingLevel,
-      tools: getBuiltinTools(adapter.workspacePath),
+      tools: [...builtinTools, ...mcpTools],
       messages: existingMessages ?? [],
     },
     getApiKey: (provider: string) => {
@@ -88,12 +105,13 @@ export function cancelAgent(handle: AgentHandle): void {
 /**
  * Destroy an agent handle and clean up resources.
  */
-export function destroyAgent(handle: AgentHandle): void {
+export async function destroyAgent(handle: AgentHandle): Promise<void> {
   handle.unsubscribe();
   handle.agent.abort();
   if (currentHandle === handle) {
     currentHandle = null;
   }
+  await disconnectAllMcpServers();
 }
 
 /**
