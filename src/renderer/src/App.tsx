@@ -1,7 +1,7 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import { RectangleGroupIcon } from "@heroicons/react/24/outline";
 import { Button } from "@heroui/react";
-import type { ChatMessage, ChatSession, ChatSessionSummary, ModelSelection, SelectedFile, ThinkingLevel, WindowFrameState } from "@shared/contracts";
+import type { ChatMessage, ChatSession, ChatSessionSummary, ModelSelection, SelectedFile, SessionGroup, ThinkingLevel, WindowFrameState } from "@shared/contracts";
 import { Composer } from "@renderer/components/Composer";
 import { ContextPanel } from "@renderer/components/ContextPanel";
 import { MessageList } from "@renderer/components/MessageList";
@@ -38,6 +38,7 @@ export default function App() {
   const [isPickingFiles, setIsPickingFiles] = useState(false);
   const [summaries, setSummaries] = useState<ChatSessionSummary[]>([]);
   const [archivedSummaries, setArchivedSummaries] = useState<ChatSessionSummary[]>([]);
+  const [groups, setGroups] = useState<SessionGroup[]>([]);
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [frameState, setFrameState] = useState<WindowFrameState>({ isMaximized: false });
@@ -106,11 +107,12 @@ export default function App() {
     }
 
     try {
-      const [uiState, frame, sessionSummaries, archivedList, settings] = await Promise.all([
+      const [uiState, frame, sessionSummaries, archivedList, groupList, settings] = await Promise.all([
         desktopApi.ui.getState(),
         desktopApi.window.getState(),
         desktopApi.sessions.list(),
         desktopApi.sessions.listArchived(),
+        desktopApi.groups.list(),
         desktopApi.settings.get(),
       ]);
 
@@ -118,6 +120,7 @@ export default function App() {
       setFrameState(frame);
       setSummaries(sessionSummaries);
       setArchivedSummaries(archivedList);
+      setGroups(groupList);
       if (settings) {
         setCurrentModel(settings.defaultModel);
         setThinkingLevel(settings.thinkingLevel);
@@ -143,7 +146,6 @@ export default function App() {
     }
   }, [desktopApi, hydrateSession]);
 
-  // When agent finishes, persist the assistant message into the session
   useEffect(() => {
     if (
       currentResponse &&
@@ -282,6 +284,35 @@ export default function App() {
     void createNewSession();
   }, [createNewSession, desktopApi, refreshSessionLists, selectSession]);
 
+  const createGroup = useCallback(async (name: string) => {
+    if (!desktopApi) return;
+    const group = await desktopApi.groups.create(name);
+    setGroups((prev) => [...prev, group]);
+  }, [desktopApi]);
+
+  const renameGroup = useCallback(async (groupId: string, name: string) => {
+    if (!desktopApi) return;
+    await desktopApi.groups.rename(groupId, name);
+    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, name } : g)));
+  }, [desktopApi]);
+
+  const deleteGroup = useCallback(async (groupId: string) => {
+    if (!desktopApi) return;
+    await desktopApi.groups.delete(groupId);
+    setGroups((prev) => prev.filter((g) => g.id !== groupId));
+    // Refresh summaries so groupId is cleared on all affected sessions
+    await refreshSessionLists();
+  }, [desktopApi, refreshSessionLists]);
+
+  const setSessionGroup = useCallback(async (sessionId: string, groupId: string | null) => {
+    if (!desktopApi) return;
+    await desktopApi.sessions.setGroup(sessionId, groupId);
+    // Update summary in state optimistically
+    setSummaries((prev) =>
+      prev.map((s) => (s.id === sessionId ? { ...s, groupId: groupId ?? undefined } : s))
+    );
+  }, [desktopApi]);
+
   const updateDraft = useCallback(
     (draft: string) => {
       setActiveSession((current) => {
@@ -394,7 +425,6 @@ export default function App() {
         throw new Error("桌面桥接不可用，无法发送消息。");
       }
 
-      // Fire and forget — response comes via agent events (useAgentEvents hook)
       await desktopApi.chat.send({
         sessionId: activeSession.id,
         text,
@@ -480,6 +510,11 @@ export default function App() {
           onUnarchiveSession={unarchiveSession}
           onDeleteSession={deleteSessionPermanently}
           archivedSummaries={archivedSummaries}
+          groups={groups}
+          onCreateGroup={createGroup}
+          onRenameGroup={renameGroup}
+          onDeleteGroup={deleteGroup}
+          onSetSessionGroup={setSessionGroup}
         />
 
         <section className="flex min-h-0 flex-col overflow-hidden">

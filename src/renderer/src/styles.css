@@ -31,6 +31,15 @@ input {
   font: inherit;
 }
 
+/* ── Override HeroUI/browser focus ring on plain inputs ── */
+@layer base {
+  input:focus,
+  input:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

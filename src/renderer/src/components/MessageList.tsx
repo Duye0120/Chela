@@ -88,7 +88,7 @@ export function MessageList({ messages, streamingResponse, onCancelAgent }: Mess
             <CloudIcon className="h-5 w-5" />
           </div>
           <h2 className="mt-4 text-lg font-medium text-gray-700">开始构建</h2>
-          <p className="mt-1 text-[13px] text-gray-300">first_pi_agent</p>
+          <p className="mt-1 text-[13px] text-gray-400">first_pi_agent</p>
         </div>
       </section>
     );

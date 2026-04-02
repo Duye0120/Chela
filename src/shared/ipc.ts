@@ -12,6 +12,13 @@ export const IPC_CHANNELS = {
   sessionsUnarchive: "sessions:unarchive",
   sessionsListArchived: "sessions:list-archived",
   sessionsDelete: "sessions:delete",
+  sessionsSetGroup: "sessions:set-group",
+
+  // Groups
+  groupsList: "groups:list",
+  groupsCreate: "groups:create",
+  groupsRename: "groups:rename",
+  groupsDelete: "groups:delete",
 
   // Chat
   chatSend: "chat:send",

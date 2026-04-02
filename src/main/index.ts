@@ -4,14 +4,19 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { pickFiles, readFilePreview } from "./files.js";
 import {
   archiveSession,
+  createGroup,
   createSession,
+  deleteGroup,
   deleteSession,
   getUiState,
   listArchivedSessions,
+  listGroups,
   listSessions,
   loadSession,
+  renameGroup,
   saveSession,
   setRightPanelOpen,
+  setSessionGroup,
   unarchiveSession,
 } from "./store.js";
 import { IPC_CHANNELS } from "../shared/ipc.js";
@@ -92,6 +97,12 @@ function registerIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.sessionsUnarchive, async (_event, sessionId: string) => unarchiveSession(sessionId));
   ipcMain.handle(IPC_CHANNELS.sessionsListArchived, async () => listArchivedSessions());
   ipcMain.handle(IPC_CHANNELS.sessionsDelete, async (_event, sessionId: string) => deleteSession(sessionId));
+  ipcMain.handle(IPC_CHANNELS.sessionsSetGroup, async (_event, sessionId: string, groupId: string | null) => setSessionGroup(sessionId, groupId));
+
+  ipcMain.handle(IPC_CHANNELS.groupsList, async () => listGroups());
+  ipcMain.handle(IPC_CHANNELS.groupsCreate, async (_event, name: string) => createGroup(name));
+  ipcMain.handle(IPC_CHANNELS.groupsRename, async (_event, groupId: string, name: string) => renameGroup(groupId, name));
+  ipcMain.handle(IPC_CHANNELS.groupsDelete, async (_event, groupId: string) => deleteGroup(groupId));
 
   ipcMain.handle(IPC_CHANNELS.chatSend, async (_event, input: SendMessageInput) => {
     if (!adapter) return;

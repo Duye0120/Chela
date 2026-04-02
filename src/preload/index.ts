@@ -4,6 +4,7 @@ import type {
   WindowFrameState,
   ChatSession,
   SendMessageInput,
+  SessionGroup,
 } from "../shared/contracts.js";
 import type { AgentEvent, ConfirmationResponse } from "../shared/agent-events.js";
 import { IPC_CHANNELS } from "../shared/ipc.js";
@@ -22,6 +23,13 @@ const desktopApi: DesktopApi = {
     unarchive: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.sessionsUnarchive, sessionId),
     listArchived: () => ipcRenderer.invoke(IPC_CHANNELS.sessionsListArchived),
     delete: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.sessionsDelete, sessionId),
+    setGroup: (sessionId: string, groupId: string | null) => ipcRenderer.invoke(IPC_CHANNELS.sessionsSetGroup, sessionId, groupId),
+  },
+  groups: {
+    list: (): Promise<SessionGroup[]> => ipcRenderer.invoke(IPC_CHANNELS.groupsList),
+    create: (name: string): Promise<SessionGroup> => ipcRenderer.invoke(IPC_CHANNELS.groupsCreate, name),
+    rename: (groupId: string, name: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.groupsRename, groupId, name),
+    delete: (groupId: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.groupsDelete, groupId),
   },
   chat: {
     send: (input: SendMessageInput) => ipcRenderer.invoke(IPC_CHANNELS.chatSend, input),

@@ -1,11 +1,13 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { app } from "electron";
-import { createEmptySession, summarizeSession, type ChatSession, type ChatSessionSummary, type PersistedAppState, type WindowUiState } from "../shared/contracts.js";
+import { createEmptySession, summarizeSession, type ChatSession, type ChatSessionSummary, type PersistedAppState, type SessionGroup, type WindowUiState } from "../shared/contracts.js";
 
 const SESSIONS_DIR = "sessions";
 const INDEX_FILE = "index.json";
 const UI_STATE_FILE = "ui-state.json";
+const GROUPS_FILE = "groups.json";
 const LEGACY_STORE_FILE = "desktop-shell-state.json";
 
 type SessionIndex = {
@@ -223,4 +225,74 @@ export function setRightPanelOpen(open: boolean): void {
   ui.rightPanelOpen = open;
   ensureDir(getDataDir());
   atomicWrite(getUiStatePath(), JSON.stringify(ui, null, 2));
+}
+
+// ── Groups ────────────────────────────────────────────────────
+
+function getGroupsPath(): string {
+  return join(getDataDir(), GROUPS_FILE);
+}
+
+export function listGroups(): SessionGroup[] {
+  const path = getGroupsPath();
+  ensureDir(getDataDir());
+  if (existsSync(path)) {
+    try {
+      const raw = readFileSync(path, "utf-8");
+      return JSON.parse(raw) as SessionGroup[];
+    } catch { /* fall through */ }
+  }
+  return [];
+}
+
+function writeGroups(groups: SessionGroup[]): void {
+  ensureDir(getDataDir());
+  atomicWrite(getGroupsPath(), JSON.stringify(groups, null, 2));
+}
+
+export function createGroup(name: string): SessionGroup {
+  const group: SessionGroup = { id: randomUUID(), name };
+  const groups = listGroups();
+  groups.push(group);
+  writeGroups(groups);
+  return group;
+}
+
+export function renameGroup(groupId: string, name: string): void {
+  const groups = listGroups();
+  const group = groups.find((g) => g.id === groupId);
+  if (group) {
+    group.name = name;
+    writeGroups(groups);
+  }
+}
+
+export function deleteGroup(groupId: string): void {
+  // Ungroup all sessions in this group
+  const index = readIndex();
+  for (const summary of index.summaries) {
+    if (summary.groupId === groupId) {
+      summary.groupId = undefined;
+      const session = loadSession(summary.id);
+      if (session) {
+        session.groupId = undefined;
+        atomicWrite(getSessionPath(session.id), JSON.stringify(session, null, 2));
+      }
+    }
+  }
+  writeIndex(index);
+
+  const groups = listGroups().filter((g) => g.id !== groupId);
+  writeGroups(groups);
+}
+
+export function setSessionGroup(sessionId: string, groupId: string | null): void {
+  const session = loadSession(sessionId);
+  if (!session) return;
+  if (groupId === null) {
+    delete session.groupId;
+  } else {
+    session.groupId = groupId;
+  }
+  saveSession(session);
 }

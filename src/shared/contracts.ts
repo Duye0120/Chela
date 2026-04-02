@@ -129,6 +129,11 @@ export type ChatMessage = {
 
 export type AssistantMessage = ChatMessage;
 
+export type SessionGroup = {
+  id: string;
+  name: string;
+};
+
 export type ChatSession = {
   id: string;
   title: string;
@@ -138,6 +143,7 @@ export type ChatSession = {
   createdAt: string;
   updatedAt: string;
   archived?: boolean;
+  groupId?: string;
 };
 
 export type ChatSessionSummary = {
@@ -146,6 +152,7 @@ export type ChatSessionSummary = {
   updatedAt: string;
   messageCount: number;
   archived?: boolean;
+  groupId?: string;
 };
 
 export type SendMessageInput = {
@@ -181,6 +188,13 @@ export type DesktopApi = {
     unarchive: (sessionId: string) => Promise<void>;
     listArchived: () => Promise<ChatSessionSummary[]>;
     delete: (sessionId: string) => Promise<void>;
+    setGroup: (sessionId: string, groupId: string | null) => Promise<void>;
+  };
+  groups: {
+    list: () => Promise<SessionGroup[]>;
+    create: (name: string) => Promise<SessionGroup>;
+    rename: (groupId: string, name: string) => Promise<void>;
+    delete: (groupId: string) => Promise<void>;
   };
   chat: {
     /** Phase 0: returns mock reply. Phase 1+: returns void, response comes via agent.onEvent */
@@ -250,5 +264,6 @@ export function summarizeSession(session: ChatSession): ChatSessionSummary {
     updatedAt: session.updatedAt,
     messageCount: session.messages.length,
     archived: session.archived,
+    groupId: session.groupId,
   };
 }
