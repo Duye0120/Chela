@@ -1,10 +1,32 @@
-import { startTransition, useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { CommandLineIcon, RectangleGroupIcon } from "@heroicons/react/24/outline";
-import type { ChatSession, ChatSessionSummary, ModelSelection, SelectedFile, SessionGroup, ThinkingLevel, WindowFrameState } from "@shared/contracts";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
+import {
+  CommandLineIcon,
+  RectangleGroupIcon,
+} from "@heroicons/react/24/outline";
+import type {
+  ChatSession,
+  ChatSessionSummary,
+  ModelSelection,
+  SelectedFile,
+  Settings,
+  SessionGroup,
+  ThinkingLevel,
+  WindowFrameState,
+} from "@shared/contracts";
 import { AssistantThreadPanel } from "@renderer/components/assistant-ui/assistant-thread-panel";
 import { Button } from "@renderer/components/assistant-ui/button";
 import { ContextPanel } from "@renderer/components/assistant-ui/context-panel";
-import { SettingsModal } from "@renderer/components/assistant-ui/settings-modal";
+import {
+  SettingsView,
+  type SettingsSection,
+} from "@renderer/components/assistant-ui/settings-modal";
 import { Sidebar } from "@renderer/components/assistant-ui/sidebar";
 import { TerminalDrawer } from "@renderer/components/assistant-ui/terminal-drawer";
 import { TitleBar } from "@renderer/components/assistant-ui/title-bar";
@@ -22,12 +44,19 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [isPickingFiles, setIsPickingFiles] = useState(false);
   const [summaries, setSummaries] = useState<ChatSessionSummary[]>([]);
-  const [archivedSummaries, setArchivedSummaries] = useState<ChatSessionSummary[]>([]);
+  const [archivedSummaries, setArchivedSummaries] = useState<
+    ChatSessionSummary[]
+  >([]);
   const [groups, setGroups] = useState<SessionGroup[]>([]);
   const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
-  const [frameState, setFrameState] = useState<WindowFrameState>({ isMaximized: false });
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [frameState, setFrameState] = useState<WindowFrameState>({
+    isMaximized: false,
+  });
+  const [mainView, setMainView] = useState<"thread" | "settings">("thread");
+  const [settingsSection, setSettingsSection] =
+    useState<SettingsSection>("general");
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     if (typeof window === "undefined") {
@@ -39,13 +68,24 @@ export default function App() {
       return DEFAULT_SIDEBAR_WIDTH;
     }
 
-    return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, storedWidth));
+    return Math.min(
+      MAX_SIDEBAR_WIDTH,
+      Math.max(MIN_SIDEBAR_WIDTH, storedWidth),
+    );
   });
-  const [currentModel, setCurrentModel] = useState<ModelSelection>({ provider: "anthropic", model: "claude-sonnet-4-20250514" });
+  const [currentModel, setCurrentModel] = useState<ModelSelection>({
+    provider: "anthropic",
+    model: "claude-sonnet-4-20250514",
+  });
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("off");
 
   const activeSessionId = activeSession?.id ?? null;
-  const threadGridColumns = rightPanelOpen ? "minmax(0,1fr) 360px" : "minmax(0,1fr) 0px";
+  const threadGridColumns =
+    mainView === "settings"
+      ? "minmax(0,1fr)"
+      : rightPanelOpen
+        ? "minmax(0,1fr) 360px"
+        : "minmax(0,1fr) 0px";
   const summariesRef = useRef<ChatSessionSummary[]>([]);
   const activeSessionIdRef = useRef<string | null>(null);
   const sidebarWidthRef = useRef(sidebarWidth);
@@ -75,10 +115,14 @@ export default function App() {
       setActiveSession(session);
       if (session.archived) {
         setArchivedSummaries((current) => upsertSummary(current, session));
-        setSummaries((current) => current.filter((summary) => summary.id !== session.id));
+        setSummaries((current) =>
+          current.filter((summary) => summary.id !== session.id),
+        );
       } else {
         setSummaries((current) => upsertSummary(current, session));
-        setArchivedSummaries((current) => current.filter((summary) => summary.id !== session.id));
+        setArchivedSummaries((current) =>
+          current.filter((summary) => summary.id !== session.id),
+        );
       }
       void desktopApi?.sessions.save(session);
     },
@@ -103,13 +147,22 @@ export default function App() {
 
   const bootApp = useCallback(async () => {
     if (!desktopApi) {
-      setBootError("桌面桥接没有注入成功，renderer 无法访问 Electron API。现在不会再整窗黑掉，而是直接把问题暴露出来。");
+      setBootError(
+        "桌面桥接没有注入成功，renderer 无法访问 Electron API。现在不会再整窗黑掉，而是直接把问题暴露出来。",
+      );
       setBooting(false);
       return;
     }
 
     try {
-      const [uiState, frame, sessionSummaries, archivedList, groupList, settings] = await Promise.all([
+      const [
+        uiState,
+        frame,
+        sessionSummaries,
+        archivedList,
+        groupList,
+        settings,
+      ] = await Promise.all([
         desktopApi.ui.getState(),
         desktopApi.window.getState(),
         desktopApi.sessions.list(),
@@ -124,12 +177,15 @@ export default function App() {
       setArchivedSummaries(archivedList);
       setGroups(groupList);
       if (settings) {
+        setSettings(settings);
         setCurrentModel(settings.defaultModel);
         setThinkingLevel(settings.thinkingLevel);
       }
 
       const storedSessionId = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
-      let nextSession = storedSessionId ? await desktopApi.sessions.load(storedSessionId) : null;
+      let nextSession = storedSessionId
+        ? await desktopApi.sessions.load(storedSessionId)
+        : null;
 
       if (!nextSession && sessionSummaries[0]) {
         nextSession = await desktopApi.sessions.load(sessionSummaries[0].id);
@@ -142,7 +198,9 @@ export default function App() {
 
       hydrateSession(nextSession);
     } catch (error) {
-      setBootError(error instanceof Error ? error.message : "桌面壳初始化失败。");
+      setBootError(
+        error instanceof Error ? error.message : "桌面壳初始化失败。",
+      );
     } finally {
       setBooting(false);
     }
@@ -170,9 +228,15 @@ export default function App() {
         void createNewSession();
       } else if (mod && e.key === ",") {
         e.preventDefault();
-        setSettingsOpen((prev) => !prev);
+        if (mainView === "settings") {
+          closeSettingsView();
+        } else {
+          openSettingsView();
+        }
       } else if (e.key === "Escape") {
-        if (settingsOpen) setSettingsOpen(false);
+        if (mainView === "settings") {
+          closeSettingsView();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -181,7 +245,7 @@ export default function App() {
       cleanup();
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [bootApp, desktopApi]);
+  }, [bootApp, desktopApi, mainView]);
 
   const createNewSession = useCallback(async () => {
     if (!desktopApi) {
@@ -207,130 +271,172 @@ export default function App() {
     [desktopApi, hydrateSession],
   );
 
-  const archiveSession = useCallback(async (sessionId: string) => {
-    if (!desktopApi) {
-      return;
-    }
+  const archiveSession = useCallback(
+    async (sessionId: string) => {
+      if (!desktopApi) {
+        return;
+      }
 
-    const remaining = summariesRef.current.filter((summary) => summary.id !== sessionId);
+      const remaining = summariesRef.current.filter(
+        (summary) => summary.id !== sessionId,
+      );
 
-    await desktopApi.sessions.archive(sessionId);
-    await refreshSessionLists();
+      await desktopApi.sessions.archive(sessionId);
+      await refreshSessionLists();
 
-    if (activeSessionIdRef.current !== sessionId) {
-      return;
-    }
+      if (activeSessionIdRef.current !== sessionId) {
+        return;
+      }
 
-    if (remaining.length > 0) {
-      void selectSession(remaining[0].id);
-      return;
-    }
+      if (remaining.length > 0) {
+        void selectSession(remaining[0].id);
+        return;
+      }
 
-    void createNewSession();
-  }, [createNewSession, desktopApi, refreshSessionLists, selectSession]);
+      void createNewSession();
+    },
+    [createNewSession, desktopApi, refreshSessionLists, selectSession],
+  );
 
-  const unarchiveSession = useCallback(async (sessionId: string) => {
-    if (!desktopApi) {
-      return;
-    }
+  const unarchiveSession = useCallback(
+    async (sessionId: string) => {
+      if (!desktopApi) {
+        return;
+      }
 
-    await desktopApi.sessions.unarchive(sessionId);
-    await refreshSessionLists();
+      await desktopApi.sessions.unarchive(sessionId);
+      await refreshSessionLists();
 
-    if (activeSessionIdRef.current !== sessionId) {
-      return;
-    }
+      if (activeSessionIdRef.current !== sessionId) {
+        return;
+      }
 
-    const session = await desktopApi.sessions.load(sessionId);
-    if (session) {
-      hydrateSession(session);
-    }
-  }, [desktopApi, hydrateSession, refreshSessionLists]);
+      const session = await desktopApi.sessions.load(sessionId);
+      if (session) {
+        hydrateSession(session);
+      }
+    },
+    [desktopApi, hydrateSession, refreshSessionLists],
+  );
 
-  const deleteSessionPermanently = useCallback(async (sessionId: string) => {
-    if (!desktopApi) {
-      return;
-    }
+  const deleteSessionPermanently = useCallback(
+    async (sessionId: string) => {
+      if (!desktopApi) {
+        return;
+      }
 
-    const wasActive = activeSessionIdRef.current === sessionId;
-    await desktopApi.sessions.delete(sessionId);
-    const { sessionSummaries } = await refreshSessionLists();
+      const wasActive = activeSessionIdRef.current === sessionId;
+      await desktopApi.sessions.delete(sessionId);
+      const { sessionSummaries } = await refreshSessionLists();
 
-    if (!wasActive) {
-      return;
-    }
+      if (!wasActive) {
+        return;
+      }
 
-    if (sessionSummaries[0]) {
-      void selectSession(sessionSummaries[0].id);
-      return;
-    }
+      if (sessionSummaries[0]) {
+        void selectSession(sessionSummaries[0].id);
+        return;
+      }
 
-    void createNewSession();
-  }, [createNewSession, desktopApi, refreshSessionLists, selectSession]);
+      void createNewSession();
+    },
+    [createNewSession, desktopApi, refreshSessionLists, selectSession],
+  );
 
-  const renameSession = useCallback(async (sessionId: string, title: string) => {
-    if (!desktopApi) {
-      return;
-    }
+  const renameSession = useCallback(
+    async (sessionId: string, title: string) => {
+      if (!desktopApi) {
+        return;
+      }
 
-    const nextTitle = title.trim();
-    if (!nextTitle) {
-      return;
-    }
+      const nextTitle = title.trim();
+      if (!nextTitle) {
+        return;
+      }
 
-    await desktopApi.sessions.rename(sessionId, nextTitle);
+      await desktopApi.sessions.rename(sessionId, nextTitle);
 
-    setSummaries((prev) =>
-      prev.map((summary) =>
-        summary.id === sessionId
-          ? { ...summary, title: nextTitle, updatedAt: new Date().toISOString() }
-          : summary,
-      ),
-    );
+      setSummaries((prev) =>
+        prev.map((summary) =>
+          summary.id === sessionId
+            ? {
+                ...summary,
+                title: nextTitle,
+                updatedAt: new Date().toISOString(),
+              }
+            : summary,
+        ),
+      );
 
-    setArchivedSummaries((prev) =>
-      prev.map((summary) =>
-        summary.id === sessionId
-          ? { ...summary, title: nextTitle, updatedAt: new Date().toISOString() }
-          : summary,
-      ),
-    );
+      setArchivedSummaries((prev) =>
+        prev.map((summary) =>
+          summary.id === sessionId
+            ? {
+                ...summary,
+                title: nextTitle,
+                updatedAt: new Date().toISOString(),
+              }
+            : summary,
+        ),
+      );
 
-    setActiveSession((current) =>
-      current && current.id === sessionId
-        ? { ...current, title: nextTitle, updatedAt: new Date().toISOString() }
-        : current,
-    );
-  }, [desktopApi]);
+      setActiveSession((current) =>
+        current && current.id === sessionId
+          ? {
+              ...current,
+              title: nextTitle,
+              updatedAt: new Date().toISOString(),
+            }
+          : current,
+      );
+    },
+    [desktopApi],
+  );
 
-  const createGroup = useCallback(async (name: string) => {
-    if (!desktopApi) return;
-    const group = await desktopApi.groups.create(name);
-    setGroups((prev) => [...prev, group]);
-  }, [desktopApi]);
+  const createGroup = useCallback(
+    async (name: string) => {
+      if (!desktopApi) return;
+      const group = await desktopApi.groups.create(name);
+      setGroups((prev) => [...prev, group]);
+    },
+    [desktopApi],
+  );
 
-  const renameGroup = useCallback(async (groupId: string, name: string) => {
-    if (!desktopApi) return;
-    await desktopApi.groups.rename(groupId, name);
-    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, name } : g)));
-  }, [desktopApi]);
+  const renameGroup = useCallback(
+    async (groupId: string, name: string) => {
+      if (!desktopApi) return;
+      await desktopApi.groups.rename(groupId, name);
+      setGroups((prev) =>
+        prev.map((g) => (g.id === groupId ? { ...g, name } : g)),
+      );
+    },
+    [desktopApi],
+  );
 
-  const deleteGroup = useCallback(async (groupId: string) => {
-    if (!desktopApi) return;
-    await desktopApi.groups.delete(groupId);
-    setGroups((prev) => prev.filter((g) => g.id !== groupId));
-    // Refresh summaries so groupId is cleared on all affected sessions
-    await refreshSessionLists();
-  }, [desktopApi, refreshSessionLists]);
+  const deleteGroup = useCallback(
+    async (groupId: string) => {
+      if (!desktopApi) return;
+      await desktopApi.groups.delete(groupId);
+      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+      // Refresh summaries so groupId is cleared on all affected sessions
+      await refreshSessionLists();
+    },
+    [desktopApi, refreshSessionLists],
+  );
 
-  const setSessionGroup = useCallback(async (sessionId: string, groupId: string | null) => {
-    if (!desktopApi) return;
-    await desktopApi.sessions.setGroup(sessionId, groupId);
-    // Update summary in state optimistically
-    setSummaries((prev) =>
-      prev.map((s) => (s.id === sessionId ? { ...s, groupId: groupId ?? undefined } : s))
-    );
-  }, [desktopApi]);
+  const setSessionGroup = useCallback(
+    async (sessionId: string, groupId: string | null) => {
+      if (!desktopApi) return;
+      await desktopApi.sessions.setGroup(sessionId, groupId);
+      // Update summary in state optimistically
+      setSummaries((prev) =>
+        prev.map((s) =>
+          s.id === sessionId ? { ...s, groupId: groupId ?? undefined } : s,
+        ),
+      );
+    },
+    [desktopApi],
+  );
 
   const enrichSelectedFiles = useCallback(
     async (files: SelectedFile[]) => {
@@ -358,7 +464,12 @@ export default function App() {
   );
 
   const appendAttachmentsToSession = useCallback(
-    async (files: SelectedFile[]) => {
+    async (
+      files: SelectedFile[],
+      options?: {
+        openRightPanel?: boolean;
+      },
+    ) => {
       if (!activeSession || !desktopApi || files.length === 0) {
         return;
       }
@@ -372,7 +483,7 @@ export default function App() {
 
       persistSession(nextSession);
 
-      if (!rightPanelOpen) {
+      if (options?.openRightPanel !== false && !rightPanelOpen) {
         setRightPanelOpen(true);
         void desktopApi.ui.setRightPanelOpen(true);
       }
@@ -395,7 +506,7 @@ export default function App() {
 
     try {
       const pickedFiles = await desktopApi.files.pick();
-      await appendAttachmentsToSession(pickedFiles);
+      await appendAttachmentsToSession(pickedFiles, { openRightPanel: true });
     } finally {
       setIsPickingFiles(false);
     }
@@ -420,7 +531,9 @@ export default function App() {
           ),
         );
 
-        await appendAttachmentsToSession(pastedFiles);
+        await appendAttachmentsToSession(pastedFiles, {
+          openRightPanel: false,
+        });
       } finally {
         setIsPickingFiles(false);
       }
@@ -436,7 +549,9 @@ export default function App() {
 
       const nextSession: ChatSession = {
         ...activeSession,
-        attachments: activeSession.attachments.filter((attachment) => attachment.id !== attachmentId),
+        attachments: activeSession.attachments.filter(
+          (attachment) => attachment.id !== attachmentId,
+        ),
         updatedAt: new Date().toISOString(),
       };
 
@@ -451,51 +566,104 @@ export default function App() {
     void desktopApi?.ui.setRightPanelOpen(nextOpen);
   }, [desktopApi, rightPanelOpen]);
 
-  const handleModelChange = useCallback((model: ModelSelection) => {
-    setCurrentModel(model);
-    void desktopApi?.settings.update({ defaultModel: model });
-  }, [desktopApi]);
-
-  const handleThinkingLevelChange = useCallback((level: ThinkingLevel) => {
-    setThinkingLevel(level);
-    void desktopApi?.settings.update({ thinkingLevel: level });
-  }, [desktopApi]);
-
-  const startSidebarResize = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-
-    const startX = event.clientX;
-    const startWidth = sidebarWidthRef.current;
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const proposedWidth = startWidth + moveEvent.clientX - startX;
-      const nextWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, proposedWidth));
-      setSidebarWidth(nextWidth);
-    };
-
-    const handleMouseUp = () => {
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+  const openSettingsView = useCallback((section: SettingsSection = "general") => {
+    startTransition(() => {
+      setSettingsSection(section);
+      setMainView("settings");
+    });
   }, []);
+
+  const closeSettingsView = useCallback(() => {
+    startTransition(() => {
+      setMainView("thread");
+    });
+  }, []);
+
+  const openArchivedSessionFromSettings = useCallback(
+    async (sessionId: string) => {
+      await selectSession(sessionId);
+      closeSettingsView();
+    },
+    [closeSettingsView, selectSession],
+  );
+
+  const handleSettingsChange = useCallback(
+    (partial: Partial<Settings>) => {
+      setSettings((current) => (current ? { ...current, ...partial } : current));
+      void desktopApi?.settings.update(partial);
+    },
+    [desktopApi],
+  );
+
+  const handleModelChange = useCallback(
+    (model: ModelSelection) => {
+      setCurrentModel(model);
+      setSettings((current) =>
+        current ? { ...current, defaultModel: model } : current,
+      );
+      void desktopApi?.settings.update({ defaultModel: model });
+    },
+    [desktopApi],
+  );
+
+  const handleThinkingLevelChange = useCallback(
+    (level: ThinkingLevel) => {
+      setThinkingLevel(level);
+      setSettings((current) =>
+        current ? { ...current, thinkingLevel: level } : current,
+      );
+      void desktopApi?.settings.update({ thinkingLevel: level });
+    },
+    [desktopApi],
+  );
+
+  const startSidebarResize = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+
+      const startX = event.clientX;
+      const startWidth = sidebarWidthRef.current;
+      const previousCursor = document.body.style.cursor;
+      const previousUserSelect = document.body.style.userSelect;
+
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const proposedWidth = startWidth + moveEvent.clientX - startX;
+        const nextWidth = Math.min(
+          MAX_SIDEBAR_WIDTH,
+          Math.max(MIN_SIDEBAR_WIDTH, proposedWidth),
+        );
+        setSidebarWidth(nextWidth);
+      };
+
+      const handleMouseUp = () => {
+        document.body.style.cursor = previousCursor;
+        document.body.style.userSelect = previousUserSelect;
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+      };
+
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    },
+    [],
+  );
 
   if (booting) {
     return (
       <main className="grid h-screen place-items-center bg-[#f0f0f0] text-gray-400">
         <div className="rounded-xl border border-black/6 bg-white/80 px-6 py-4 shadow-sm">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400">Booting</p>
-          <h1 className="mt-2 text-lg font-medium text-gray-800">正在拉起桌面聊天壳…</h1>
-          <p className="mt-1 text-xs text-gray-400">会话状态、窗口状态和本地文件能力正在就位。</p>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400">
+            Booting
+          </p>
+          <h1 className="mt-2 text-lg font-medium text-gray-800">
+            正在拉起桌面聊天壳…
+          </h1>
+          <p className="mt-1 text-xs text-gray-400">
+            会话状态、窗口状态和本地文件能力正在就位。
+          </p>
         </div>
       </main>
     );
@@ -505,10 +673,18 @@ export default function App() {
     return (
       <main className="grid h-screen place-items-center bg-[#f0f0f0] px-6 text-gray-400">
         <div className="max-w-lg rounded-xl border border-rose-400/20 bg-rose-50 px-6 py-4 shadow-sm">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-rose-300">Renderer Error</p>
-          <h1 className="mt-2 text-lg font-medium text-gray-800">界面初始化失败</h1>
-          <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-gray-500">{bootError}</p>
-          <p className="mt-2 text-xs text-gray-400">现在就算 preload 出问题，也不会再整窗发黑，而是直接显示诊断信息。</p>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-rose-300">
+            Renderer Error
+          </p>
+          <h1 className="mt-2 text-lg font-medium text-gray-800">
+            界面初始化失败
+          </h1>
+          <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-gray-500">
+            {bootError}
+          </p>
+          <p className="mt-2 text-xs text-gray-400">
+            现在就算 preload 出问题，也不会再整窗发黑，而是直接显示诊断信息。
+          </p>
         </div>
       </main>
     );
@@ -532,7 +708,7 @@ export default function App() {
             activeSessionId={activeSessionId}
             onSelectSession={selectSession}
             onNewSession={createNewSession}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={() => openSettingsView("general")}
             onArchiveSession={archiveSession}
             onUnarchiveSession={unarchiveSession}
             onDeleteSession={deleteSessionPermanently}
@@ -543,6 +719,10 @@ export default function App() {
             onRenameGroup={renameGroup}
             onDeleteGroup={deleteGroup}
             onSetSessionGroup={setSessionGroup}
+            viewMode={mainView === "settings" ? "settings" : "threads"}
+            activeSettingsSection={settingsSection}
+            onSelectSettingsSection={setSettingsSection}
+            onExitSettings={closeSettingsView}
           />
           <div
             role="separator"
@@ -557,35 +737,57 @@ export default function App() {
 
         <section className="relative flex min-h-0 flex-col overflow-hidden bg-shell-window">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-l-[var(--radius-shell)] border border-shell-border border-r-0 border-b-0 bg-shell-panel shadow-none">
-            <div className="flex items-center justify-end gap-2 px-5 pb-3 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => setTerminalOpen((prev) => !prev)}
-                className={`h-9 w-9 rounded-[var(--radius-shell)] border-shell-border bg-shell-toolbar text-muted-foreground shadow-none hover:bg-shell-toolbar-hover hover:text-foreground ${terminalOpen ? "border-shell-border bg-shell-panel text-foreground" : ""}`}
-                aria-label={terminalOpen ? "收起终端" : "展开终端"}
-              >
-                <CommandLineIcon className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={toggleRightPanel}
-                className={`h-9 w-9 rounded-[var(--radius-shell)] border-shell-border bg-shell-toolbar text-muted-foreground shadow-none hover:bg-shell-toolbar-hover hover:text-foreground ${rightPanelOpen ? "border-shell-border bg-shell-panel text-foreground" : ""}`}
-                aria-label={rightPanelOpen ? "收起右侧上下文" : "展开右侧上下文"}
-              >
-                <RectangleGroupIcon className="h-4 w-4" />
-              </Button>
-            </div>
+            {mainView === "thread" ? (
+              <div className="flex items-center justify-end gap-2 px-5 pb-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setTerminalOpen((prev) => !prev)}
+                  className={`h-9 w-9 cursor-pointer rounded-[var(--radius-shell)] border-none shadow-none hover:bg-shell-toolbar-hover ${terminalOpen ? "bg-shell-toolbar-hover text-foreground" : "bg-transparent text-muted-foreground"}`}
+                  aria-label={terminalOpen ? "收起终端" : "展开终端"}
+                >
+                  <CommandLineIcon className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={toggleRightPanel}
+                  className={`h-9 w-9 cursor-pointer rounded-[var(--radius-shell)] border-none shadow-none hover:bg-shell-toolbar-hover ${rightPanelOpen ? "bg-shell-toolbar-hover text-foreground" : "bg-transparent text-muted-foreground"}`}
+                  aria-label={
+                    rightPanelOpen ? "收起右侧上下文" : "展开右侧上下文"
+                  }
+                >
+                  <RectangleGroupIcon className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : null}
 
             <div
               className="grid min-h-0 flex-1 bg-shell-panel transition-[grid-template-columns] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{ gridTemplateColumns: threadGridColumns }}
             >
               <section className="flex min-h-0 flex-col bg-shell-panel">
-                {activeSession && desktopApi ? (
+                {mainView === "settings" ? (
+                  <SettingsView
+                    activeSection={settingsSection}
+                    settings={settings}
+                    currentModel={currentModel}
+                    thinkingLevel={thinkingLevel}
+                    onModelChange={handleModelChange}
+                    onThinkingLevelChange={handleThinkingLevelChange}
+                    onSettingsChange={handleSettingsChange}
+                    archivedSummaries={archivedSummaries}
+                    onOpenArchivedSession={openArchivedSessionFromSettings}
+                    onUnarchiveSession={(sessionId) => {
+                      void unarchiveSession(sessionId);
+                    }}
+                    onDeleteSession={(sessionId) => {
+                      void deleteSessionPermanently(sessionId);
+                    }}
+                  />
+                ) : activeSession && desktopApi ? (
                   <AssistantThreadPanel
                     session={activeSession}
                     desktopApi={desktopApi}
@@ -607,20 +809,24 @@ export default function App() {
                 )}
               </section>
 
-              <div className={`min-h-0 overflow-hidden ${rightPanelOpen ? "" : "pointer-events-none"}`}>
-                <ContextPanel open={rightPanelOpen} session={activeSession} />
-              </div>
+              {mainView === "thread" ? (
+                <div
+                  className={`min-h-0 overflow-hidden ${rightPanelOpen ? "" : "pointer-events-none"}`}
+                >
+                  <ContextPanel open={rightPanelOpen} session={activeSession} />
+                </div>
+              ) : null}
             </div>
 
-            <TerminalDrawer
-              open={terminalOpen}
-              onToggle={() => setTerminalOpen((prev) => !prev)}
-            />
+            {mainView === "thread" ? (
+              <TerminalDrawer
+                open={terminalOpen}
+                onToggle={() => setTerminalOpen((prev) => !prev)}
+              />
+            ) : null}
           </div>
         </section>
       </div>
-
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </main>
   );
 }

@@ -4,15 +4,20 @@ import {
   ArrowUturnLeftIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CommandLineIcon,
   Cog6ToothIcon,
   EllipsisHorizontalIcon,
   FolderIcon,
   FolderPlusIcon,
+  InformationCircleIcon,
+  KeyIcon,
   PlusIcon,
+  SwatchIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import type { ChatSessionSummary, SessionGroup } from "@shared/contracts";
 import { formatRelativeTime } from "@renderer/lib/session";
+import type { SettingsSection } from "@renderer/components/assistant-ui/settings-modal";
 
 type SidebarProps = {
   summaries: ChatSessionSummary[];
@@ -30,6 +35,10 @@ type SidebarProps = {
   onRenameGroup: (groupId: string, name: string) => void;
   onDeleteGroup: (groupId: string) => void;
   onSetSessionGroup: (sessionId: string, groupId: string | null) => void;
+  viewMode?: "threads" | "settings";
+  activeSettingsSection?: SettingsSection;
+  onSelectSettingsSection?: (section: SettingsSection) => void;
+  onExitSettings?: () => void;
 };
 
 export function Sidebar({
@@ -48,15 +57,25 @@ export function Sidebar({
   onRenameGroup,
   onDeleteGroup,
   onSetSessionGroup,
+  viewMode = "threads",
+  activeSettingsSection = "general",
+  onSelectSettingsSection,
+  onExitSettings,
 }: SidebarProps) {
   const [showArchived, setShowArchived] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    new Set(),
+  );
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [threadMenuOpenFor, setThreadMenuOpenFor] = useState<string | null>(null);
-  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [threadMenuOpenFor, setThreadMenuOpenFor] = useState<string | null>(
+    null,
+  );
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(
+    null,
+  );
   const [sessionRenameValue, setSessionRenameValue] = useState("");
   const [movingSessionId, setMovingSessionId] = useState<string | null>(null);
   const [groupMenuOpenFor, setGroupMenuOpenFor] = useState<string | null>(null);
@@ -68,6 +87,20 @@ export function Sidebar({
   const newGroupInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameSessionInputRef = useRef<HTMLInputElement>(null);
+
+  const settingsItems: {
+    id: SettingsSection;
+    label: string;
+    icon: typeof Cog6ToothIcon;
+  }[] = [
+    { id: "general", label: "常规", icon: Cog6ToothIcon },
+    { id: "keys", label: "API Keys", icon: KeyIcon },
+    { id: "appearance", label: "外观", icon: SwatchIcon },
+    { id: "terminal", label: "终端", icon: CommandLineIcon },
+    { id: "workspace", label: "工作区", icon: FolderIcon },
+    { id: "archived", label: "已归档", icon: ArchiveBoxIcon },
+    { id: "about", label: "关于", icon: InformationCircleIcon },
+  ];
 
   useEffect(() => {
     if (creatingGroup) newGroupInputRef.current?.focus();
@@ -130,6 +163,52 @@ export function Sidebar({
     sessions: summaries.filter((s) => s.groupId === group.id),
   }));
 
+  if (viewMode === "settings") {
+    return (
+      <aside className="flex h-full flex-col bg-transparent text-[13px] text-foreground">
+        <div className="px-4 pb-2 pt-4">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            设置
+          </p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-3 pb-2">
+          <div className="space-y-1">
+            {settingsItems.map(({ id, label, icon: Icon }) => {
+              const active = activeSettingsSection === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onSelectSettingsSection?.(id)}
+                  className={`flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2 text-left text-[12px] transition ${
+                    active
+                      ? "border border-shell-border bg-shell-panel text-foreground"
+                      : "border border-transparent text-muted-foreground hover:bg-shell-hover hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="border-t border-border/70 px-3 py-3">
+          <button
+            type="button"
+            onClick={onExitSettings}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2 text-[12px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          >
+            <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
+            返回
+          </button>
+        </div>
+      </aside>
+    );
+  }
+
   const renderThreadItem = (summary: ChatSessionSummary, indented = false) => {
     const active = summary.id === activeSessionId;
     const isMoving = movingSessionId === summary.id;
@@ -158,8 +237,9 @@ export function Sidebar({
             setGroupMenuOpenFor(null);
             setThreadMenuOpenFor(null);
           }}
-          className={`group flex cursor-pointer items-center rounded-[var(--radius-shell)] py-2 transition ${indented ? "pl-6 pr-2.5" : "px-3"
-            } ${active ? "border border-shell-border bg-shell-panel" : "border border-transparent hover:bg-shell-hover"}`}
+          className={`group flex cursor-pointer items-center rounded-[var(--radius-shell)] py-2 transition ${
+            indented ? "pl-6 pr-2.5" : "px-3"
+          } ${active ? "border border-shell-border bg-shell-panel" : "border border-transparent hover:bg-shell-hover"}`}
         >
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
@@ -181,7 +261,9 @@ export function Sidebar({
                   className="min-w-0 flex-1 border-none bg-transparent p-0 text-[12px] font-medium text-foreground outline-none"
                 />
               ) : (
-                <span className={`truncate text-[12px] ${active ? "font-medium text-foreground" : "text-foreground/80"}`}>
+                <span
+                  className={`truncate text-[12px] ${active ? "font-medium text-foreground" : "text-foreground/80"}`}
+                >
                   {summary.title}
                 </span>
               )}
@@ -273,12 +355,19 @@ export function Sidebar({
                   onSetSessionGroup(summary.id, g.id);
                   setMovingSessionId(null);
                 }}
-                className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-accent ${summary.groupId === g.id ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                  }`}
+                className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-accent ${
+                  summary.groupId === g.id
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
               >
                 <FolderIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
                 <span className="truncate">{g.name}</span>
-                {summary.groupId === g.id && <span className="ml-auto text-[10px] text-muted-foreground">✓</span>}
+                {summary.groupId === g.id && (
+                  <span className="ml-auto text-[10px] text-muted-foreground">
+                    ✓
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -294,10 +383,10 @@ export function Sidebar({
         <button
           type="button"
           onClick={onNewSession}
-          className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] border border-shell-border bg-shell-panel px-3 py-2.5 text-sm font-medium text-foreground transition hover:bg-accent hover:text-accent-foreground"
+          className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] border border-shell-border bg-shell-panel px-3 py-2.5  font-medium text-foreground transition hover:bg-accent hover:text-accent-foreground"
         >
           <PlusIcon className="h-4 w-4" />
-          <span>新线程</span>
+          <span className="text-[12px]">新线程</span>
         </button>
       </div>
 
@@ -314,7 +403,9 @@ export function Sidebar({
           </button>
         ) : (
           <>
-            <span className="flex-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">线程</span>
+            <span className="flex-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              线程
+            </span>
             <button
               type="button"
               onClick={(e) => {
@@ -337,7 +428,9 @@ export function Sidebar({
         {showArchived ? (
           <div className="space-y-1 px-3">
             {archivedSummaries.length === 0 ? (
-              <p className="px-2 py-4 text-center text-[11px] text-muted-foreground">没有已归档的线程</p>
+              <p className="px-2 py-4 text-center text-[11px] text-muted-foreground">
+                没有已归档的线程
+              </p>
             ) : (
               archivedSummaries.map((summary) => (
                 <div
@@ -352,7 +445,9 @@ export function Sidebar({
                     }}
                     className="min-w-0 flex-1 cursor-pointer text-left"
                   >
-                    <span className="block truncate text-[12px] text-foreground">{summary.title}</span>
+                    <span className="block truncate text-[12px] text-foreground">
+                      {summary.title}
+                    </span>
                   </button>
                   <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
                     <button
@@ -471,11 +566,15 @@ export function Sidebar({
                       className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5"
                     >
                       <span className="shrink-0 text-muted-foreground">
-                        {collapsed
-                          ? <ChevronRightIcon className="h-3 w-3" />
-                          : <ChevronDownIcon className="h-3 w-3" />}
+                        {collapsed ? (
+                          <ChevronRightIcon className="h-3 w-3" />
+                        ) : (
+                          <ChevronDownIcon className="h-3 w-3" />
+                        )}
                       </span>
-                      <FolderIcon className={`h-3.5 w-3.5 shrink-0 transition-colors ${isDragOver ? "text-foreground" : "text-muted-foreground"}`} />
+                      <FolderIcon
+                        className={`h-3.5 w-3.5 shrink-0 transition-colors ${isDragOver ? "text-foreground" : "text-muted-foreground"}`}
+                      />
                       {isRenaming ? (
                         <input
                           ref={renameInputRef}
@@ -485,13 +584,16 @@ export function Sidebar({
                           onClick={(e) => e.stopPropagation()}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") submitRenameGroup();
-                            else if (e.key === "Escape") setRenamingGroupId(null);
+                            else if (e.key === "Escape")
+                              setRenamingGroupId(null);
                           }}
                           onBlur={submitRenameGroup}
                           className="min-w-0 flex-1 border-none bg-transparent p-0 text-[12px] font-medium text-foreground outline-none"
                         />
                       ) : (
-                        <span className="truncate text-[12px] font-medium text-foreground">{group.name}</span>
+                        <span className="truncate text-[12px] font-medium text-foreground">
+                          {group.name}
+                        </span>
                       )}
                     </button>
 
@@ -501,7 +603,9 @@ export function Sidebar({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setGroupMenuOpenFor(isGroupMenuOpen ? null : group.id);
+                          setGroupMenuOpenFor(
+                            isGroupMenuOpen ? null : group.id,
+                          );
                           setMovingSessionId(null);
                         }}
                         className="cursor-pointer rounded-md p-1 text-muted-foreground opacity-0 transition hover:bg-shell-panel hover:text-foreground group-hover:opacity-100"
@@ -544,7 +648,9 @@ export function Sidebar({
                   {!collapsed && (
                     <div className="space-y-px">
                       {sessions.length === 0 ? (
-                        <p className={`py-1 pl-7 text-[11px] ${isDragOver ? "text-muted-foreground" : "text-muted-foreground/70"}`}>
+                        <p
+                          className={`py-1 pl-7 text-[11px] ${isDragOver ? "text-muted-foreground" : "text-muted-foreground/70"}`}
+                        >
                           {isDragOver ? "松开鼠标放入分组" : "暂无线程"}
                         </p>
                       ) : (
@@ -557,7 +663,9 @@ export function Sidebar({
             })}
 
             {ungroupedSessions.length > 0 ? (
-              <div className={`space-y-1 ${groupedSessions.length > 0 ? "mt-2 border-t border-border/70 pt-2" : ""}`}>
+              <div
+                className={`space-y-1 ${groupedSessions.length > 0 ? "mt-2 border-t border-border/70 pt-2" : ""}`}
+              >
                 {ungroupedSessions.map((s) => renderThreadItem(s, false))}
               </div>
             ) : null}
@@ -567,23 +675,10 @@ export function Sidebar({
 
       {/* Bottom: Archive entry + Settings */}
       <div className="border-t border-border/70 px-3 py-3">
-        {!showArchived ? (
-          <button
-            type="button"
-            onClick={() => setShowArchived(true)}
-            className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2 text-[12px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
-          >
-            <ArchiveBoxIcon className="h-3.5 w-3.5" />
-            已归档
-            {archivedSummaries.length > 0 ? (
-              <span className="ml-auto text-[10px] text-muted-foreground">{archivedSummaries.length}</span>
-            ) : null}
-          </button>
-        ) : null}
         <button
           type="button"
           onClick={onOpenSettings}
-          className="mt-1 flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2 text-[12px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2 text-[12px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
           <Cog6ToothIcon className="h-3.5 w-3.5" />
           设置
