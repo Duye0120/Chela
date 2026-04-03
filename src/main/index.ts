@@ -1,7 +1,12 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { app, BrowserWindow, ipcMain } from "electron";
-import { pickFiles, readFilePreview, saveClipboardFile } from "./files.js";
+import {
+  pickFiles,
+  readFilePreview,
+  readImageDataUrl,
+  saveClipboardFile,
+} from "./files.js";
 import {
   archiveSession,
   createGroup,
@@ -149,6 +154,10 @@ function registerIpcHandlers() {
   ipcMain.handle(
     IPC_CHANNELS.filesReadPreview,
     async (_event, filePath: string) => readFilePreview(filePath),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.filesReadImageDataUrl,
+    async (_event, filePath: string) => readImageDataUrl(filePath),
   );
   ipcMain.handle(IPC_CHANNELS.filesSaveFromClipboard, async (_event, payload) =>
     saveClipboardFile(payload),

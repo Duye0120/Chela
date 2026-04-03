@@ -214,8 +214,8 @@ export const Thread: FC<ThreadProps> = ({
         <ThreadPrimitive.ViewportFooter
           className={
             terminalOpen
-              ? "sticky bottom-0 mx-auto mt-auto flex w-full max-w-(--thread-max-width) flex-col gap-2 overflow-visible bg-gradient-to-t from-white/92 via-white/84 to-transparent pb-2 pt-4"
-              : "sticky bottom-0 mx-auto mt-auto flex w-full max-w-(--thread-max-width) flex-col gap-3 overflow-visible bg-gradient-to-t from-white via-white to-transparent pb-6 pt-10 md:pb-7"
+              ? "sticky bottom-0 mx-auto mt-auto flex w-full max-w-none flex-col gap-2 overflow-visible bg-gradient-to-t from-white/92 via-white/84 to-transparent pb-1 pt-4"
+              : "sticky bottom-0 mx-auto mt-auto flex w-full max-w-none flex-col gap-3 overflow-visible bg-gradient-to-t from-white via-white to-transparent pb-3 pt-9 md:pb-4"
           }
         >
           <ThreadScrollToBottom />
@@ -385,7 +385,7 @@ const ComposerAction: FC<
               </span>
             ),
           }))}
-          className="h-8 rounded-md border border-input bg-transparent"
+          className="h-8 rounded-md border border-input bg-transparent text-[12px]"
           placeholder="思考强度"
         />
       </div>
@@ -501,18 +501,17 @@ const ComposerAttachmentSync: FC<{
   const aui = useAui();
   const runtimeAttachments = useAuiState((s) => s.composer.attachments);
   const isApplyingExternalSync = useRef(false);
+  const lastAppliedExternalSignatureRef = useRef<string | null>(null);
   const externalSignature = attachments
-    .map((attachment) => attachment.id)
-    .join("|");
-  const runtimeSignature = runtimeAttachments
     .map((attachment) => attachment.id)
     .join("|");
 
   useEffect(() => {
-    if (externalSignature === runtimeSignature) return;
+    if (lastAppliedExternalSignatureRef.current === externalSignature) return;
 
     let cancelled = false;
     isApplyingExternalSync.current = true;
+    lastAppliedExternalSignatureRef.current = externalSignature;
 
     void (async () => {
       await aui.composer().clearAttachments();
@@ -536,7 +535,7 @@ const ComposerAttachmentSync: FC<{
     return () => {
       cancelled = true;
     };
-  }, [attachments, aui, externalSignature, runtimeSignature]);
+  }, [attachments, aui, externalSignature]);
 
   useEffect(() => {
     if (isApplyingExternalSync.current) return;
@@ -550,6 +549,7 @@ const ComposerAttachmentSync: FC<{
 
     if (removedIds.length === 0) return;
 
+    lastAppliedExternalSignatureRef.current = null;
     removedIds.forEach((attachmentId) => {
       onRemoveAttachment(attachmentId);
     });

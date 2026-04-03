@@ -7,12 +7,13 @@ import type { SelectedFile } from "@shared/contracts";
 
 export type PersistedMessageAttachment = Pick<
   SelectedFile,
-  "id" | "name" | "size" | "kind" | "extension" | "path" | "previewText"
+  "id" | "name" | "size" | "kind" | "extension" | "path" | "mimeType" | "previewText"
 >;
 
 function selectedFileToAttachmentType(
-  file: Pick<SelectedFile, "kind">,
+  file: Pick<SelectedFile, "kind" | "mimeType">,
 ): "image" | "document" | "file" {
+  if (file.mimeType?.startsWith("image/")) return "image";
   if (file.kind === "image") return "image";
   if (file.kind === "text") return "document";
   return "file";
@@ -26,9 +27,9 @@ function toFileUrl(filePath: string) {
 }
 
 function selectedFileToContent(
-  file: Pick<SelectedFile, "kind" | "path" | "previewText" | "name">,
+  file: Pick<SelectedFile, "kind" | "mimeType" | "path" | "previewText" | "name">,
 ): ThreadUserMessagePart[] {
-  if (file.kind === "image") {
+  if (file.mimeType?.startsWith("image/") || file.kind === "image") {
     return [
       {
         type: "image",
@@ -59,6 +60,7 @@ export function toPersistedMessageAttachment(
     kind: file.kind,
     extension: file.extension,
     path: file.path,
+    mimeType: file.mimeType,
     previewText: file.previewText,
   };
 }
@@ -70,6 +72,7 @@ export function selectedFileToCreateAttachment(
     id: file.id,
     type: selectedFileToAttachmentType(file),
     name: file.name,
+    contentType: file.mimeType,
     content: selectedFileToContent(file),
   };
 }
@@ -82,7 +85,7 @@ export function selectedFileToCompleteAttachment(
     type: selectedFileToAttachmentType(file),
     name: file.name,
     status: { type: "complete" },
-    contentType: undefined,
+    contentType: file.mimeType,
     content: selectedFileToContent(file),
   };
 }

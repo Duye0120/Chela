@@ -98,7 +98,7 @@ function ModelSelectorTrigger({
       data-slot="model-selector-trigger"
       variant={variant}
       size={size}
-      className={cn("aui-model-selector-trigger", className)}
+      className={cn("aui-model-selector-trigger cursor-pointer", className)}
       {...props}
     >
       {children ?? <ModelSelectorValue />}
@@ -123,7 +123,9 @@ function ModelSelectorValue() {
             {selectedModel.icon}
           </span>
         )}
-        <span className="truncate font-medium">{selectedModel.name}</span>
+        <span className="truncate font-medium text-[12px]">
+          {selectedModel.name}
+        </span>
       </span>
     </span>
   );
@@ -176,7 +178,7 @@ function ModelSelectorItem({
       value={model.id}
       textValue={model.name}
       className={cn(
-        "relative flex w-full cursor-default select-none items-center gap-2 rounded-lg py-2 pr-9 pl-3 text-sm outline-none",
+        "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-lg py-2 pr-9 pl-3 text-sm outline-none",
         "focus:bg-accent focus:text-accent-foreground",
         "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className,
@@ -195,7 +197,7 @@ function ModelSelectorItem({
               {model.icon}
             </span>
           )}
-          <span className="truncate font-medium">{model.name}</span>
+          <span className="truncate font-medium text-[12px]">{model.name}</span>
         </span>
       </SelectPrimitive.ItemText>
       {model.description && (

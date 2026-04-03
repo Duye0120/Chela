@@ -2,6 +2,7 @@ export const IPC_CHANNELS = {
   // Files
   filesPick: "files:pick",
   filesReadPreview: "files:read-preview",
+  filesReadImageDataUrl: "files:read-image-data-url",
   filesSaveFromClipboard: "files:save-from-clipboard",
 
   // Sessions

@@ -14,7 +14,7 @@ const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 
 const selectTriggerVariants = cva(
-  "flex w-fit items-center justify-between gap-2 whitespace-nowrap rounded-md text-sm outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground [&>span]:line-clamp-1 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "cursor-pointer flex w-fit items-center justify-between gap-2 whitespace-nowrap rounded-md text-sm outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground [&>span]:line-clamp-1 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -145,7 +145,7 @@ const SelectItem = ({
   <SelectPrimitive.Item
     data-slot="select-item"
     className={cn(
-      "relative flex w-full cursor-default select-none items-center gap-2 rounded-lg py-2 pr-9 pl-3 text-sm outline-none",
+      "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-lg py-2 pr-9 pl-3 text-[12px] outline-none",
       "focus:bg-accent focus:text-accent-foreground",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       "[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
@@ -198,14 +198,16 @@ function Select({ options, placeholder, className, ...props }: SelectProps) {
     <SelectRoot {...props}>
       <SelectPrimitive.Trigger
         className={cn(
-          "flex items-center gap-1.5 rounded-md py-1 pr-2 pl-3 text-sm outline-none transition-colors",
+          "cursor-pointer flex items-center gap-1.5 rounded-md py-1 pr-2 pl-3 text-sm outline-none transition-colors",
           "text-muted-foreground hover:bg-muted hover:text-foreground",
           "disabled:cursor-not-allowed disabled:opacity-50",
           !selectedOption && placeholder && "italic opacity-70",
           className,
         )}
       >
-        <span>{selectedOption?.label ?? placeholder}</span>
+        <span className={"text-[12px]"}>
+          {selectedOption?.label ?? placeholder}
+        </span>
         <ChevronDownIcon className="size-3.5 opacity-50" />
       </SelectPrimitive.Trigger>
 

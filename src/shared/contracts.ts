@@ -105,6 +105,7 @@ export type SelectedFile = {
   size: number;
   extension: string;
   kind: FileKind;
+  mimeType?: string;
   previewText?: string;
   truncated?: boolean;
   error?: string;
@@ -184,6 +185,7 @@ export type DesktopApi = {
   files: {
     pick: () => Promise<SelectedFile[]>;
     readPreview: (filePath: string) => Promise<FilePreviewResult>;
+    readImageDataUrl: (filePath: string) => Promise<string | null>;
     saveFromClipboard: (
       payload: ClipboardFilePayload,
     ) => Promise<SelectedFile>;
