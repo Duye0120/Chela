@@ -16,20 +16,21 @@ export function getRunStatusLabel(
   options: RunStatusLabelOptions = {},
 ) {
   const { isSlowConnection = false } = options;
+  const thinkingLabel = isSlowConnection
+    ? "思考中…响应有点慢，你可以停止这次请求。"
+    : "思考中…";
 
   switch (stage) {
     case "sending":
-      return "发送中…";
+      return thinkingLabel;
     case "connecting":
-      return isSlowConnection
-        ? "正在连接模型…响应有点慢，你可以停止这次请求。"
-        : "正在连接模型…";
+      return thinkingLabel;
     case "thinking":
-      return "正在思考…";
+      return thinkingLabel;
     case "tool":
       return "正在调用工具…";
     case "responding":
-      return "正在生成回复…";
+      return thinkingLabel;
     case "cancelling":
       return "正在停止…";
     default:

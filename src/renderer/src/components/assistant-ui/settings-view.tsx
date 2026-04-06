@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BotIcon } from "lucide-react";
 import type { ModelEntry, ProviderSource, SoulFilesStatus } from "@shared/contracts";
 import { buildSelectableModelOptions, findEntryLabel, loadProviderDirectory } from "@renderer/lib/provider-directory";
+import type { ModelOption } from "@renderer/components/assistant-ui/model-selector";
 import {
   canConfigureThinking,
   getEffectiveThinkingLevel,
@@ -66,18 +68,25 @@ export function SettingsView({
   }, [activeSection, loadDirectory, loadSoulStatus]);
 
   const modelOptions = useMemo(() => {
-    const nextOptions = buildSelectableModelOptions(sources, entries).map(
-      (option) => ({
-        value: option.value,
-        label: option.label,
-        disabled: false,
-      }),
-    );
+    const nextOptions: ModelOption[] = buildSelectableModelOptions(
+      sources,
+      entries,
+    ).map((option) => ({
+      id: option.value,
+      name: option.label,
+      description: option.description,
+      groupId: option.groupId,
+      groupLabel: option.groupLabel,
+      icon: <BotIcon className="size-4" />,
+      disabled: false,
+    }));
 
-    if (!nextOptions.some((option) => option.value === currentModelId)) {
+    if (!nextOptions.some((option) => option.id === currentModelId)) {
       nextOptions.unshift({
-        value: currentModelId,
-        label: findEntryLabel(currentModelId, sources, entries),
+        id: currentModelId,
+        name: findEntryLabel(currentModelId, sources, entries),
+        description: "当前模型",
+        icon: <BotIcon className="size-4" />,
         disabled: false,
       });
     }
