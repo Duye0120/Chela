@@ -34,6 +34,11 @@ OpenClaw 在 2026 年初爆火（60 天 247k GitHub stars），证明了个人 A
 │  v1：Electron UI                                  │
 │  后续：Telegram Bot（预留接口）                     │
 ├──────────────────────────────────────────────────┤
+│  Harness（执行约束层）                              │
+│                                                   │
+│  职责：run 状态机、权限门控、确认断点、事件回放      │
+│  规则：模型只能提议下一步，不能直接落地副作用        │
+├──────────────────────────────────────────────────┤
 │  Agent Core（大脑）                                │
 │                                                   │
 │  职责：接收消息 → 思考 → 调用工具 → 继续思考 → 回复 │
@@ -62,6 +67,23 @@ OpenClaw 在 2026 年初爆火（60 天 247k GitHub stars），证明了个人 A
 │  文件 Diff：file_write 前后变更对比展示              │
 └──────────────────────────────────────────────────┘
 ```
+
+### Harness 约束
+
+从这轮开始，本项目不是“模型直接控制工具”的自由 Agent，而是“模型运行在 Harness 里”的桌面 Agent。
+
+Harness 是夹在 Adapter、Agent Core、Tool System 之间的执行约束层，负责：
+
+- 把一次用户输入包装成一个可追踪的 `run`
+- 控制 `run` 状态：`idle → running → awaiting_confirmation → executing_tool → completed / aborted / failed`
+- 在 `tool_call` 真正落地前做 policy check、budget check、confirmation check
+- 把 thinking、tool、result、final text 组织成可回放事件流
+
+硬规则：
+
+- LLM 只能提议下一步，不能直接产生副作用
+- 所有副作用都必须经 Harness 批准，并绑定 `runId`
+- 所有高风险动作都必须可中断、可确认、可恢复
 
 ### 为什么分层？
 
@@ -116,19 +138,19 @@ v2 规划中有更高级的方案（sub-agent 上下文蒸馏），但 v1 这三
    a. 读取 SOUL.md + USER.md + AGENTS.md → 拼成 system prompt
    b. 检索长期记忆 → 找到相关条目注入 context
    c. 把消息 + context 发给 LLM
-4. LLM 返回：tool_call("file_read", { path: "./package.json" })
-5. Agent Core 执行工具 → 读到文件内容
+4. LLM 返回：tool_call proposal("file_read", { path: "./package.json" })
+5. Harness 检查权限和策略 → 允许后执行工具 → 读到文件内容
 6. 前端实时展示：Step 1 - Thinking... → Step 2 - file_read [running...]
 7. 工具结果喂回 LLM → LLM 生成最终回复
 8. 前端展示回复 + Step 2 变成 [done ✓]
-9. 会话消息存入 JSON store
+9. 会话消息和 run 轨迹存入 store
 ```
 
 ## 1.7 Scope 边界
 
 ### v1 做的
 
-- Agent Core（pi-agent-core 集成 + 上下文管理）
+- Harness 驱动的 Agent Core（pi-agent-core 集成 + 状态机 + 上下文管理）
 - 5 个内置工具（file_read、file_write、shell_exec、web_fetch、memory_search）
 - MCP Client（配置文件驱动，能连能用）
 - 三层记忆系统（Soul 文件 + 长期 RAG + 会话记忆）

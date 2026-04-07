@@ -12,8 +12,11 @@ Agent Core 是整个系统的大脑。它负责：
 3. **驱动 ReAct Loop** — 发给 LLM → 判断回复类型 → 执行工具或回复用户 → 循环
 4. **管理上下文预算** — 对话太长时压缩，防止 token 溢出和幻觉
 5. **透传流式事件** — 把 agent 执行过程的每一步事件发给前端展示
+6. **作为 Harness Runtime** — 把模型输出变成受约束的 run / step / checkpoint，而不是直接放行
 
 Agent Core 不关心消息从哪来（Electron 还是 Telegram），也不关心 UI 长什么样。它只管"想"和"做"。
+
+但在这个项目里，Agent Core 不是“裸 Agent”。它默认运行在 Harness Runtime 里：模型负责提议，Harness 负责准入、暂停、恢复和记账。
 
 ## 3.2 技术选型：pi-agent-core
 
@@ -75,6 +78,70 @@ Agent Core 不关心消息从哪来（Electron 还是 Telegram），也不关心
    如果是新会话 → messages 为空
 ```
 
+### Harness Run 上下文
+
+每次用户发送一条消息，不是直接 `agent.prompt()` 完事，而是先创建一个 run：
+
+```typescript
+interface AgentRunContext {
+  runId: string;
+  sessionId: string;
+  modelEntryId: string;
+  startedAt: number;
+  state:
+    | "running"
+    | "awaiting_confirmation"
+    | "executing_tool"
+    | "completed"
+    | "aborted"
+    | "failed";
+  currentStepId?: string;
+  pendingApproval?: {
+    type: "shell" | "file_write" | "mcp";
+    payloadHash: string;
+  };
+}
+```
+
+Harness 关心的不是“模型正在说什么”，而是“这次 run 当前处于哪个状态、能不能继续往前推进”。
+
+### Harness 状态机
+
+```
+idle
+  ↓
+running
+  ├─→ awaiting_confirmation
+  │      ├─ 用户允许 → executing_tool → running
+  │      └─ 用户拒绝 → running / failed
+  ├─→ executing_tool → running
+  ├─→ completed
+  ├─→ aborted
+  └─→ failed
+```
+
+关键点：
+
+- `run` 是一等公民，消息和步骤只是它的产物
+- 高风险动作进入 `awaiting_confirmation` 时必须暂停，而不是偷偷继续
+- 恢复执行时沿用同一个 `runId`，不能新建一个假 run 把上下文冲掉
+- Renderer 展示的是 Harness 事件流，不是直接把模型原始输出生搬过去
+
+### Tool Call 并不直执行
+
+在 Harness 模式下，LLM 产出的 `tool_call` 只是一个 **proposal**：
+
+```
+LLM 输出 tool_call
+  → Harness 规范化参数
+  → Policy Engine 判定 allow / confirm / deny
+  → allow 才真正执行工具
+  → 执行结果写回事件流
+  → 再喂回 LLM
+```
+
+也就是说，模型没有“直接碰文件系统/命令行”的权力。它只能请求 Harness 代执行。
+
 ## 3.4 ReAct Loop 详解
 
 一次用户输入触发的完整循环：
@@ -95,8 +162,9 @@ Agent Core 不关心消息从哪来（Electron 还是 Telegram），也不关心
 │                            content: "Hello World", │
 │                            mode: "overwrite" })    │
 │                                                   │
-│  Agent Core 判断: 这是工具调用 → 执行它             │
-│  执行 file_write → 成功，返回 { size: 11 }        │
+│  Harness 判断: 这是工具调用 proposal               │
+│  policy allow → 执行 file_write → 成功返回         │
+│  { size: 11 }                                     │
 │                                                   │
 │  事件流:                                           │
 │    → turn_start                                   │
@@ -119,7 +187,7 @@ Agent Core 不关心消息从哪来（Electron 还是 Telegram），也不关心
 │  LLM 回复:                                        │
 │    text: "已创建 hello.txt，内容是 Hello World"    │
 │                                                   │
-│  Agent Core 判断: 这是最终回复 → 发给用户           │
+│  Harness 判断: 这是最终回复 → 发给用户              │
 │                                                   │
 │  事件流:                                           │
 │    → turn_start                                   │
