@@ -69,29 +69,13 @@ import {
   destroyTerminal,
   destroyAllTerminals,
 } from "./terminal.js";
+import { HarnessRunCancelledError } from "./harness/runtime.js";
+import { harnessRuntime } from "./harness/singleton.js";
 
 let mainWindow: BrowserWindow | null = null;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIN_WINDOW_WIDTH = 920;
 const MIN_WINDOW_HEIGHT = 600;
-
-type PendingChatRequest = {
-  id: string;
-  sessionId: string;
-  runId: string;
-  cancelled: boolean;
-  handle: ReturnType<typeof getHandle>;
-};
-
-class ChatRequestCancelledError extends Error {
-  constructor() {
-    super("Chat request cancelled.");
-    this.name = "ChatRequestCancelledError";
-  }
-}
-
-const pendingChatRequests = new Map<string, PendingChatRequest>();
-
 function getPreloadPath() {
   return join(__dirname, "../preload/index.mjs");
 }
@@ -192,15 +176,6 @@ function requireMainWindow() {
   return mainWindow;
 }
 
-function ensureRequestActive(request: PendingChatRequest) {
-  if (
-    pendingChatRequests.get(request.sessionId)?.id !== request.id ||
-    request.cancelled
-  ) {
-    throw new ChatRequestCancelledError();
-  }
-}
-
 function registerIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.filesPick, async () =>
     pickFiles(requireMainWindow()),
@@ -267,35 +242,29 @@ function registerIpcHandlers() {
   ipcMain.handle(
     IPC_CHANNELS.chatSend,
     async (_event, input: SendMessageInput) => {
-      const activeRequest = pendingChatRequests.get(input.sessionId);
-      if (activeRequest && !activeRequest.cancelled) {
-        throw new Error("当前线程仍在生成中，请先停止当前回复。");
-      }
-
-      const request: PendingChatRequest = {
-        id: crypto.randomUUID(),
+      const settings = getSettings();
+      const runScope = {
         sessionId: input.sessionId,
         runId: input.runId,
-        cancelled: false,
-        handle: null,
       };
-      pendingChatRequests.set(input.sessionId, request);
+      harnessRuntime.createRun({
+        ...runScope,
+        modelEntryId: settings.defaultModelId,
+      });
       const scopedAdapter = new ElectronAdapter(requireMainWindow(), {
         sessionId: input.sessionId,
         runId: input.runId,
       });
 
       let createdHandle = false;
+      let handle: ReturnType<typeof getHandle> = null;
 
       try {
-        ensureRequestActive(request);
-
-        const settings = getSettings();
+        harnessRuntime.assertRunActive(runScope);
         const resolvedModel = resolveModelEntry(settings.defaultModelId);
+        harnessRuntime.assertRunActive(runScope);
 
-        ensureRequestActive(request);
-
-        let handle = getHandle(input.sessionId);
+        handle = getHandle(input.sessionId);
         if (
           !handle ||
           handle.modelEntryId !== resolvedModel.entry.id ||
@@ -303,7 +272,7 @@ function registerIpcHandlers() {
           handle.thinkingLevel !== settings.thinkingLevel
         ) {
           const session = await loadSession(input.sessionId);
-          ensureRequestActive(request);
+          harnessRuntime.assertRunActive(runScope);
 
           handle = await initAgent(
             input.sessionId,
@@ -314,21 +283,28 @@ function registerIpcHandlers() {
         }
 
         bindHandleToRun(handle, scopedAdapter, input.runId);
-        request.handle = handle;
-        ensureRequestActive(request);
+        harnessRuntime.attachHandle(runScope, handle);
+        harnessRuntime.assertRunActive(runScope);
 
         await promptAgent(handle, input.text, input.attachments);
+        harnessRuntime.finishRun(runScope, "completed");
       } catch (err) {
         if (
-          err instanceof ChatRequestCancelledError ||
-          request.cancelled ||
-          pendingChatRequests.get(request.sessionId)?.id !== request.id
+          err instanceof HarnessRunCancelledError ||
+          harnessRuntime.isCancelRequested(runScope)
         ) {
-          if (createdHandle && request.handle) {
-            await destroyAgent(request.handle);
+          if (createdHandle && handle) {
+            await destroyAgent(handle);
           }
+          harnessRuntime.finishRun(runScope, "aborted", {
+            reason: "用户取消了当前 run。",
+          });
           return;
         }
+
+        harnessRuntime.finishRun(runScope, "failed", {
+          reason: err instanceof Error ? err.message : "Agent 执行失败",
+        });
 
         // Send error event to renderer
         scopedAdapter.send({
@@ -339,11 +315,8 @@ function registerIpcHandlers() {
           timestamp: Date.now(),
         });
       } finally {
-        if (request.handle) {
-          completeRun(request.handle, input.runId);
-        }
-        if (pendingChatRequests.get(request.sessionId)?.id === request.id) {
-          pendingChatRequests.delete(request.sessionId);
+        if (handle) {
+          completeRun(handle, input.runId);
         }
       }
       // Return void — response comes via agent events
@@ -351,11 +324,11 @@ function registerIpcHandlers() {
   );
 
   ipcMain.handle(IPC_CHANNELS.agentCancel, async (_event, scope) => {
-    const request = pendingChatRequests.get(scope.sessionId);
-    if (request && request.runId === scope.runId) {
-      request.cancelled = true;
-      if (request.handle) {
-        cancelAgent(request.handle);
+    const activeRun = harnessRuntime.requestCancel(scope);
+    const activeHandle = harnessRuntime.getHandle(scope);
+    if (activeRun) {
+      if (activeHandle) {
+        cancelAgent(activeHandle);
       }
       return;
     }
@@ -487,6 +460,7 @@ function registerIpcHandlers() {
 }
 
 app.whenReady().then(() => {
+  harnessRuntime.hydrateFromDisk();
   registerIpcHandlers();
   createMainWindow();
   setTerminalWindow(mainWindow!);

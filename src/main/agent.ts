@@ -8,6 +8,8 @@ import { buildSoulPromptSection } from "./soul.js";
 import { loadMcpConfig, getActiveServers } from "../mcp/config.js";
 import { McpConnectionManager } from "../mcp/client.js";
 import { getAllMcpTools } from "../mcp/adapter.js";
+import { wrapToolsWithHarness } from "./harness/tool-execution.js";
+import { harnessRuntime } from "./harness/singleton.js";
 import {
   buildUserPromptMessage,
   normalizePersistedSessionMessages,
@@ -86,12 +88,19 @@ export async function initAgent(
     /* MCP init failure is non-fatal */
   }
 
+  const tools = wrapToolsWithHarness([...builtinTools, ...mcpTools], {
+    sessionId,
+    workspacePath: adapter.workspacePath,
+    adapter,
+    runtime: harnessRuntime,
+  });
+
   const agent = new Agent({
     initialState: {
       systemPrompt: buildSystemPrompt(adapter.workspacePath),
       model: resolved.model,
       thinkingLevel: settings.thinkingLevel,
-      tools: [...builtinTools, ...mcpTools],
+      tools,
       messages: normalizedMessages,
     },
     getApiKey: () => resolved.apiKey,

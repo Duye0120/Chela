@@ -1,4 +1,4 @@
-import type { BrowserWindow } from "electron";
+import { dialog, type BrowserWindow } from "electron";
 import type { AgentEvent as CoreAgentEvent } from "@mariozechner/pi-agent-core";
 import type { AgentEvent, AgentEventScope } from "../shared/agent-events.js";
 import { IPC_CHANNELS } from "../shared/ipc.js";
@@ -50,6 +50,29 @@ export class ElectronAdapter {
     if (!this.window.isDestroyed()) {
       this.window.webContents.send(IPC_CHANNELS.agentEvent, event);
     }
+  }
+
+  async requestConfirmation(input: {
+    title: string;
+    description: string;
+    detail?: string;
+  }): Promise<boolean> {
+    if (this.window.isDestroyed()) {
+      return false;
+    }
+
+    const result = await dialog.showMessageBox(this.window, {
+      type: "warning",
+      buttons: ["拒绝", "允许"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: input.title,
+      message: input.description,
+      detail: input.detail,
+    });
+
+    return result.response === 1;
   }
 
   /**
