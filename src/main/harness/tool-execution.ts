@@ -73,6 +73,13 @@ function buildConfirmDescription(
   };
 }
 
+function buildApprovalRequestId(
+  scope: HarnessRunScope,
+  toolCallId: string,
+): string {
+  return `${scope.runId}:${toolCallId}`;
+}
+
 function ensureRunScope(
   runtime: HarnessRuntime,
   sessionId: string,
@@ -149,43 +156,78 @@ async function executeWithHarness(
 
   if (evaluation.decision.type === "confirm") {
     const normalizedArgs = evaluation.normalizedArgs ?? args;
+    const confirmCopy = buildConfirmDescription(tool.name, normalizedArgs);
+    const pendingApproval = {
+      requestId: buildApprovalRequestId(runScope, toolCallId),
+      kind: inferApprovalKind(tool.name),
+      payloadHash: buildPayloadHash(tool.name, normalizedArgs),
+      reason: evaluation.decision.reason,
+      createdAt: Date.now(),
+      title: confirmCopy.title,
+      description: confirmCopy.description,
+      detail: confirmCopy.detail,
+    } as const;
+    const pendingResponse = context.runtime.waitForApprovalResponse(
+      runScope,
+      pendingApproval,
+    );
     const pendingRun = context.runtime.transitionState(runScope, "awaiting_confirmation", {
       currentStepId: toolCallId,
-      pendingApproval: {
-        kind: inferApprovalKind(tool.name),
-        payloadHash: buildPayloadHash(tool.name, normalizedArgs),
-        reason: evaluation.decision.reason,
-        createdAt: Date.now(),
-      },
+      pendingApproval,
       reason: evaluation.decision.reason,
       metadata: {
         toolName: tool.name,
         decision: evaluation.decision.type,
+        requestId: pendingApproval.requestId,
       },
     });
     if (pendingRun) {
       emitRunStateChanged(pendingRun.state, evaluation.decision.reason);
     }
 
-    const confirmCopy = buildConfirmDescription(tool.name, normalizedArgs);
-    const allowed = await context.adapter.requestConfirmation({
-      title: confirmCopy.title,
-      description: confirmCopy.description,
-      detail: confirmCopy.detail,
-    });
+    void context.adapter
+      .presentConfirmationRequest({
+        requestId: pendingApproval.requestId,
+        title: confirmCopy.title,
+        description: confirmCopy.description,
+        detail: confirmCopy.detail,
+      })
+      .then((response) => {
+        context.runtime.resolvePendingApproval(response, "dialog");
+      })
+      .catch(() => {
+        context.runtime.resolvePendingApproval(
+          {
+            requestId: pendingApproval.requestId,
+            allowed: false,
+          },
+          "system",
+        );
+      });
+
+    const approvalResolution = await pendingResponse;
+    context.adapter.recordConfirmationResolution(approvalResolution);
+    const allowed = approvalResolution.allowed;
 
     if (!allowed) {
+      const denyReason =
+        approvalResolution.source === "system"
+          ? "当前操作在等待确认时被系统中断。"
+          : "用户拒绝了当前操作。";
+
       const resumedRun = context.runtime.transitionState(runScope, "running", {
         currentStepId: toolCallId,
         pendingApproval: null,
-        reason: "用户拒绝了当前操作。",
+        reason: denyReason,
         metadata: {
           toolName: tool.name,
           decision: "reject-confirm",
+          requestId: pendingApproval.requestId,
+          source: approvalResolution.source,
         },
       });
       if (resumedRun) {
-        emitRunStateChanged(resumedRun.state, "用户拒绝了当前操作。");
+        emitRunStateChanged(resumedRun.state, denyReason);
       }
       return {
         content: [

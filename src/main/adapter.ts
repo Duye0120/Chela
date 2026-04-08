@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { dialog, type BrowserWindow } from "electron";
 import type { AgentEvent as CoreAgentEvent } from "@mariozechner/pi-agent-core";
-import type { AgentEvent, AgentEventScope } from "../shared/agent-events.js";
+import type {
+  AgentEvent,
+  AgentEventScope,
+  ConfirmationResponse,
+} from "../shared/agent-events.js";
+import type { HarnessApprovalResolution } from "./harness/types.js";
 import type { AgentStep, ChatMessage } from "../shared/contracts.js";
 import { IPC_CHANNELS } from "../shared/ipc.js";
 import { getSettings } from "./settings.js";
@@ -134,29 +139,36 @@ export class ElectronAdapter {
     });
   }
 
-  async requestConfirmation(input: {
+  async presentConfirmationRequest(input: {
+    requestId: string;
     title: string;
     description: string;
     detail?: string;
-  }): Promise<boolean> {
-    const requestId = randomUUID();
+  }): Promise<ConfirmationResponse> {
     appendConfirmationRequestedEvent({
       sessionId: this.scope.sessionId,
       runId: this.scope.runId,
-      requestId,
+      requestId: input.requestId,
       title: input.title,
       description: input.description,
       detail: input.detail,
     });
+    this.send({
+      type: "confirmation_request",
+      sessionId: this.scope.sessionId,
+      runId: this.scope.runId,
+      requestId: input.requestId,
+      title: input.title,
+      description: input.description,
+      detail: input.detail,
+      timestamp: Date.now(),
+    });
 
     if (this.window.isDestroyed()) {
-      appendConfirmationResolvedEvent({
-        sessionId: this.scope.sessionId,
-        runId: this.scope.runId,
-        requestId,
+      return {
+        requestId: input.requestId,
         allowed: false,
-      });
-      return false;
+      };
     }
 
     const result = await dialog.showMessageBox(this.window, {
@@ -170,14 +182,19 @@ export class ElectronAdapter {
       detail: input.detail,
     });
 
-    const allowed = result.response === 1;
+    return {
+      requestId: input.requestId,
+      allowed: result.response === 1,
+    };
+  }
+
+  recordConfirmationResolution(resolution: HarnessApprovalResolution): void {
     appendConfirmationResolvedEvent({
       sessionId: this.scope.sessionId,
       runId: this.scope.runId,
-      requestId,
-      allowed,
+      requestId: resolution.requestId,
+      allowed: resolution.allowed,
     });
-    return allowed;
   }
 
   handleCoreEvent(event: CoreAgentEvent): void {

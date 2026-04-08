@@ -37,6 +37,33 @@ export function loadPersistedHarnessRuns(): HarnessRunSnapshot[] {
       ? parsed.runs.map((run) => ({
           ...run,
           runKind: run.runKind ?? "chat",
+          pendingApproval: run.pendingApproval
+            ? {
+                requestId:
+                  typeof run.pendingApproval.requestId === "string" &&
+                  run.pendingApproval.requestId.trim()
+                    ? run.pendingApproval.requestId
+                    : `recovered-${run.runId}`,
+                kind: run.pendingApproval.kind,
+                payloadHash: run.pendingApproval.payloadHash,
+                reason: run.pendingApproval.reason,
+                createdAt: run.pendingApproval.createdAt,
+                title:
+                  typeof run.pendingApproval.title === "string" &&
+                  run.pendingApproval.title.trim()
+                    ? run.pendingApproval.title
+                    : "恢复待确认操作",
+                description:
+                  typeof run.pendingApproval.description === "string" &&
+                  run.pendingApproval.description.trim()
+                    ? run.pendingApproval.description
+                    : run.pendingApproval.reason,
+                detail:
+                  typeof run.pendingApproval.detail === "string"
+                    ? run.pendingApproval.detail
+                    : undefined,
+              }
+            : undefined,
         }))
       : [];
   } catch {

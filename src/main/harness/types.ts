@@ -11,6 +11,7 @@ export type HarnessRunState =
 export type HarnessRiskLevel = "safe" | "guarded" | "dangerous";
 
 export type HarnessApprovalKind = "shell" | "file_write" | "mcp";
+export type HarnessApprovalSource = "dialog" | "renderer" | "system";
 
 export type HarnessRunScope = {
   sessionId: string;
@@ -18,10 +19,22 @@ export type HarnessRunScope = {
 };
 
 export type HarnessPendingApproval = {
+  requestId: string;
   kind: HarnessApprovalKind;
   payloadHash: string;
   reason: string;
   createdAt: number;
+  title: string;
+  description: string;
+  detail?: string;
+};
+
+export type HarnessApprovalResolution = {
+  requestId: string;
+  allowed: boolean;
+  respondedAt: number;
+  source: HarnessApprovalSource;
+  remember?: boolean;
 };
 
 export type HarnessRunSnapshot = HarnessRunScope & {

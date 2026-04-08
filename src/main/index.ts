@@ -583,6 +583,11 @@ function registerIpcHandlers() {
     }
   });
 
+  handleIpc(
+    IPC_CHANNELS.agentConfirmResponse,
+    async (_event, response) => harnessRuntime.resolvePendingApproval(response),
+  );
+
   // Settings
   handleIpc(IPC_CHANNELS.settingsGet, async () => getSettings());
   handleIpc(IPC_CHANNELS.settingsUpdate, async (_event, partial) =>

@@ -1,8 +1,11 @@
 import type { AgentHandle } from "../agent.js";
+import type { ConfirmationResponse } from "../../shared/agent-events.js";
 import type { RunKind } from "../../shared/contracts.js";
 import { appendHarnessAuditEvent } from "./audit.js";
 import { loadPersistedHarnessRuns, savePersistedHarnessRuns } from "./store.js";
 import type {
+  HarnessApprovalResolution,
+  HarnessApprovalSource,
   HarnessAuditEvent,
   HarnessPendingApproval,
   HarnessRunScope,
@@ -17,6 +20,13 @@ type ActiveHarnessRun = HarnessRunSnapshot & {
 type CreateRunInput = HarnessRunScope & {
   modelEntryId: string;
   runKind: RunKind;
+};
+
+type PendingApprovalWaiter = {
+  scope: HarnessRunScope;
+  promise: Promise<HarnessApprovalResolution>;
+  resolve: (resolution: HarnessApprovalResolution) => void;
+  settled: boolean;
 };
 
 type FinishRunOptions = {
@@ -41,6 +51,7 @@ export type InterruptedApprovalRecord = {
 export class HarnessRuntime {
   private readonly activeRunsBySession = new Map<string, ActiveHarnessRun>();
   private readonly activeRunsById = new Map<string, ActiveHarnessRun>();
+  private readonly approvalWaitersByRequestId = new Map<string, PendingApprovalWaiter>();
   private readonly interruptedApprovals: InterruptedApprovalRecord[] = [];
   private hydrated = false;
 
@@ -203,9 +214,63 @@ export class HarnessRuntime {
         timestamp: Date.now(),
         state: run.state,
       });
+      if (run.pendingApproval?.requestId) {
+        this.resolvePendingApproval(
+          {
+            requestId: run.pendingApproval.requestId,
+            allowed: false,
+          },
+          "system",
+        );
+      }
     }
 
     return this.toSnapshot(run);
+  }
+
+  waitForApprovalResponse(
+    scope: HarnessRunScope,
+    approval: HarnessPendingApproval,
+  ): Promise<HarnessApprovalResolution> {
+    const existing = this.approvalWaitersByRequestId.get(approval.requestId);
+    if (existing) {
+      return existing.promise;
+    }
+
+    let resolveWaiter!: (resolution: HarnessApprovalResolution) => void;
+    const promise = new Promise<HarnessApprovalResolution>((resolve) => {
+      resolveWaiter = resolve;
+    });
+
+    this.approvalWaitersByRequestId.set(approval.requestId, {
+      scope,
+      promise,
+      resolve: resolveWaiter,
+      settled: false,
+    });
+
+    return promise;
+  }
+
+  resolvePendingApproval(
+    response: ConfirmationResponse,
+    source: HarnessApprovalSource = "renderer",
+  ): boolean {
+    const waiter = this.approvalWaitersByRequestId.get(response.requestId);
+    if (!waiter || waiter.settled) {
+      return false;
+    }
+
+    waiter.settled = true;
+    this.approvalWaitersByRequestId.delete(response.requestId);
+    waiter.resolve({
+      requestId: response.requestId,
+      allowed: response.allowed,
+      respondedAt: Date.now(),
+      source,
+      remember: response.remember,
+    });
+    return true;
   }
 
   transitionState(
@@ -277,6 +342,10 @@ export class HarnessRuntime {
       reason: options?.reason,
       metadata: options?.metadata,
     });
+
+    if (run.pendingApproval?.requestId) {
+      this.approvalWaitersByRequestId.delete(run.pendingApproval.requestId);
+    }
 
     this.activeRunsById.delete(run.runId);
     if (this.activeRunsBySession.get(run.sessionId)?.requestId === run.requestId) {
