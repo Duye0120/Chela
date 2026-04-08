@@ -31,10 +31,36 @@ export class HarnessRunCancelledError extends Error {
   }
 }
 
+export type InterruptedApprovalRecord = {
+  sessionId: string;
+  runId: string;
+  approval: HarnessPendingApproval;
+  interruptedAt: number;
+};
+
 export class HarnessRuntime {
   private readonly activeRunsBySession = new Map<string, ActiveHarnessRun>();
   private readonly activeRunsById = new Map<string, ActiveHarnessRun>();
+  private readonly interruptedApprovals: InterruptedApprovalRecord[] = [];
   private hydrated = false;
+
+  /** 返回因应用重启而中断的待确认记录。 */
+  getInterruptedApprovals(sessionId?: string): InterruptedApprovalRecord[] {
+    if (sessionId) {
+      return this.interruptedApprovals.filter((r) => r.sessionId === sessionId);
+    }
+    return [...this.interruptedApprovals];
+  }
+
+  /** 确认已知晓某条中断记录（从列表中移除）。 */
+  dismissInterruptedApproval(runId: string): boolean {
+    const idx = this.interruptedApprovals.findIndex((r) => r.runId === runId);
+    if (idx >= 0) {
+      this.interruptedApprovals.splice(idx, 1);
+      return true;
+    }
+    return false;
+  }
 
   hydrateFromDisk(): HarnessRunSnapshot[] {
     if (this.hydrated) {
@@ -47,17 +73,34 @@ export class HarnessRuntime {
       return [];
     }
 
-    // Current implementation does not support true continuation of an interrupted
-    // agent loop after app restart. We keep the trace, write an audit event, and
-    // clear the active run registry so the session can continue.
+    const now = Date.now();
+
     for (const run of persistedRuns) {
+      const wasAwaitingConfirmation = run.state === "awaiting_confirmation";
+      const finalState = wasAwaitingConfirmation ? "aborted" : "failed";
+      const action: HarnessAuditEvent["action"] = wasAwaitingConfirmation
+        ? "run_aborted"
+        : "run_failed";
+      const reason = wasAwaitingConfirmation
+        ? "应用重启中断了待确认操作。"
+        : "应用启动时发现未完成 run，已标记为失败。";
+
+      if (wasAwaitingConfirmation && run.pendingApproval) {
+        this.interruptedApprovals.push({
+          sessionId: run.sessionId,
+          runId: run.runId,
+          approval: run.pendingApproval,
+          interruptedAt: now,
+        });
+      }
+
       this.audit({
         runId: run.runId,
         sessionId: run.sessionId,
-        action: "run_failed",
-        timestamp: Date.now(),
-        state: "failed",
-        reason: "应用启动时发现未完成 run，当前版本尚不支持自动续跑，已标记为失败。",
+        action,
+        timestamp: now,
+        state: finalState,
+        reason,
         metadata: {
           recoveredFromDisk: true,
           previousState: run.state,

@@ -258,6 +258,8 @@ export type SessionMemorySnapshot = {
   openLoops: string[];
   nextActions: string[];
   risks: string[];
+  errors: string[];
+  learnings: string[];
   workspace: {
     branchName: string | null;
     modelEntryId: string | null;

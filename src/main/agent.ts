@@ -7,6 +7,15 @@ import {
   getSessionMemoryPromptSection,
 } from "./context/service.js";
 import { getSemanticMemoryPromptSection } from "./memory/service.js";
+import {
+  assemblePromptSections,
+  buildPlatformConstitutionSection,
+  buildRuntimeCapabilitySection,
+  buildSemanticMemorySection,
+  buildSessionSnapshotSection,
+  buildTurnIntentPatchSection,
+  buildWorkspacePolicySection,
+} from "./prompt-control-plane.js";
 import { getSettings } from "./settings.js";
 import { resolveModelEntry } from "./providers.js";
 import { buildToolPool } from "./tools/index.js";
@@ -31,6 +40,15 @@ export interface AgentHandle {
   mcpManager: McpConnectionManager;
   workspacePath: string;
   activeRunId: string | null;
+  promptRuntime: {
+    sourceName: string;
+    providerType: "anthropic" | "openai" | "google" | "openai-compatible";
+    modelName: string;
+    modelId: string;
+    contextWindow: number | null;
+    supportsVision: boolean;
+    supportsToolCalling: boolean;
+  };
 }
 
 const handlesBySession = new Map<string, AgentHandle>();
@@ -102,9 +120,28 @@ export async function initAgent(
     runtime: harnessRuntime,
   });
 
+  const promptRuntime = {
+    sourceName: resolved.source.name,
+    providerType: resolved.source.providerType,
+    modelName: resolved.entry.name,
+    modelId: resolved.entry.modelId,
+    contextWindow: resolved.model.contextWindow ?? null,
+    supportsVision: resolved.model.input.includes("image"),
+    supportsToolCalling: resolved.entry.capabilities.toolCalling ??
+      resolved.entry.detectedCapabilities.toolCalling ??
+      false,
+  } satisfies AgentHandle["promptRuntime"];
+
   const agent = new Agent({
     initialState: {
-      systemPrompt: await buildSystemPrompt(adapter.workspacePath, sessionId),
+      systemPrompt: await buildSystemPrompt({
+        workspacePath: adapter.workspacePath,
+        sessionId,
+        latestUserText: null,
+        toolNames: tools.map((tool) => tool.name),
+        thinkingLevel: settings.thinkingLevel,
+        promptRuntime,
+      }),
       model: resolved.model,
       thinkingLevel: settings.thinkingLevel,
       tools,
@@ -130,6 +167,7 @@ export async function initAgent(
     mcpManager,
     workspacePath: adapter.workspacePath,
     activeRunId: null,
+    promptRuntime,
   };
 
   if (initGenerations.get(sessionId) !== generation) {
@@ -162,7 +200,14 @@ export async function promptAgent(
   attachments: SelectedFile[],
 ): Promise<void> {
   handle.agent.setSystemPrompt(
-    await buildSystemPrompt(handle.workspacePath, handle.sessionId, text),
+    await buildSystemPrompt({
+      workspacePath: handle.workspacePath,
+      sessionId: handle.sessionId,
+      latestUserText: text,
+      toolNames: handle.agent.state.tools.map((tool) => tool.name),
+      thinkingLevel: handle.thinkingLevel,
+      promptRuntime: handle.promptRuntime,
+    }),
   );
   await handle.agent.prompt(
     await buildUserPromptMessage(
@@ -215,48 +260,41 @@ export function getHandle(sessionId: string): AgentHandle | null {
   return handlesBySession.get(sessionId) ?? null;
 }
 
-function buildBaseSystemPrompt(workspacePath: string): string {
-  const base = [
-    "你是 Pi，一个运行在用户桌面上的 AI 助手。",
-    "你可以帮助用户完成各种软件开发和日常任务。",
-    "请用中文回复。",
-    "",
-    "你拥有以下工具能力：",
-    "- get_time: 获取当前时间",
-    "- file_read: 读取本地文件内容（指定行范围）",
-    "- file_edit: 对已有文件做精确替换，适合小范围改代码",
-    "- file_write: 创建或写入本地文件（覆盖/追加）",
-    "- glob_search: 按 glob 模式查找文件",
-    "- grep_search: 按文本或正则搜索代码/文本内容",
-    "- shell_exec: 执行 shell 命令（有安全限制）",
-    "- web_fetch: 获取网页内容并转换为纯文本",
-    "- web_search: 搜索网页结果，适合先搜再读",
-    "- todo_read / todo_write: 读取或更新当前线程的待办清单",
-    "- list_mcp_resources / read_mcp_resource / list_mcp_resource_templates: 读取已连接 MCP 服务暴露的资源",
-    "- 兼容外部常见别名：edit_file / WebSearch / TodoWrite / ListMcpResources / ReadMcpResource",
-    "- mcp_*: 已连接 MCP 服务动态注入的工具，默认需要更谨慎地使用",
-    "",
-    "使用工具时，路径相对于用户的 workspace 目录。",
-    "shell_exec 会使用当前配置的 shell；Windows 下通常是 PowerShell。请按对应 shell 的语法写命令，不要默认使用 bash 专属语法。",
-    "执行命令前请确认命令的安全性。",
-  ].join("\n");
-
-  const soul = buildSoulPromptSection(workspacePath);
-  return soul ? base + soul : base;
-}
-
-async function buildSystemPrompt(
-  workspacePath: string,
-  sessionId: string,
-  latestUserText?: string,
-): Promise<string> {
-  await ensureContextSnapshotCoverage(sessionId);
-  const base = buildBaseSystemPrompt(workspacePath);
-  const snapshot = await getSessionMemoryPromptSection(sessionId);
+async function buildSystemPrompt(input: {
+  workspacePath: string;
+  sessionId: string;
+  latestUserText?: string | null;
+  toolNames: string[];
+  thinkingLevel: string;
+  promptRuntime: AgentHandle["promptRuntime"];
+}): Promise<string> {
+  await ensureContextSnapshotCoverage(input.sessionId);
+  const settings = getSettings();
+  const workspacePolicy = buildSoulPromptSection(input.workspacePath);
+  const snapshot = await getSessionMemoryPromptSection(input.sessionId);
   const semanticMemory = await getSemanticMemoryPromptSection({
-    sessionId,
-    query: latestUserText ?? null,
+    sessionId: input.sessionId,
+    query: input.latestUserText ?? null,
   });
 
-  return [base, snapshot, semanticMemory].filter(Boolean).join("\n\n");
+  return assemblePromptSections([
+    buildPlatformConstitutionSection(),
+    buildWorkspacePolicySection(workspacePolicy),
+    buildRuntimeCapabilitySection({
+      workspacePath: input.workspacePath,
+      shell: settings.terminal.shell,
+      sourceName: input.promptRuntime.sourceName,
+      providerType: input.promptRuntime.providerType,
+      modelName: input.promptRuntime.modelName,
+      modelId: input.promptRuntime.modelId,
+      contextWindow: input.promptRuntime.contextWindow,
+      supportsVision: input.promptRuntime.supportsVision,
+      supportsToolCalling: input.promptRuntime.supportsToolCalling,
+      thinkingLevel: input.thinkingLevel,
+      toolNames: input.toolNames,
+    }),
+    buildSemanticMemorySection(semanticMemory),
+    buildSessionSnapshotSection(snapshot),
+    buildTurnIntentPatchSection(input.latestUserText),
+  ]);
 }

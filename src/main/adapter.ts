@@ -5,6 +5,7 @@ import type { AgentEvent, AgentEventScope } from "../shared/agent-events.js";
 import type { AgentStep, ChatMessage } from "../shared/contracts.js";
 import { IPC_CHANNELS } from "../shared/ipc.js";
 import { getSettings } from "./settings.js";
+import { appLogger } from "./logger.js";
 import {
   appendConfirmationRequestedEvent,
   appendConfirmationResolvedEvent,
@@ -22,6 +23,7 @@ type RunBuffer = {
   finalText: string;
   usage?: { inputTokens: number; outputTokens: number };
   steps: AgentStep[];
+  lastStopReason?: string;
 };
 
 function stringifyPartialResult(value: unknown): string {
@@ -244,6 +246,12 @@ export class ElectronAdapter {
           break;
         }
 
+        // 捕获 stop reason 用于 max_output_tokens 续写检测
+        const stopReason = (message as unknown as Record<string, unknown>).stopReason;
+        if (typeof stopReason === "string") {
+          this.buffer.lastStopReason = stopReason;
+        }
+
         const usage = message.usage
           ? { inputTokens: message.usage.input, outputTokens: message.usage.output }
           : undefined;
@@ -383,6 +391,19 @@ export class ElectronAdapter {
           result: event.isError ? undefined : event.result,
           error: event.isError ? String(event.result) : undefined,
         });
+        if (event.isError) {
+          appLogger.warn({
+            scope: "agent.tool",
+            message: "工具执行失败",
+            data: {
+              sessionId,
+              runId,
+              stepId: event.toolCallId,
+              toolName: event.toolName,
+            },
+            error: event.result,
+          });
+        }
         this.send({
           type: "tool_execution_end",
           sessionId,
@@ -415,6 +436,16 @@ export class ElectronAdapter {
     if (this.terminalEventFlushed) {
       return;
     }
+
+    appLogger.error({
+      scope: "agent.runtime",
+      message: "Agent 终止于错误",
+      data: {
+        sessionId: this.scope.sessionId,
+        runId: this.scope.runId,
+      },
+      error: message,
+    });
 
     this.pendingTerminalEvent = {
       type: "agent_error",
@@ -474,6 +505,11 @@ export class ElectronAdapter {
       usage: this.buffer.usage,
       steps,
     };
+  }
+
+  /** 获取最后一次 message_end 的 stop reason，用于 max_output_tokens 检测 */
+  getLastStopReason(): string | undefined {
+    return this.buffer.lastStopReason;
   }
 
   get workspacePath(): string {

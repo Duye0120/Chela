@@ -10,9 +10,6 @@
   "scripts": {
     "dev": "electron-vite dev --watch",
     "dev:renderer": "electron-vite dev --rendererOnly",
-    "demo:cli": "tsx src/main.ts",
-    "mcp:dev": "tsx watch src/chatgpt/server.ts",
-    "mcp:start": "tsx src/chatgpt/server.ts",
     "build": "electron-vite build",
     "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.renderer.json",
     "start": "electron-vite preview"

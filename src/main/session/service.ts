@@ -168,6 +168,8 @@ function createEmptySnapshot(sessionId: string): SessionMemorySnapshot {
     openLoops: [],
     nextActions: [],
     risks: [],
+    errors: [],
+    learnings: [],
     workspace: {
       branchName: null,
       modelEntryId: null,

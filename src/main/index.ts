@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from "electron";
 import {
   pickFiles,
   readFilePreview,
@@ -25,7 +25,7 @@ import {
   setSessionGroup,
   unarchiveSession,
 } from "./store.js";
-import { compactSession, getContextSummary } from "./context/service.js";
+import { compactSession, getContextSummary, reactiveCompact } from "./context/service.js";
 import { IPC_CHANNELS } from "../shared/ipc.js";
 import type { ChatSession, SendMessageInput } from "../shared/contracts.js";
 import { ElectronAdapter } from "./adapter.js";
@@ -79,11 +79,43 @@ import {
 } from "./terminal.js";
 import { HarnessRunCancelledError } from "./harness/runtime.js";
 import { harnessRuntime } from "./harness/singleton.js";
+import {
+  appLogger,
+  attachWindowLogging,
+  registerProcessLogging,
+  summarizeIpcArgs,
+} from "./logger.js";
+
+// ── 错误分类辅助 ─────────────────────────────────────
+
+/** 检测 API 返回的 prompt-too-long / context_length_exceeded 错误 */
+function isPromptTooLongError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("prompt is too long") ||
+    msg.includes("context_length_exceeded") ||
+    msg.includes("maximum context length") ||
+    msg.includes("too many tokens") ||
+    msg.includes("prompt_too_long") ||
+    msg.includes("request too large") ||
+    msg.includes("请求过长") ||
+    (msg.includes("context") && msg.includes("exceed"))
+  );
+}
+
+/** 检测 max_output_tokens 截断（基于 stop_reason） */
+function isMaxTokensTruncation(stopReason: string | undefined): boolean {
+  if (!stopReason) return false;
+  const normalized = stopReason.toLowerCase();
+  return normalized === "max_tokens" || normalized === "length";
+}
 
 let mainWindow: BrowserWindow | null = null;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIN_WINDOW_WIDTH = 920;
 const MIN_WINDOW_HEIGHT = 600;
+
 function getPreloadPath() {
   return join(__dirname, "../preload/index.mjs");
 }
@@ -131,6 +163,8 @@ function createMainWindow() {
     },
   });
 
+  attachWindowLogging(mainWindow);
+
   mainWindow.on("maximize", notifyWindowState);
   mainWindow.on("unmaximize", notifyWindowState);
   mainWindow.on("ready-to-show", notifyWindowState);
@@ -174,6 +208,14 @@ function createMainWindow() {
   } else {
     void mainWindow.loadFile(getRendererPath());
   }
+
+  appLogger.info({
+    scope: "app.window",
+    message: "主窗口已创建",
+    data: {
+      devServerUrl: devServerUrl ?? null,
+    },
+  });
 }
 
 function requireMainWindow() {
@@ -184,78 +226,100 @@ function requireMainWindow() {
   return mainWindow;
 }
 
+function handleIpc(
+  channel: string,
+  handler: (event: IpcMainInvokeEvent, ...args: any[]) => Promise<unknown> | unknown,
+): void {
+  ipcMain.handle(channel, async (event, ...args) => {
+    try {
+      return await handler(event, ...args);
+    } catch (error) {
+      appLogger.error({
+        scope: "ipc",
+        message: "IPC 调用失败",
+        data: {
+          channel,
+          args: summarizeIpcArgs(args),
+        },
+        error,
+      });
+      throw error;
+    }
+  });
+}
+
 function registerIpcHandlers() {
-  ipcMain.handle(IPC_CHANNELS.filesPick, async () =>
+  handleIpc(IPC_CHANNELS.filesPick, async () =>
     pickFiles(requireMainWindow()),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.filesReadPreview,
     async (_event, filePath: string) => readFilePreview(filePath),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.filesReadImageDataUrl,
     async (_event, filePath: string) => readImageDataUrl(filePath),
   );
-  ipcMain.handle(IPC_CHANNELS.filesSaveFromClipboard, async (_event, payload) =>
+  handleIpc(IPC_CHANNELS.filesSaveFromClipboard, async (_event, payload) =>
     saveClipboardFile(payload),
   );
 
-  ipcMain.handle(IPC_CHANNELS.sessionsList, async () => listSessions());
-  ipcMain.handle(IPC_CHANNELS.sessionsLoad, async (_event, sessionId: string) =>
+  handleIpc(IPC_CHANNELS.sessionsList, async () => listSessions());
+  handleIpc(IPC_CHANNELS.sessionsLoad, async (_event, sessionId: string) =>
     loadSession(sessionId),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.sessionsSave,
     async (_event, session: ChatSession) => saveSession(session),
   );
-  ipcMain.handle(IPC_CHANNELS.sessionsCreate, async () => createSession());
-  ipcMain.handle(
+  handleIpc(IPC_CHANNELS.sessionsCreate, async () => createSession());
+  handleIpc(
     IPC_CHANNELS.sessionsArchive,
     async (_event, sessionId: string) => archiveSession(sessionId),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.sessionsUnarchive,
     async (_event, sessionId: string) => unarchiveSession(sessionId),
   );
-  ipcMain.handle(IPC_CHANNELS.sessionsListArchived, async () =>
+  handleIpc(IPC_CHANNELS.sessionsListArchived, async () =>
     listArchivedSessions(),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.sessionsDelete,
     async (_event, sessionId: string) => deleteSession(sessionId),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.sessionsSetGroup,
     async (_event, sessionId: string, groupId: string | null) =>
       setSessionGroup(sessionId, groupId),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.sessionsRename,
     async (_event, sessionId: string, title: string) =>
       renameSession(sessionId, title),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.contextGetSummary,
     async (_event, sessionId: string) => getContextSummary(sessionId),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.contextCompact,
     async (_event, sessionId: string) => compactSession(sessionId),
   );
 
-  ipcMain.handle(IPC_CHANNELS.groupsList, async () => listGroups());
-  ipcMain.handle(IPC_CHANNELS.groupsCreate, async (_event, name: string) =>
+  handleIpc(IPC_CHANNELS.groupsList, async () => listGroups());
+  handleIpc(IPC_CHANNELS.groupsCreate, async (_event, name: string) =>
     createGroup(name),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.groupsRename,
     async (_event, groupId: string, name: string) => renameGroup(groupId, name),
   );
-  ipcMain.handle(IPC_CHANNELS.groupsDelete, async (_event, groupId: string) =>
+  handleIpc(IPC_CHANNELS.groupsDelete, async (_event, groupId: string) =>
     deleteGroup(groupId),
   );
 
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.chatSend,
     async (_event, input: SendMessageInput) => {
       const settings = getSettings();
@@ -278,6 +342,18 @@ function registerIpcHandlers() {
       let handle: ReturnType<typeof getHandle> = null;
       let runCreated = false;
       let transcriptStarted = false;
+
+      appLogger.info({
+        scope: "chat.send",
+        message: "开始发送消息",
+        data: {
+          sessionId: input.sessionId,
+          runId: input.runId,
+          textLength: input.text.length,
+          attachmentCount: input.attachments.length,
+          modelEntryId: resolvedModel.entry.id,
+        },
+      });
 
       try {
         harnessRuntime.createRun({
@@ -324,7 +400,57 @@ function registerIpcHandlers() {
         harnessRuntime.attachHandle(runScope, handle);
         harnessRuntime.assertRunActive(runScope);
 
-        await promptAgent(handle, input.text, input.attachments);
+        // ── 带 PTL 恢复的 prompt 调用 ──
+        try {
+          await promptAgent(handle, input.text, input.attachments);
+        } catch (promptErr) {
+          if (
+            isPromptTooLongError(promptErr) &&
+            !harnessRuntime.isCancelRequested(runScope)
+          ) {
+            appLogger.warn({
+              scope: "chat.send",
+              message: "检测到 prompt-too-long，尝试反应式 compact 后重试",
+              data: { sessionId: input.sessionId, runId: input.runId },
+            });
+            const compacted = await reactiveCompact(input.sessionId);
+            if (compacted) {
+              await promptAgent(handle, input.text, input.attachments);
+            } else {
+              throw promptErr;
+            }
+          } else {
+            throw promptErr;
+          }
+        }
+
+        // ── max_output_tokens 续写检测 ──
+        const stopReason = scopedAdapter.getLastStopReason();
+        if (
+          isMaxTokensTruncation(stopReason) &&
+          !harnessRuntime.isCancelRequested(runScope)
+        ) {
+          appLogger.info({
+            scope: "chat.send",
+            message: "检测到 max_output_tokens 截断，注入续写指令",
+            data: { sessionId: input.sessionId, runId: input.runId, stopReason },
+          });
+          try {
+            await promptAgent(
+              handle,
+              "直接继续，不要道歉，不要回顾，从中断处接着写。",
+              [],
+            );
+          } catch (contErr) {
+            // 续写失败不阻塞主流程，只记录日志
+            appLogger.warn({
+              scope: "chat.send",
+              message: "max_tokens 续写失败",
+              error: contErr,
+            });
+          }
+        }
+
         const assistantMessage = scopedAdapter.buildAssistantMessage("completed");
         if (assistantMessage) {
           appendAssistantMessageEvent({
@@ -339,6 +465,14 @@ function registerIpcHandlers() {
           finalState: "completed",
         });
         harnessRuntime.finishRun(runScope, "completed");
+        appLogger.info({
+          scope: "chat.send",
+          message: "消息发送完成",
+          data: {
+            sessionId: input.sessionId,
+            runId: input.runId,
+          },
+        });
         scopedAdapter.flushTerminalEvent({ type: "agent_end" });
       } catch (err) {
         if (
@@ -369,6 +503,14 @@ function registerIpcHandlers() {
               reason: "用户取消了当前 run。",
             });
           }
+          appLogger.warn({
+            scope: "chat.send",
+            message: "消息发送被取消",
+            data: {
+              sessionId: input.sessionId,
+              runId: input.runId,
+            },
+          });
           scopedAdapter.flushTerminalEvent({ type: "agent_end" });
           return;
         }
@@ -399,6 +541,18 @@ function registerIpcHandlers() {
             reason: errorMessage,
           });
         }
+        appLogger.error({
+          scope: "chat.send",
+          message: "消息发送失败",
+          data: {
+            sessionId: input.sessionId,
+            runId: input.runId,
+            createdHandle,
+            runCreated,
+            transcriptStarted,
+          },
+          error: err,
+        });
         scopedAdapter.queueTerminalError(errorMessage);
         scopedAdapter.flushTerminalEvent({
           type: "agent_error",
@@ -413,7 +567,7 @@ function registerIpcHandlers() {
     },
   );
 
-  ipcMain.handle(IPC_CHANNELS.agentCancel, async (_event, scope) => {
+  handleIpc(IPC_CHANNELS.agentCancel, async (_event, scope) => {
     const activeRun = harnessRuntime.requestCancel(scope);
     const activeHandle = harnessRuntime.getHandle(scope);
     if (activeRun) {
@@ -430,108 +584,108 @@ function registerIpcHandlers() {
   });
 
   // Settings
-  ipcMain.handle(IPC_CHANNELS.settingsGet, async () => getSettings());
-  ipcMain.handle(IPC_CHANNELS.settingsUpdate, async (_event, partial) =>
+  handleIpc(IPC_CHANNELS.settingsGet, async () => getSettings());
+  handleIpc(IPC_CHANNELS.settingsUpdate, async (_event, partial) =>
     updateSettings(partial),
   );
 
   // Providers
-  ipcMain.handle(IPC_CHANNELS.providersListSources, async () => listSources());
-  ipcMain.handle(
+  handleIpc(IPC_CHANNELS.providersListSources, async () => listSources());
+  handleIpc(
     IPC_CHANNELS.providersGetSource,
     async (_event, sourceId: string) => getSource(sourceId),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.providersSaveSource,
     async (_event, draft) => saveSource(draft),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.providersDeleteSource,
     async (_event, sourceId: string) => deleteSource(sourceId),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.providersTestSource,
     async (_event, draft) => testSource(draft),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.providersGetCredentials,
     async (_event, sourceId: string) => getCredentials(sourceId),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.providersSetCredentials,
     async (_event, sourceId: string, apiKey: string) =>
       setCredentials(sourceId, apiKey),
   );
 
   // Models
-  ipcMain.handle(IPC_CHANNELS.modelsListEntries, async () => listEntries());
-  ipcMain.handle(
+  handleIpc(IPC_CHANNELS.modelsListEntries, async () => listEntries());
+  handleIpc(
     IPC_CHANNELS.modelsListEntriesBySource,
     async (_event, sourceId: string) => listEntriesBySource(sourceId),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.modelsSaveEntry,
     async (_event, draft) => saveEntry(draft),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.modelsDeleteEntry,
     async (_event, entryId: string) => deleteEntry(entryId),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.modelsGetEntry,
     async (_event, entryId: string) => getEntry(entryId),
   );
 
   // Workspace
-  ipcMain.handle(IPC_CHANNELS.workspaceChange, async (_event, path: string) => {
+  handleIpc(IPC_CHANNELS.workspaceChange, async (_event, path: string) => {
     updateSettings({ workspace: path });
   });
-  ipcMain.handle(IPC_CHANNELS.workspaceGetSoul, async () => {
+  handleIpc(IPC_CHANNELS.workspaceGetSoul, async () => {
     const settings = getSettings();
     return getSoulFilesStatus(settings.workspace);
   });
 
   // Terminal
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.terminalCreate,
     async (_event, options?: { cwd?: string }) => createTerminal(options),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.terminalWrite,
     async (_event, id: string, data: string) => writeTerminal(id, data),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.terminalResize,
     async (_event, id: string, cols: number, rows: number) =>
       resizeTerminal(id, cols, rows),
   );
-  ipcMain.handle(IPC_CHANNELS.terminalDestroy, async (_event, id: string) =>
+  handleIpc(IPC_CHANNELS.terminalDestroy, async (_event, id: string) =>
     destroyTerminal(id),
   );
-  ipcMain.handle(IPC_CHANNELS.gitStatus, async () =>
+  handleIpc(IPC_CHANNELS.gitStatus, async () =>
     getGitDiffSnapshot(getSettings().workspace),
   );
-  ipcMain.handle(IPC_CHANNELS.gitListBranches, async () =>
+  handleIpc(IPC_CHANNELS.gitListBranches, async () =>
     listGitBranches(getSettings().workspace),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.gitSwitchBranch,
     async (_event, branchName: string) =>
       switchGitBranch(getSettings().workspace, branchName),
   );
-  ipcMain.handle(
+  handleIpc(
     IPC_CHANNELS.gitCreateBranch,
     async (_event, branchName: string) =>
       createAndSwitchGitBranch(getSettings().workspace, branchName),
   );
 
-  ipcMain.handle(IPC_CHANNELS.uiGetState, async () => getUiState());
-  ipcMain.handle(
+  handleIpc(IPC_CHANNELS.uiGetState, async () => getUiState());
+  handleIpc(
     IPC_CHANNELS.uiSetDiffPanelOpen,
     async (_event, open: boolean) => setDiffPanelOpen(open),
   );
 
-  ipcMain.handle(IPC_CHANNELS.windowGetState, async () => {
+  handleIpc(IPC_CHANNELS.windowGetState, async () => {
     return computeWindowFrameState();
   });
   ipcMain.on(IPC_CHANNELS.windowMinimize, () => requireMainWindow().minimize());
@@ -549,21 +703,41 @@ function registerIpcHandlers() {
   ipcMain.on(IPC_CHANNELS.windowClose, () => requireMainWindow().close());
 }
 
-app.whenReady().then(() => {
-  const recoveredRuns = harnessRuntime.hydrateFromDisk();
-  recoverInterruptedRuns(recoveredRuns);
-  registerIpcHandlers();
-  createMainWindow();
-  setTerminalWindow(mainWindow!);
+registerProcessLogging();
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
-    }
+app.whenReady()
+  .then(() => {
+    appLogger.info({
+      scope: "app.lifecycle",
+      message: "应用启动完成",
+    });
+
+    const recoveredRuns = harnessRuntime.hydrateFromDisk();
+    recoverInterruptedRuns(recoveredRuns);
+    registerIpcHandlers();
+    createMainWindow();
+    setTerminalWindow(mainWindow!);
+
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createMainWindow();
+      }
+    });
+  })
+  .catch((error) => {
+    appLogger.error({
+      scope: "app.lifecycle",
+      message: "应用启动失败",
+      error,
+    });
+    throw error;
   });
-});
 
 app.on("window-all-closed", () => {
+  appLogger.info({
+    scope: "app.lifecycle",
+    message: "所有窗口已关闭",
+  });
   void destroyAllAgents();
   destroyAllTerminals();
   if (process.platform !== "darwin") {

@@ -1,6 +1,6 @@
 # 后端架构蓝图
 
-> 更新时间：2026-04-08 11:34:08
+> 更新时间：2026-04-08 16:40:47
 > 目的：把“当前已经实现的后端结构”和“接下来要定的后端结构”一次讲清，避免继续边写边漂。
 
 ## 1. 一句话
@@ -23,6 +23,7 @@
 - `Agent Core` 保留 `src/main/agent.ts` façade，但 continuity 已拆给 `Context Engine + Session Service`
 - `Context Engine` 现在独立负责 `transformContext`、token budget、manual/auto compact、snapshot 注入
 - `Transcript Persistence` 现在独立负责 `session.json + transcript.jsonl + context-snapshot.json`
+- `App Logging` 现在独立负责 `app.log`，专门接运行时异常、IPC 报错和 renderer 生命周期故障
 - `Renderer` 不再是聊天正文事实源，只保留实时投影和交互
 
 ## 2. 当前状态总览
@@ -245,7 +246,7 @@ spec 里有 T0 / T1 / T2，但当前只有 Soul 文件这一层在工作。
 
 ### 7.6 审计已经有入口，但还没有形成产品能力
 
-现在 `audit.log` 已经开始写，但还缺：
+现在 `audit.log` 和 `app.log` 都已经开始写，但还缺：
 
 - 统一 event schema 收口
 - 查询/过滤能力

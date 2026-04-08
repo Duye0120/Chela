@@ -65,5 +65,5 @@ export function buildSoulPromptSection(workspacePath: string): string {
     sections.push("## Agent 配置（AGENTS.md）\n\n" + agents);
   }
 
-  return "\n\n---\n\n" + sections.join("\n\n---\n\n");
+  return sections.join("\n\n---\n\n");
 }

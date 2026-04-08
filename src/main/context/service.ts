@@ -43,7 +43,7 @@ type PersistedAttachment = Pick<
 
 type SnapshotDraft = Pick<
   SessionMemorySnapshot,
-  "summary" | "currentTask" | "currentState" | "decisions" | "openLoops" | "nextActions" | "risks"
+  "summary" | "currentTask" | "currentState" | "decisions" | "openLoops" | "nextActions" | "risks" | "errors" | "learnings"
 >;
 
 function getMessageEvents(events: SessionTranscriptEvent[]): MessageTranscriptEvent[] {
@@ -435,6 +435,19 @@ function collectRisks(events: SessionTranscriptEvent[]): string[] {
   return dedupeTake(risks, 3);
 }
 
+function collectErrors(events: SessionTranscriptEvent[]): string[] {
+  const errors: string[] = [];
+  for (const event of events) {
+    if (event.type === "tool_finished" && event.error) {
+      errors.push(`工具 ${event.toolName} 失败: ${truncateText(event.error, 80)}`);
+    }
+    if (event.type === "run_finished" && event.finalState === "failed" && event.reason) {
+      errors.push(`运行失败: ${truncateText(event.reason, 80)}`);
+    }
+  }
+  return dedupeTake(errors, 5);
+}
+
 function buildSummaryText(input: {
   backgroundGoals: string[];
   progress: string[];
@@ -568,6 +581,8 @@ function normalizeSnapshotDraft(value: Record<string, unknown>): SnapshotDraft |
     openLoops: normalizeDraftStringArray(value.openLoops, 4, 120),
     nextActions: normalizeDraftStringArray(value.nextActions, 3, 120),
     risks: normalizeDraftStringArray(value.risks, 3, 120),
+    errors: normalizeDraftStringArray(value.errors, 5, 120),
+    learnings: normalizeDraftStringArray(value.learnings, 3, 120),
   };
 }
 
@@ -609,12 +624,16 @@ async function buildSnapshotDraftWithModel(input: {
               '  "decisions": string[],',
               '  "openLoops": string[],',
               '  "nextActions": string[],',
-              '  "risks": string[]',
+              '  "risks": string[],',
+              '  "errors": string[],',
+              '  "learnings": string[]',
               "}",
               "",
               "要求：",
               "- summary 用中文，控制在 6 行以内，适合下次打开线程直接接上。",
               "- 数组项简短具体，不超过 4 项。",
+              "- errors 只记录本轮遇到的工具/API 失败，不是用户提到的 bug。",
+              "- learnings 只记录跨会话有价值的经验教训（如某方案不可行、某 API 有坑）。",
               "- 如果某字段不确定，就给 null 或空数组。",
               "",
               `当前任务候选：${input.currentTask ?? "null"}`,
@@ -793,6 +812,7 @@ async function buildSnapshot(sessionId: string): Promise<SessionMemorySnapshot |
   const heuristicOpenLoops = collectOpenLoops(events);
   const heuristicNextActions = collectNextActions(events);
   const heuristicRisks = collectRisks(events);
+  const heuristicErrors = collectErrors(olderEvents);
   const latestRunStarted = getLatestRunStarted(events);
   const heuristicCurrentTask = resolveCurrentTask(events);
   const heuristicCurrentState = resolveCurrentState(events);
@@ -856,6 +876,8 @@ async function buildSnapshot(sessionId: string): Promise<SessionMemorySnapshot |
     openLoops,
     nextActions,
     risks,
+    errors: heuristicErrors,
+    learnings: modelDraft?.learnings ?? [],
     workspace: {
       branchName: await resolveBranchName(),
       modelEntryId: getSessionMeta(sessionId)?.lastModelEntryId ?? null,
@@ -1034,6 +1056,8 @@ function buildSnapshotPrompt(snapshot: SessionMemorySnapshot): string {
     snapshot.openLoops.length > 0 ? `未闭环：${snapshot.openLoops.join("；")}` : "",
     snapshot.nextActions.length > 0 ? `下一步：${snapshot.nextActions.join("；")}` : "",
     snapshot.risks.length > 0 ? `风险：${snapshot.risks.join("；")}` : "",
+    snapshot.errors.length > 0 ? `遇到的错误：${snapshot.errors.join("；")}` : "",
+    snapshot.learnings.length > 0 ? `经验教训：${snapshot.learnings.join("；")}` : "",
   ].filter(Boolean);
 
   return sections.join("\n");
@@ -1052,6 +1076,29 @@ export async function compactSession(sessionId: string): Promise<ContextSummary>
   compactingSessionIds.add(sessionId);
   try {
     return await applySnapshot(sessionId, "manual");
+  } finally {
+    compactingSessionIds.delete(sessionId);
+  }
+}
+
+/**
+ * 反应式 compact — API 返回 prompt-too-long 时调用。
+ * 不阻塞活跃 run，允许在 run 内部触发。
+ * 返回 true 表示 compact 成功，可以重试请求。
+ */
+export async function reactiveCompact(sessionId: string): Promise<boolean> {
+  if (compactingSessionIds.has(sessionId)) return false;
+
+  const meta = getSessionMeta(sessionId);
+  if (meta?.autoCompactBlockedAt) return false;
+
+  compactingSessionIds.add(sessionId);
+  try {
+    await applySnapshot(sessionId, "auto");
+    return true;
+  } catch {
+    recordAutoCompactFailure(sessionId);
+    return false;
   } finally {
     compactingSessionIds.delete(sessionId);
   }

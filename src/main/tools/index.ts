@@ -1,12 +1,13 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { McpConnectionManager } from "../../mcp/client.js";
 import { getAllMcpTools, getMcpResourceTools } from "../../mcp/adapter.js";
-import { getTimeTool } from "../../tools/getTime.js";
+import { getTimeTool } from "./get-time.js";
 import { createFileEditTool } from "./file-edit.js";
 import { createFileReadTool } from "./file-read.js";
 import { createFileWriteTool } from "./file-write.js";
 import { createGlobSearchTool } from "./glob-search.js";
 import { createGrepSearchTool } from "./grep-search.js";
+import { createMemorySaveTool, createMemoryListTool } from "./memory.js";
 import { createShellExecTool } from "./shell-exec.js";
 import { createTodoReadTool, createTodoWriteTool } from "./todo.js";
 import { createWebFetchTool } from "./web-fetch.js";
@@ -74,6 +75,8 @@ export function getBuiltinTools(options: BuiltinToolOptions): AgentTool<any, any
     todoRead,
     todoWrite,
     aliasTool(todoWrite, "TodoWrite", "写入待办"),
+    createMemorySaveTool(options.sessionId),
+    createMemoryListTool(),
   ];
 }
 
