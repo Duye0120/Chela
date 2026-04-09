@@ -69,6 +69,12 @@
 | 14 | [data-storage.md](./14-data-storage.md) | 存储布局、多文件会话、凭证安全、记忆向量数据库 | `in-review` |
 | 15 | [security.md](./15-security.md) | 沙箱策略、命令黑白名单、prompt injection 防护、审计日志 | `in-review` |
 
+### 第六层：可扩展性 & 平台化
+
+| # | 文档 | 主题 | 状态 |
+|---|------|------|------|
+| 16 | [extensibility-architecture.md](./16-extensibility-architecture.md) | Event Bus · Scheduler · Webhook · Plugin · Notification — 从聊天工具到个人 AI 平台 | `draft` |
+
 ### 后续规划（v1 不实现，预留接口）
 
 | # | 文档 | 主题 | 状态 |
@@ -77,8 +83,8 @@
 | F2 | — | Sub-agent / Multi-agent | `future` |
 | F3 | — | Plan mode（先规划再执行） | `future` |
 | F4 | — | MCP Server 管理 UI | `future` |
-| F5 | — | Cron / 定时任务 | `future` |
-| F6 | — | 心跳 / 后台常驻 | `future` |
+| F5 | — | ~~Cron / 定时任务~~ → 已纳入 spec-16 Scheduler | `→ spec-16` |
+| F6 | — | ~~心跳 / 后台常驻~~ → 已纳入 spec-16 Event Bus | `→ spec-16` |
 | F7 | — | Workspace 文件浏览器 | `future` |
 | F8 | — | Sub-agent 预处理（轻量模型做工具结果过滤/摘要，减少主 context 占用） | `future` |
 
