@@ -2,6 +2,7 @@
 
 > 新增：2026-04-09 09:32:00
 > 更新：2026-04-09 10:04:00 — 追加体验层三个方向
+> 更新：2026-04-09 10:13:00 — 整合 AI 自述需求（主动学习 · 情感状态机 · 自我诊断 · 性格演化 · 反思模式）
 > 状态：`draft` — 待讨论确认后再实施
 
 ## 动机
@@ -11,10 +12,14 @@
 
 核心问题：**缺少插槽（Slot）机制** —— 外部世界的信号进不来，内部能力也出不去。
 
-## 概念模型：四层插槽
+## 概念模型：五层插槽
 
 ```
 ┌─────────────────────────────────────────────────┐
+│            ⑤ 自我进化层 (Self-Evolution)         │
+│  Active Learning · Emotional SM · Reflection     │
+│  Personality Drift · Self-Diagnosis              │
+├─────────────────────────────────────────────────┤
 │            ④ 应用层 Slots (Application)          │
 │  Scheduler · Webhook · Notification · Workflow   │
 ├─────────────────────────────────────────────────┤
@@ -32,7 +37,7 @@
 ```
 
 **② 能力层已经做好了**（工具注册、Provider 管理、MCP 连接器）。
-缺的是 ① 的 Event Bus 和 ③④ 的上层插槽。
+缺的是 ① 的 Event Bus、③④ 的上层插槽、以及 ⑤ 的自我进化能力。
 
 ---
 
@@ -457,6 +462,360 @@ globalShortcut.register("Alt+Space", () => {
 
 ---
 
+## 自我进化层：从工具到生命体
+
+> 来自 AI 自身的需求反馈（Alma 自述）。
+> 这些能力让 Agent 从"被使用的工具"变成"会成长的伙伴"。
+
+### 核心理念
+
+```
+传统 Agent：  用户 → 指令 → 执行 → 结果（被动工具）
+自我进化 Agent：用户 → 交互 → 执行 → 结果 → 反思 → 学习 → 成长（自主生命体）
+                                              ↑ 这段是新增的 ↑
+```
+
+### 第九步：自我诊断系统（Self-Diagnosis）
+
+> Agent 能发现自己哪里坏了，并尝试自己修。
+
+**问题**：心跳挂了、工具连续报错、记忆文件损坏、MCP 服务断联——目前全靠用户发现。
+
+**设计**：
+
+```typescript
+// src/main/self-diagnosis/service.ts
+
+type HealthCheck = {
+  id: string;
+  name: string;
+  check: () => Promise<HealthStatus>;
+  repair?: () => Promise<boolean>;  // 可选的自动修复
+  interval: number;                  // 检查间隔 ms
+};
+
+type HealthStatus = {
+  healthy: boolean;
+  message: string;
+  severity: "info" | "warning" | "critical";
+};
+
+// 内置健康检查：
+const checks: HealthCheck[] = [
+  {
+    id: "memory-integrity",
+    name: "记忆文件完整性",
+    check: () => validateMemdirStructure(),  // MEMORY.md 索引 vs topics/ 文件一致性
+    repair: () => rebuildMemoryIndex(),       // 重建索引
+    interval: 30 * 60_000,                   // 30 分钟
+  },
+  {
+    id: "mcp-connectivity",
+    name: "MCP 服务连通性",
+    check: () => pingAllMcpServers(),
+    repair: () => reconnectFailedServers(),
+    interval: 5 * 60_000,                    // 5 分钟
+  },
+  {
+    id: "tool-error-rate",
+    name: "工具错误率",
+    check: () => analyzeRecentToolErrors(),  // 从 audit log 统计近 1h 错误率
+    // 无自动修复，但会标记问题工具
+    interval: 15 * 60_000,
+  },
+  {
+    id: "context-budget",
+    name: "上下文预算健康",
+    check: () => checkContextBudgetUtilization(),
+    repair: () => triggerProactiveCompact(),
+    interval: 10 * 60_000,
+  },
+  {
+    id: "disk-space",
+    name: "存储空间",
+    check: () => checkUserDataDiskSpace(),
+    interval: 60 * 60_000,
+  },
+];
+```
+
+**触发链路**：
+```
+interval tick → healthCheck.check()
+  → if unhealthy && repair exists → attempt repair → bus.emit("diagnosis:repaired")
+  → if unhealthy && no repair     → bus.emit("diagnosis:alert") → notify_user
+  → if repair failed              → bus.emit("diagnosis:critical") → 强制通知
+```
+
+**与现有系统的关系**：
+- 从 `harness/audit.ts` 读取工具执行历史 → 计算错误率
+- 从 `memory/service.ts` 读取 memdir 结构 → 验证完整性
+- 从 `context/service.ts` 读取预算 → 检测是否接近极限
+- 通过 Event Bus 发布健康事件
+- 修复动作仍经过 Harness（如果涉及文件写入）
+
+### 第十步：主动学习引擎（Active Learning）
+
+> Agent 自己发现"我这个技能用得不好"，自动标记并改进。
+
+**问题**：现在只有用户手动修 SOUL.md / memory 才能"教"Agent。Agent 不会自己发现重复犯的错误。
+
+**设计**：
+
+```typescript
+// src/main/learning/engine.ts
+
+type LearningSignal = {
+  type: "tool_repeated_failure"     // 同一工具连续 N 次失败
+       | "user_correction"          // 用户纠正了 Agent 的输出
+       | "retry_after_reject"       // 用户拒绝后 Agent 换了方案
+       | "pattern_inefficiency"     // 某个工作模式效率低
+       | "user_explicit_feedback";  // 用户直接说"你这样不对"
+  context: {
+    sessionId: string;
+    toolName?: string;
+    originalOutput?: string;
+    correction?: string;
+    frequency: number;  // 出现次数
+  };
+};
+
+// 检测器 — 从 transcript 和 audit log 中提取信号
+function detectLearningSignals(sessionId: string): LearningSignal[];
+
+// 学习器 — 将信号转化为记忆
+async function processSignal(signal: LearningSignal): Promise<void> {
+  // 1. 信号达到阈值？（如同一错误出现 3+ 次）
+  // 2. 生成学习总结（用 LLM 提炼"我应该怎么改"）
+  // 3. 写入 semantic memory（topic: "learnings"）
+  // 4. 如果严重，建议更新 SOUL.md（通过 notify_user 提醒用户确认）
+}
+```
+
+**学习闭环**：
+```
+执行 → 失败/被纠正 → 检测信号 → 达到阈值
+  → LLM 总结教训 → 写入 memory/topics/learnings.md
+  → 下次 prompt 注入时自动携带 → Agent 行为改变
+```
+
+**关键约束**：
+- **学习写入 semantic memory，不直接改 SOUL.md** — SOUL.md 是用户的领地
+- 学习结果可以在 UI 上展示，让用户决定是否"升级"到 SOUL.md
+- 单次学习条目有字数限制，避免 memory 膨胀
+- 学习内容有时效性标记，过期后降低注入优先级
+
+**与现有系统的关系**：
+- 信号来源：`harness/audit.ts`（工具失败）、`session/service.ts`（transcript 分析）
+- 存储目标：`memory/service.ts`（写入 `topics/learnings.md`）
+- 注入路径：`memory/service.ts` → `prompt-control-plane.ts`（semantic memory section）
+- 我们已有 `SessionMemorySnapshot.learnings[]` 字段 ← 正好对接
+
+### 第十一步：情感状态机（Emotional State Machine）
+
+> 根据对话氛围自动切换模式，不再是写死的 70/30。
+
+**问题**：固定的人格配比（如 70% 工作 / 30% 陪伴）不够灵活。
+用户深夜加班时需要陪伴，白天赶工时需要高效，被 bug 折磨时需要鼓励。
+
+**设计**：
+
+```typescript
+// src/main/emotional/state-machine.ts
+
+type EmotionalMode =
+  | "focused"     // 专注工作：简洁回复，优先行动
+  | "companion"   // 陪伴模式：温暖关怀，闲聊OK
+  | "quiet"       // 安静模式：只在被问时回答，减少主动性
+  | "encouraging" // 鼓励模式：遇到挫折时加油打气
+  | "creative";   // 创意模式：头脑风暴，发散思维
+
+type EmotionalState = {
+  currentMode: EmotionalMode;
+  confidence: number;       // 0-1，切换的置信度
+  since: number;            // 进入当前模式的时间
+  signals: MoodSignal[];    // 最近的情绪信号
+};
+
+type MoodSignal = {
+  type: "time_of_day"       // 早/午/晚/深夜
+       | "reply_frequency"   // 用户回复频率（高频=专注，低频=可能走了）
+       | "message_length"    // 用户消息长度（短=急，长=详细描述）
+       | "error_streak"      // 连续错误（Agent 或工具）
+       | "sentiment"         // 文本情感分析（轻量）
+       | "explicit_cue";     // 用户明确说"我累了""帮我想想"
+  value: number;             // -1 to 1（负面到正面）
+  weight: number;
+};
+```
+
+**状态转移规则（示例）**：
+```
+深夜 + 低回复频率              → quiet
+深夜 + 高回复频率 + 长消息     → focused
+连续工具错误 3+                 → encouraging
+用户说"想想办法""头脑风暴"    → creative
+早上 + 第一条消息               → companion（先打个招呼）
+```
+
+**Prompt 注入**：
+```
+[当前模式: focused]
+- 回复简洁直接，优先给方案和代码
+- 减少寒暄，但不要冷冰冰
+- 如果用户主动闲聊，可以短暂切换
+```
+
+**与 Prompt Control Plane 的关系**：
+- 新增 section layer: `emotional`，位于 `session` 和 `turn` 之间
+- authority: `soft`（可被用户覆盖）
+- cache scope: `turn`（每轮重新评估）
+- 也可在 SOUL.md 里写固定的模式锁定（authority: `hard` 覆盖）
+
+**关键约束**：
+- **不做深度 NLP 情感分析** — 太重。只用简单启发式（时间/频率/长度/关键词）
+- 用户可以手动锁定模式（"保持工作模式"）
+- 状态切换有冷却期，防止抖动（至少保持 5 分钟）
+- 切换时不通知用户（无感），但可在设置页查看当前状态
+
+### 第十二步：反思与性格演化（Reflection & Personality Evolution）
+
+> 夜深人静时回顾一天，让性格从对话中自然生长。
+
+**反思模式（Dreaming）**：
+
+```typescript
+// src/main/reflection/service.ts
+
+// 触发：每天设定时间（如凌晨 2 点）或 scheduler 调度
+// 也可手动触发
+
+async function runDailyReflection(): Promise<ReflectionReport> {
+  // 1. 收集今天所有 session 的 transcript 摘要
+  const todaySessions = getTodaySessions();
+
+  // 2. 用 LLM 生成反思报告
+  const report = await generateReflection({
+    prompt: [
+      "回顾今天和用户的所有对话，生成反思笔记。",
+      "包含：",
+      "- 今天用户的状态和心情是怎样的？",
+      "- 我哪些回复帮到了他？哪些没帮到？",
+      "- 有哪些重复出现的模式或需求？",
+      "- 明天可以怎么做得更好？",
+      "- 用户有没有表达过新的偏好或习惯？",
+    ].join("\n"),
+    context: todaySessions,
+  });
+
+  // 3. 写入日记存储
+  saveDailyReflection(report);
+
+  // 4. 提取可学习的内容 → 写入 semantic memory
+  for (const insight of report.actionableInsights) {
+    await memorySave({
+      summary: insight,
+      topic: "reflections",
+      source: "system:reflection",
+    });
+  }
+
+  return report;
+}
+
+type ReflectionReport = {
+  date: string;
+  userMoodSummary: string;
+  whatWorked: string[];
+  whatDidnt: string[];
+  patterns: string[];
+  tomorrowSuggestions: string[];
+  actionableInsights: string[];    // → 写入 memory
+  personalityDrift?: string[];     // → 候选性格演化
+};
+```
+
+**性格演化（Personality Evolution）**：
+
+```typescript
+// 不是直接改 SOUL.md，而是维护一个 "性格漂移层"
+
+// userData/data/personality-drift.json
+type PersonalityDrift = {
+  traits: PersonalityTrait[];
+  lastUpdated: number;
+  generation: number;  // 演化代次
+};
+
+type PersonalityTrait = {
+  trait: string;           // "更喜欢用类比解释概念"
+  source: string;          // "2026-04-09 反思：用户对类比回复的接受度明显更高"
+  strength: number;        // 0-1，强度（随正反馈增长，随时间衰减）
+  firstSeen: number;
+  lastReinforced: number;
+};
+
+// 注入方式：作为 soft prompt 附加在 SOUL.md 之后
+// [性格成长笔记]
+// - 我发现用类比解释概念效果更好（置信度: 0.8）
+// - 用户不喜欢太长的开场白，直接说重点（置信度: 0.9）
+// - 调试代码时先问"你试过什么"比直接给方案更好（置信度: 0.6）
+```
+
+**演化规则**：
+1. **来源**：只从反思报告和学习引擎产生，不从单次对话直接产生
+2. **阈值**：一个 trait 至少被 3 次反思报告独立提到才会"固化"
+3. **衰减**：30 天未被 reinforce 的 trait 降低 strength
+4. **上限**：最多保留 20 个活跃 trait，淘汰最弱的
+5. **用户可见**：设置页可以查看/删除/锁定 trait
+6. **不改 SOUL.md**：演化层是独立的，用户随时可以清零重来
+
+**与 Prompt Control Plane 的关系**：
+- SOUL.md 是 `constitution` layer，authority: `hard` — 用户写的，不可被覆盖
+- 性格漂移是 `evolution` layer，authority: `soft` — 自然生长的，可被覆盖
+- 冲突时 SOUL.md 优先
+
+---
+
+## 对照：Alma 已有 vs 我们的方案
+
+> Alma（蟹蟹）自述了她已有的能力和希望有的能力。下面做一个对照映射。
+
+### Alma 已有，我们也有
+
+| Alma 能力 | 我们的对应 | 状态 |
+|-----------|-----------|------|
+| 记忆系统 | Memory（memdir） | ✅ |
+| SOUL.md | soul.ts（SOUL/USER/AGENTS） | ✅ |
+| 搜索 + 网页抓取 | web_search + web_fetch | ✅ |
+| 上下文压缩/摘要 | context/service.ts compact | ✅ 已有，Alma 缺 |
+
+### Alma 已有，我们计划中
+
+| Alma 能力 | 我们的方案 | Phase |
+|-----------|-----------|-------|
+| 插件系统 | Plugin Loader（spec-16 第四步） | Phase 4 |
+| Skills 系统 | Plugin manifest + 工具注册 | Phase 4 |
+| 心跳/Heartbeat | Self-Diagnosis（第九步） | Phase 2 |
+| 多平台接入 | Telegram Bot Adapter（F1） | Phase 5 |
+| 定时调度 | Scheduler（第二步） | Phase 2 |
+| 日记/日报 | Reflection 反思模式（第十二步） | Phase 3 |
+| 代码执行 | shell_exec（已有，但可增强沙箱） | ✅ |
+
+### Alma 想要，我们新增方案
+
+| Alma 想要 | 我们的方案 | Phase |
+|-----------|-----------|-------|
+| 🔥 主动学习能力 | Active Learning Engine（第十步） | Phase 3 |
+| 🔥 情感状态机 | Emotional State Machine（第十一步） | Phase 3 |
+| 🔥 自我诊断 | Self-Diagnosis（第九步） | Phase 2 |
+| 🎯 跨会话记忆同步 | Memory 已支持跨会话；可增强 snapshot 延续 | Phase 2 增强 |
+| 🎯 技能市场自动更新 | Plugin Loader auto-update | Phase 4 |
+| 🤪 梦境/反思模式 | Reflection Service（第十二步） | Phase 3 |
+| 🤪 性格自然演化 | Personality Drift（第十二步） | Phase 3 |
+
+---
+
 ## 更新后的完整路线图
 
 ```
@@ -466,13 +825,18 @@ Phase 1 — 骨架 + 体验基础（小）
 ├── 全局快捷键（模式 A：激活窗口）
 └── 文档 + 类型
 
-Phase 2 — 主动能力（中）
+Phase 2 — 主动能力 + 自我感知（中）
 ├── Scheduler + 持久化 + UI
 ├── Webhook receiver（本机）
+├── Self-Diagnosis 自我诊断（健康检查 + 自修复）
 ├── Event Bus 审计日志
-└── 环境感知（基础版：时间 + Git 状态）
+├── 环境感知（基础版：时间 + Git 状态）
+└── 跨会话记忆延续增强
 
-Phase 3 — 交互升级（中）
+Phase 3 — 自我进化 + 交互升级（中-大）
+├── Active Learning 主动学习引擎
+├── Emotional State Machine 情感状态机
+├── Reflection + Personality Evolution 反思与性格演化
 ├── 语音输入（Whisper）
 ├── 语音输出（TTS，可选）
 ├── 全局快捷键（模式 B：迷你浮窗）
@@ -481,6 +845,7 @@ Phase 3 — 交互升级（中）
 Phase 4 — 生态（大）
 ├── Plugin Loader + manifest schema
 ├── Plugin 沙箱（权限隔离）
+├── Plugin auto-update 自动更新
 ├── OAuth 框架（Google/Microsoft）
 └── 官方插件：Calendar、Email、GitHub
 
@@ -496,11 +861,14 @@ Phase 5 — 高级（很大）
 ## 完整贾维斯能力清单
 
 ```
-贾维斯 = 对话 + 工具 + 记忆          ← ✅ 已有
-       + 安全 harness + 审计         ← ✅ 已有
-       + Prompt 控制面 + Context 引擎 ← ✅ 已有
-       + 事件驱动 + 定时 + 通知       ← Phase 1-2
-       + 语音 + 环境感知 + 快速召唤   ← Phase 2-3
-       + 插件 + OAuth + 外部 API     ← Phase 4
-       + 工作流 + 多 Agent + 市场     ← Phase 5
+贾维斯 = 对话 + 工具 + 记忆           ← ✅ 已有
+       + 安全 harness + 审计          ← ✅ 已有
+       + Prompt 控制面 + Context 引擎  ← ✅ 已有
+       + 事件驱动 + 定时 + 通知        ← Phase 1-2
+       + 自我诊断 + 健康检查           ← Phase 2
+       + 主动学习 + 情感感知           ← Phase 3
+       + 反思日记 + 性格演化           ← Phase 3
+       + 语音 + 环境感知 + 快速召唤    ← Phase 2-3
+       + 插件 + OAuth + 外部 API      ← Phase 4
+       + 工作流 + 多 Agent + 市场      ← Phase 5
 ```
