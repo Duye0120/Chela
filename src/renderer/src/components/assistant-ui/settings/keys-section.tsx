@@ -679,7 +679,7 @@ export function KeysSection({
 
   if (loading) {
     return (
-      <div className="grid h-[640px] place-items-center rounded-[var(--radius-shell)] border border-[color:var(--color-border-light)] bg-shell-panel-muted/60 text-sm text-muted-foreground">
+      <div className="grid h-[640px] place-items-center rounded-[var(--radius-shell)] bg-shell-panel-muted/60 text-sm text-muted-foreground">
         正在加载提供商与模型目录…
       </div>
     );
@@ -687,8 +687,8 @@ export function KeysSection({
 
   return (
     <div className="grid h-[680px] min-h-0 grid-cols-[280px_minmax(0,1fr)] gap-4">
-      <div className="flex min-h-0 flex-col rounded-[var(--radius-shell)] border border-[color:var(--color-border-light)] bg-shell-panel-muted/60">
-        <div className="space-y-3 border-b border-[color:var(--color-border-light)] px-4 py-4">
+      <div className="flex min-h-0 flex-col rounded-[var(--radius-shell)] bg-shell-panel-muted/60">
+        <div className="space-y-3 px-4 py-4">
           <FieldInput
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -720,10 +720,10 @@ export function KeysSection({
                     setError(null);
                     setTestResult(null);
                   }}
-                  className={`w-full rounded-[var(--radius-shell)] border-y border-r border-l-4 px-3 py-2 text-left transition-colors ${
+                  className={`w-full rounded-[var(--radius-shell)] px-3 py-2 text-left transition-colors ${
                     isSelected
-                      ? "border-l-[color:var(--color-accent)] border-y-[color:var(--color-shell-border)] border-r-[color:var(--color-shell-border)] bg-shell-panel"
-                      : "border-l-transparent border-y-[color:var(--color-border-light)] border-r-[color:var(--color-border-light)] bg-shell-panel/70 hover:bg-shell-panel"
+                      ? "bg-accent-subtle text-accent-text font-medium"
+                      : "bg-transparent text-foreground hover:bg-shell-panel-muted"
                   }`}
                 >
                   <div className="truncate text-[13px] font-semibold text-foreground">
@@ -760,7 +760,7 @@ export function KeysSection({
       </div>
 
       {currentWorkspace ? (
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-shell)] border border-[color:var(--color-border-light)] bg-shell-panel-muted/60">
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-shell)] bg-shell-panel-muted/60">
           <div className="flex items-start justify-between border-b border-[color:var(--color-border-light)] px-6 py-5">
             <div>
               <div className="text-[20px] font-semibold text-foreground">
@@ -821,7 +821,7 @@ export function KeysSection({
               <SettingsCard
                 title="连接配置"
                 description="这里管理当前提供商的接入方式和认证信息。"
-                className="border border-[color:var(--color-border-light)] bg-shell-panel"
+                className="bg-shell-panel"
               >
                 <div className="space-y-4 px-5 py-5">
                   {currentWorkspace.kind === "custom" ? (
@@ -895,7 +895,7 @@ export function KeysSection({
                     </>
                   ) : (
                     <>
-                      <div className="rounded-[var(--radius-shell)] border border-[color:var(--color-border-light)] bg-shell-panel-contrast px-4 py-4">
+                      <div className="rounded-[var(--radius-shell)] bg-shell-panel-contrast px-4 py-4">
                         <label className="inline-flex items-start gap-3 text-[13px] text-foreground">
                           <Switch
                             checked={
@@ -1016,7 +1016,7 @@ export function KeysSection({
               <SettingsCard
                 title="模型目录"
                 description="所有聊天和后续任务都会通过稳定的模型条目来选择模型。"
-                className="border border-[color:var(--color-border-light)] bg-shell-panel"
+                className="bg-shell-panel"
               >
                 <div className="px-5 py-2">
                   {[...currentWorkspace.entries]
@@ -1495,7 +1495,7 @@ export function KeysSection({
           </Dialog>
         </div>
       ) : (
-        <div className="grid place-items-center rounded-[var(--radius-shell)] border border-[color:var(--color-border-light)] bg-shell-panel-muted/60 text-sm text-muted-foreground">
+        <div className="grid place-items-center rounded-[var(--radius-shell)] bg-shell-panel-muted/60 text-sm text-muted-foreground">
           请选择一个提供商。
         </div>
       )}

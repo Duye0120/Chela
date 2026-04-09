@@ -18,6 +18,7 @@ import {
   renamePersistedSession,
   saveSessionProjection,
   setPersistedSessionGroup,
+  setPersistedSessionPinned,
   unarchivePersistedSession,
 } from "./session/service.js";
 
@@ -105,6 +106,10 @@ export function renameSession(sessionId: string, title: string): void {
   }
 
   renamePersistedSession(sessionId, nextTitle);
+}
+
+export function setSessionPinned(sessionId: string, pinned: boolean): void {
+  setPersistedSessionPinned(sessionId, pinned);
 }
 
 export function getUiState(): WindowUiState {

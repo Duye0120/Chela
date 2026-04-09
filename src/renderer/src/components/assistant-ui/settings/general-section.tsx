@@ -50,7 +50,7 @@ export function GeneralSection({
                 ? `当前默认模型：${currentModel.name}`
                 : "选择默认模型"
             }
-            className="h-9 w-full justify-between rounded-[var(--radius-shell)] border border-[color:var(--color-border-light)] bg-shell-panel-contrast px-3 text-[13px] text-foreground shadow-none hover:bg-shell-panel-contrast"
+            className="h-9 w-full justify-between rounded-[var(--radius-shell)] bg-shell-panel-contrast px-3 text-[13px] text-foreground shadow-none hover:bg-shell-panel-contrast"
           />
           <ModelSelector.Content
             align="start"
@@ -59,10 +59,7 @@ export function GeneralSection({
         </ModelSelector.Root>
       </SettingsRow>
 
-      <SettingsRow
-        label="默认思考强度"
-        hint={thinkingHint}
-      >
+      <SettingsRow label="默认思考强度" hint={thinkingHint}>
         <FieldSelect
           value={canConfigureThinking ? thinkingLevel : "__unsupported__"}
           onChange={(value) => onThinkingLevelChange(value as ThinkingLevel)}

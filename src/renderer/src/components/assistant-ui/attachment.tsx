@@ -190,7 +190,7 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
   return (
     <Dialog>
       <DialogTrigger
-        className="cursor-pointer transition-colors hover:bg-accent/50"
+        className="cursor-pointer transition-colors hover:bg-shell-hover"
         asChild
       >
         {children}

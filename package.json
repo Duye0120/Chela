@@ -1,6 +1,7 @@
 {
-  "name": "first-pi-agent",
-  "version": "1.0.0",
+  "name": "chela",
+  "productName": "Chela",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",

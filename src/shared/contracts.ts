@@ -226,6 +226,7 @@ export type ChatSession = {
   updatedAt: string;
   archived?: boolean;
   groupId?: string;
+  pinned?: boolean;
 };
 
 export type ChatSessionSummary = {
@@ -235,6 +236,7 @@ export type ChatSessionSummary = {
   messageCount: number;
   archived?: boolean;
   groupId?: string;
+  pinned?: boolean;
   lastRunState?: AgentResponseStatus | "awaiting_confirmation" | "running";
 };
 
@@ -475,6 +477,7 @@ export type DesktopApi = {
     delete: (sessionId: string) => Promise<void>;
     setGroup: (sessionId: string, groupId: string | null) => Promise<void>;
     rename: (sessionId: string, title: string) => Promise<void>;
+    setPinned: (sessionId: string, pinned: boolean) => Promise<void>;
   };
   groups: {
     list: () => Promise<SessionGroup[]>;
@@ -571,5 +574,6 @@ export function summarizeSession(session: ChatSession): ChatSessionSummary {
     messageCount: session.messages.length,
     archived: session.archived,
     groupId: session.groupId,
+    pinned: session.pinned,
   };
 }

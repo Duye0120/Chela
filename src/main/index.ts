@@ -1,3 +1,4 @@
+import { cpSync, existsSync, readdirSync, renameSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from "electron";
@@ -23,6 +24,7 @@ import {
   saveSession,
   setDiffPanelOpen,
   setSessionGroup,
+  setSessionPinned,
   unarchiveSession,
 } from "./store.js";
 import { compactSession, getContextSummary, reactiveCompact } from "./context/service.js";
@@ -126,6 +128,10 @@ let mainWindow: BrowserWindow | null = null;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIN_WINDOW_WIDTH = 920;
 const MIN_WINDOW_HEIGHT = 600;
+const APP_PRODUCT_NAME = "Chela";
+const LEGACY_USER_DATA_DIR_NAMES = ["first-pi-agent", "first_pi_agent"];
+
+app.setName(APP_PRODUCT_NAME);
 
 function getPreloadPath() {
   return join(__dirname, "../preload/index.mjs");
@@ -137,6 +143,37 @@ function getRendererPath() {
 
 function getDevServerUrl() {
   return process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_SERVER_URL;
+}
+
+function migrateLegacyUserData(): void {
+  const currentUserDataPath = app.getPath("userData");
+  const hasCurrentData = existsSync(currentUserDataPath)
+    && readdirSync(currentUserDataPath).length > 0;
+
+  if (hasCurrentData) {
+    return;
+  }
+
+  const appDataPath = app.getPath("appData");
+
+  for (const legacyDirName of LEGACY_USER_DATA_DIR_NAMES) {
+    const legacyUserDataPath = join(appDataPath, legacyDirName);
+    if (legacyUserDataPath === currentUserDataPath || !existsSync(legacyUserDataPath)) {
+      continue;
+    }
+
+    if (!existsSync(currentUserDataPath)) {
+      renameSync(legacyUserDataPath, currentUserDataPath);
+      return;
+    }
+
+    cpSync(legacyUserDataPath, currentUserDataPath, {
+      recursive: true,
+      force: false,
+      errorOnExist: false,
+    });
+    return;
+  }
 }
 
 function computeWindowFrameState() {
@@ -165,7 +202,7 @@ function createMainWindow() {
     minHeight: MIN_WINDOW_HEIGHT,
     frame: false,
     backgroundColor: "#e8edf3",
-    title: "first_pi_agent",
+    title: APP_PRODUCT_NAME,
     webPreferences: {
       preload: getPreloadPath(),
       contextIsolation: true,
@@ -308,6 +345,11 @@ function registerIpcHandlers() {
     IPC_CHANNELS.sessionsRename,
     async (_event, sessionId: string, title: string) =>
       renameSession(sessionId, title),
+  );
+  handleIpc(
+    IPC_CHANNELS.sessionsSetPinned,
+    async (_event, sessionId: string, pinned: boolean) =>
+      setSessionPinned(sessionId, pinned),
   );
   handleIpc(
     IPC_CHANNELS.contextGetSummary,
@@ -731,6 +773,7 @@ registerProcessLogging();
 
 app.whenReady()
   .then(() => {
+    migrateLegacyUserData();
     appLogger.info({
       scope: "app.lifecycle",
       message: "应用启动完成",

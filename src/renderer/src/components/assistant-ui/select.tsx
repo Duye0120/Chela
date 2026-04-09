@@ -146,7 +146,7 @@ const SelectItem = ({
     data-slot="select-item"
     className={cn(
       "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-lg py-2 pr-9 pl-3 text-[13px] font-medium text-foreground outline-none transition-colors",
-      "data-[state=checked]:bg-shell-panel-contrast dark:data-[state=checked]:bg-white/10 data-[state=checked]:shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] dark:data-[state=checked]:shadow-none",
+      "data-[state=checked]:bg-accent-subtle data-[state=checked]:text-accent-text",
       "data-[highlighted]:bg-shell-panel-muted dark:data-[highlighted]:bg-white/5 data-[highlighted]:text-foreground",
       "focus:bg-shell-panel-muted dark:focus:bg-white/5 focus:text-foreground",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",

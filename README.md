@@ -1,4 +1,8 @@
-# first_pi_agent
+# Chela
+
+`Chela` 是这个项目的正式名称。
+
+仓库目录目前可能还是 `first_pi_agent`，但从现在开始，**产品名 / 对外名称统一使用 `Chela`**。
 
 现在这个仓库已经从“最小 MCP demo”切到了 **桌面壳优先**：
 
@@ -30,7 +34,7 @@
 ## 项目结构
 
 ```text
-first_pi_agent/
+Chela/
 ├─ src/
 │  ├─ main/              # Electron main process
 │  ├─ preload/           # 安全桥接 API

@@ -28,6 +28,7 @@ const desktopApi: DesktopApi = {
     delete: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.sessionsDelete, sessionId),
     setGroup: (sessionId: string, groupId: string | null) => ipcRenderer.invoke(IPC_CHANNELS.sessionsSetGroup, sessionId, groupId),
     rename: (sessionId: string, title: string) => ipcRenderer.invoke(IPC_CHANNELS.sessionsRename, sessionId, title),
+    setPinned: (sessionId: string, pinned: boolean) => ipcRenderer.invoke(IPC_CHANNELS.sessionsSetPinned, sessionId, pinned),
   },
   groups: {
     list: (): Promise<SessionGroup[]> => ipcRenderer.invoke(IPC_CHANNELS.groupsList),

@@ -11,13 +11,19 @@ import {
   FolderPlusIcon,
   InformationCircleIcon,
   KeyIcon,
-  PlusIcon,
+  MapPinIcon,
   SwatchIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
+import { SquarePen } from "lucide-react";
 import type { ChatSessionSummary, SessionGroup } from "@shared/contracts";
 import { formatRelativeTime } from "@renderer/lib/session";
 import type { SettingsSection } from "@renderer/components/assistant-ui/settings/types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@renderer/components/ui/tooltip";
 
 type SidebarProps = {
   summaries: ChatSessionSummary[];
@@ -30,6 +36,8 @@ type SidebarProps = {
   onUnarchiveSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onRenameSession: (sessionId: string, title: string) => void;
+  onToggleSessionPinned: (sessionId: string, pinned: boolean) => void;
+  onCreateSessionInGroup: (groupId: string) => void;
   archivedSummaries: ChatSessionSummary[];
   groups: SessionGroup[];
   onCreateGroup: (name: string) => void;
@@ -53,6 +61,8 @@ export function Sidebar({
   onUnarchiveSession,
   onDeleteSession,
   onRenameSession,
+  onToggleSessionPinned,
+  onCreateSessionInGroup,
   archivedSummaries,
   groups,
   onCreateGroup,
@@ -73,6 +83,9 @@ export function Sidebar({
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [threadMenuOpenFor, setThreadMenuOpenFor] = useState<string | null>(
+    null,
+  );
+  const [archiveConfirmFor, setArchiveConfirmFor] = useState<string | null>(
     null,
   );
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(
@@ -117,15 +130,23 @@ export function Sidebar({
   }, [renamingSessionId]);
 
   useEffect(() => {
-    if (!groupMenuOpenFor && !movingSessionId && !threadMenuOpenFor) return;
+    if (
+      !groupMenuOpenFor &&
+      !movingSessionId &&
+      !threadMenuOpenFor &&
+      !archiveConfirmFor
+    ) {
+      return;
+    }
     const handler = () => {
       setGroupMenuOpenFor(null);
       setMovingSessionId(null);
       setThreadMenuOpenFor(null);
+      setArchiveConfirmFor(null);
     };
     document.addEventListener("click", handler);
     return () => document.removeEventListener("click", handler);
-  }, [groupMenuOpenFor, movingSessionId, threadMenuOpenFor]);
+  }, [archiveConfirmFor, groupMenuOpenFor, movingSessionId, threadMenuOpenFor]);
 
   const toggleGroupCollapse = (groupId: string) => {
     setCollapsedGroups((prev) => {
@@ -159,17 +180,19 @@ export function Sidebar({
     setSessionRenameValue("");
   };
 
-  const ungroupedSessions = summaries.filter((s) => !s.groupId);
+  const pinnedSummaries = summaries.filter((s) => s.pinned);
+  const regularSummaries = summaries.filter((s) => !s.pinned);
+  const ungroupedSessions = regularSummaries.filter((s) => !s.groupId);
   const groupedSessions = groups.map((group) => ({
     group,
-    sessions: summaries.filter((s) => s.groupId === group.id),
+    sessions: regularSummaries.filter((s) => s.groupId === group.id),
   }));
 
   if (viewMode === "settings") {
     return (
-      <aside className="flex h-full flex-col bg-transparent text-[13px] text-foreground">
+      <aside className="flex h-full flex-col bg-transparent text-[13px] text-[color:var(--chela-text-primary)]">
         <div className="px-4 pb-2 pt-4">
-          <p className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-text-secondary)]">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--chela-text-tertiary)]">
             设置
           </p>
         </div>
@@ -185,8 +208,8 @@ export function Sidebar({
                   onClick={() => onSelectSettingsSection?.(id)}
                   className={`flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2 text-left text-[12px] transition ${
                     active
-                      ? "bg-shell-panel-elevated text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
-                      : "text-[color:var(--color-text-secondary)] hover:bg-shell-hover hover:text-foreground"
+                      ? "bg-[color:var(--chela-accent-subtle)] text-[color:var(--chela-accent-text)] font-medium"
+                      : "text-[color:var(--chela-text-secondary)] hover:bg-[color:var(--chela-accent-subtle)] hover:text-[color:var(--chela-accent-text)]"
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -201,7 +224,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={onExitSettings}
-            className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2 text-[12px] text-[color:var(--color-text-secondary)] transition hover:bg-accent hover:text-foreground"
+            className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2 text-[12px] text-[color:var(--chela-text-secondary)] transition hover:bg-[color:var(--chela-accent-subtle)] hover:text-[color:var(--chela-accent-text)]"
           >
             <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
             返回
@@ -216,17 +239,31 @@ export function Sidebar({
     const isRunning = runningSessionIds.includes(summary.id);
     const isMoving = movingSessionId === summary.id;
     const isThreadMenuOpen = threadMenuOpenFor === summary.id;
+    const isArchiveConfirming = archiveConfirmFor === summary.id;
     const isRenaming = renamingSessionId === summary.id;
+    const showPinAction =
+      "pointer-events-none w-0 opacity-0 group-hover:pointer-events-auto group-hover:w-5 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:w-5 group-focus-within:opacity-100";
 
     return (
       <div key={summary.id} className="relative">
         <div
           draggable
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onSelectSession(summary.id);
+            setThreadMenuOpenFor(summary.id);
+            setGroupMenuOpenFor(null);
+            setMovingSessionId(null);
+            setArchiveConfirmFor(null);
+          }}
           onDragStart={(e) => {
             dragSessionIdRef.current = summary.id;
             e.dataTransfer.effectAllowed = "move";
             // Suppress the popup if open
             setMovingSessionId(null);
+            setThreadMenuOpenFor(null);
+            setArchiveConfirmFor(null);
           }}
           onDragEnd={() => {
             dragSessionIdRef.current = null;
@@ -239,11 +276,34 @@ export function Sidebar({
             setMovingSessionId(null);
             setGroupMenuOpenFor(null);
             setThreadMenuOpenFor(null);
+            setArchiveConfirmFor(null);
           }}
-          className={`group flex cursor-pointer items-center rounded-[var(--radius-shell)] py-2 transition ${
+          className={`group flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-shell)] py-2 transition ${
             indented ? "pl-6 pr-2.5" : "px-3"
-          } ${active ? "bg-shell-panel-elevated shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]" : "hover:bg-shell-hover"}`}
+          } ${active ? "bg-[color:var(--chela-accent-subtle)] text-[color:var(--chela-accent-text)] font-medium" : "hover:bg-[color:var(--chela-accent-subtle)]"}`}
         >
+          <div
+            className={`flex h-5 shrink-0 items-center overflow-visible transition-[width,opacity] duration-150 ${showPinAction}`}
+          >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleSessionPinned(summary.id, !summary.pinned);
+                  }}
+                  className={`flex h-5 w-5 cursor-pointer items-center justify-center transition-colors hover:text-[color:var(--chela-text-primary)] ${summary.pinned ? "text-[color:var(--chela-text-primary)]" : "text-[color:var(--chela-text-tertiary)]"}`}
+                  aria-label={summary.pinned ? "取消置顶" : "置顶到顶部"}
+                >
+                  <MapPinIcon className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {summary.pinned ? "取消置顶" : "置顶到顶部"}
+              </TooltipContent>
+            </Tooltip>
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
               {isRenaming ? (
@@ -265,85 +325,101 @@ export function Sidebar({
                 />
               ) : (
                 <span
-                  className={`truncate text-[12px] ${active ? "font-medium text-foreground" : "text-[color:var(--color-text-secondary)]"}`}
+                  className={`truncate text-[12px] ${active ? "font-medium text-[color:var(--chela-accent-text)]" : "text-[color:var(--chela-text-secondary)]"}`}
                 >
                   {summary.title}
                 </span>
               )}
-              <div className="flex shrink-0 items-center gap-1.5 text-[10px] text-[color:var(--color-text-muted)]">
+              <div className="flex shrink-0 items-center gap-1 text-[10px] text-[color:var(--chela-text-tertiary)]">
                 {isRunning ? (
                   <span
-                    className="inline-flex size-1.5 rounded-full bg-[color:var(--color-text-muted)] animate-pulse"
+                    className="inline-flex size-1.5 rounded-full bg-[color:var(--chela-accent)] animate-pulse"
                     aria-label="线程运行中"
                     title="线程运行中"
                   />
                 ) : null}
-                <span>{formatRelativeTime(summary.updatedAt)}</span>
+                <span
+                  className={`${isArchiveConfirming ? "invisible" : "group-hover:hidden group-focus-within:hidden"}`}
+                >
+                  {formatRelativeTime(summary.updatedAt)}
+                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setArchiveConfirmFor(
+                          isArchiveConfirming ? null : summary.id,
+                        );
+                        setThreadMenuOpenFor(null);
+                        setGroupMenuOpenFor(null);
+                        setMovingSessionId(null);
+                      }}
+                      className={`${isArchiveConfirming ? "hidden" : "hidden group-hover:flex group-focus-within:flex"} h-5 w-5 cursor-pointer items-center justify-center text-[color:var(--chela-text-tertiary)] transition-colors hover:text-[color:var(--chela-text-primary)]`}
+                      aria-label={`归档 ${summary.title}`}
+                    >
+                      <ArchiveBoxIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">归档线程</TooltipContent>
+                </Tooltip>
               </div>
             </div>
           </div>
-          <div className="relative ml-1 flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
+        </div>
+        {isArchiveConfirming ? (
+          <div className="pointer-events-none absolute inset-y-0 right-3 z-10 flex items-center">
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setThreadMenuOpenFor(isThreadMenuOpen ? null : summary.id);
-                setGroupMenuOpenFor(null);
-                setMovingSessionId(null);
+                onArchiveSession(summary.id);
+                setArchiveConfirmFor(null);
+                setThreadMenuOpenFor(null);
               }}
-              className="cursor-pointer rounded-md p-1 text-[color:var(--color-text-muted)] hover:bg-shell-panel hover:text-foreground"
-              title="更多"
+              className="pointer-events-auto h-6 cursor-pointer rounded-full bg-red-500/10 px-2 text-[10px] leading-none font-medium text-red-600 transition hover:bg-red-500/15 dark:bg-red-500/20 dark:text-red-300"
             >
-              <EllipsisHorizontalIcon className="h-3.5 w-3.5" />
+              确认
             </button>
-            {isThreadMenuOpen ? (
-              <div
-                onClick={(e) => e.stopPropagation()}
-                className="absolute right-0 top-full z-20 mt-1 min-w-[132px] rounded-[var(--radius-shell)] bg-shell-panel-elevated py-1 shadow-[0_18px_40px_rgba(0,0,0,0.32)]"
+          </div>
+        ) : null}
+        {isThreadMenuOpen ? (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute right-2 top-full z-20 mt-1 min-w-[132px] rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-surface)] py-1 shadow-[var(--chela-shadow-lg)]"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setRenamingSessionId(summary.id);
+                setSessionRenameValue(summary.title);
+                setThreadMenuOpenFor(null);
+              }}
+              className="flex w-full cursor-pointer items-center px-3 py-1.5 text-[11px] text-[color:var(--chela-text-primary)] hover:bg-[color:var(--chela-accent-subtle)]"
+            >
+              重命名
+            </button>
+            {groups.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMovingSessionId(isMoving ? null : summary.id);
+                  setThreadMenuOpenFor(null);
+                }}
+                className="flex w-full cursor-pointer items-center px-3 py-1.5 text-[11px] text-[color:var(--chela-text-primary)] hover:bg-[color:var(--chela-accent-subtle)]"
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRenamingSessionId(summary.id);
-                    setSessionRenameValue(summary.title);
-                    setThreadMenuOpenFor(null);
-                  }}
-                  className="flex w-full cursor-pointer items-center px-3 py-1.5 text-[11px] text-foreground hover:bg-accent"
-                >
-                  重命名
-                </button>
-                {groups.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMovingSessionId(isMoving ? null : summary.id);
-                      setThreadMenuOpenFor(null);
-                    }}
-                    className="flex w-full cursor-pointer items-center px-3 py-1.5 text-[11px] text-foreground hover:bg-accent"
-                  >
-                    分组
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    onArchiveSession(summary.id);
-                    setThreadMenuOpenFor(null);
-                  }}
-                  className="flex w-full cursor-pointer items-center px-3 py-1.5 text-[11px] text-foreground hover:bg-accent"
-                >
-                  归档
-                </button>
-              </div>
+                分组
+              </button>
             ) : null}
           </div>
-        </div>
+        ) : null}
 
         {/* Inline group picker */}
         {isMoving && (
           <div
             onClick={(e) => e.stopPropagation()}
-            className={`mx-2 mb-2 rounded-[var(--radius-shell)] bg-shell-panel-elevated py-1 shadow-[0_18px_40px_rgba(0,0,0,0.32)] ${indented ? "ml-6" : ""}`}
+            className={`mx-2 mb-2 rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-surface)] py-1 shadow-[var(--chela-shadow-lg)] ${indented ? "ml-6" : ""}`}
           >
             {summary.groupId && (
               <button
@@ -352,7 +428,7 @@ export function Sidebar({
                   onSetSessionGroup(summary.id, null);
                   setMovingSessionId(null);
                 }}
-                className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-[11px] text-[color:var(--color-text-secondary)] hover:bg-accent hover:text-foreground"
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-[11px] text-[color:var(--chela-text-secondary)] hover:bg-[color:var(--chela-accent-subtle)] hover:text-[color:var(--chela-accent-text)]"
               >
                 移出分组
               </button>
@@ -365,16 +441,16 @@ export function Sidebar({
                   onSetSessionGroup(summary.id, g.id);
                   setMovingSessionId(null);
                 }}
-                className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-accent ${
+                className={`flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-[color:var(--chela-accent-subtle)] ${
                   summary.groupId === g.id
-                    ? "text-foreground"
-                    : "text-[color:var(--color-text-secondary)] hover:text-foreground"
+                    ? "text-[color:var(--chela-accent-text)]"
+                    : "text-[color:var(--chela-text-secondary)] hover:text-[color:var(--chela-text-primary)]"
                 }`}
               >
-                <FolderIcon className="h-3 w-3 shrink-0 text-[color:var(--color-text-secondary)]" />
+                <FolderIcon className="h-3 w-3 shrink-0 text-[color:var(--chela-text-secondary)]" />
                 <span className="truncate">{g.name}</span>
                 {summary.groupId === g.id && (
-                  <span className="ml-auto text-[10px] text-[color:var(--color-text-muted)]">
+                  <span className="ml-auto text-[10px] text-[color:var(--chela-accent)]">
                     ✓
                   </span>
                 )}
@@ -387,48 +463,61 @@ export function Sidebar({
   };
 
   return (
-    <aside className="flex h-full bg-transparent flex-col text-[13px] text-foreground">
+    <aside className="flex h-full bg-transparent flex-col text-[13px] text-[color:var(--chela-text-primary)]">
       {/* Top: New thread */}
-      <div className="px-3 pb-3 pt-3">
+      <div className="px-3 pb-2 pt-3">
         <button
           type="button"
           onClick={onNewSession}
-          className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] bg-shell-panel-elevated px-3 py-2.5 font-medium text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition hover:bg-shell-panel-contrast"
+          className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-2.5 py-2 text-[12px] font-medium text-[color:var(--chela-text-secondary)] transition hover:bg-[color:var(--chela-accent-subtle)] hover:text-[color:var(--chela-text-primary)]"
         >
-          <PlusIcon className="h-4 w-4" />
-          <span className="text-[12px]">新线程</span>
+          <SquarePen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+          <span>新线程</span>
         </button>
       </div>
 
+      {pinnedSummaries.length > 0 ? (
+        <div className="px-3 pb-3 pt-1">
+          <div className="space-y-1">
+            {pinnedSummaries.map((summary) => renderThreadItem(summary, false))}
+          </div>
+        </div>
+      ) : null}
+
       {/* Threads header */}
-      <div className="flex items-center px-4 pb-2 pt-1">
+      <div className="flex items-center px-4 pb-2 pt-1.5">
         {showArchived ? (
           <button
             type="button"
             onClick={() => setShowArchived(false)}
-            className="flex cursor-pointer items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-text-secondary)] transition hover:text-foreground"
+            className="flex cursor-pointer items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-[color:var(--chela-text-secondary)] transition hover:text-[color:var(--chela-accent-text)]"
           >
             <ArrowUturnLeftIcon className="h-3 w-3" />
             <span>返回</span>
           </button>
         ) : (
           <>
-            <span className="flex-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[color:var(--color-text-secondary)]">
+            <span className="flex-1 text-[11px] font-medium uppercase tracking-[0.14em] text-[color:var(--chela-text-tertiary)]">
               线程
             </span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setCreatingGroup(true);
-                setGroupMenuOpenFor(null);
-                setMovingSessionId(null);
-              }}
-              className="cursor-pointer rounded-md p-1 text-muted-foreground transition hover:bg-accent hover:text-foreground"
-              title="新建分组"
-            >
-              <FolderPlusIcon className="h-3.5 w-3.5" />
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCreatingGroup(true);
+                    setGroupMenuOpenFor(null);
+                    setMovingSessionId(null);
+                  }}
+                  className="cursor-pointer rounded-md p-1 text-[color:var(--chela-text-tertiary)] transition hover:bg-[color:var(--chela-accent-subtle)] hover:text-[color:var(--chela-accent-text)]"
+                  aria-label="新建分组"
+                >
+                  <FolderPlusIcon className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">新建分组</TooltipContent>
+            </Tooltip>
           </>
         )}
       </div>
@@ -438,14 +527,14 @@ export function Sidebar({
         {showArchived ? (
           <div className="space-y-1 px-3">
             {archivedSummaries.length === 0 ? (
-              <p className="px-2 py-4 text-center text-[11px] text-[color:var(--color-text-muted)]">
+              <p className="px-2 py-4 text-center text-[11px] text-[color:var(--chela-text-tertiary)]">
                 没有已归档的线程
               </p>
             ) : (
               archivedSummaries.map((summary) => (
                 <div
                   key={summary.id}
-                  className="group flex cursor-pointer items-center justify-between rounded-[var(--radius-shell)] px-3 py-2 transition hover:bg-shell-hover"
+                  className="group flex cursor-pointer items-center justify-between rounded-[var(--radius-shell)] px-3 py-2 transition hover:bg-[color:var(--chela-accent-subtle)]"
                 >
                   <button
                     type="button"
@@ -455,7 +544,7 @@ export function Sidebar({
                     }}
                     className="min-w-0 flex-1 cursor-pointer text-left"
                   >
-                    <span className="block truncate text-[12px] text-foreground">
+                    <span className="block truncate text-[12px] text-[color:var(--chela-text-primary)]">
                       {summary.title}
                     </span>
                   </button>
@@ -463,7 +552,7 @@ export function Sidebar({
                     <button
                       type="button"
                       onClick={() => onUnarchiveSession(summary.id)}
-                      className="cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-background hover:text-foreground"
+                      className="cursor-pointer rounded-md p-1 text-[color:var(--chela-text-tertiary)] hover:bg-[color:var(--chela-accent-subtle)] hover:text-[color:var(--chela-accent-text)]"
                       title="恢复"
                     >
                       <ArrowUturnLeftIcon className="h-3 w-3" />
@@ -483,7 +572,7 @@ export function Sidebar({
           </div>
         ) : (
           <div
-            className={`px-3 transition-colors ${dragOverUngrouped ? "rounded-2xl bg-shell-hover" : ""}`}
+            className={`px-3 transition-colors ${dragOverUngrouped ? "rounded-2xl bg-[color:var(--chela-accent-subtle)]" : ""}`}
             onDragOver={(e) => {
               if (dragSessionIdRef.current) {
                 const sid = dragSessionIdRef.current;
@@ -512,11 +601,11 @@ export function Sidebar({
           >
             {/* Create group input */}
             {creatingGroup && (
-              <div className="mb-2 flex items-center rounded-[var(--radius-shell)] bg-shell-panel-elevated px-2 py-2">
+              <div className="mb-2 flex items-center rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-surface)] px-2 py-2 shadow-[var(--chela-shadow-sm)]">
                 <span className="shrink-0 text-transparent">
                   <ChevronRightIcon className="h-3 w-3" />
                 </span>
-                <FolderIcon className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <FolderIcon className="ml-1.5 h-3.5 w-3.5 shrink-0 text-[color:var(--chela-text-tertiary)]" />
                 <input
                   ref={newGroupInputRef}
                   type="text"
@@ -531,7 +620,7 @@ export function Sidebar({
                   }}
                   onBlur={submitCreateGroup}
                   placeholder="分组名称..."
-                  className="ml-1.5 min-w-0 flex-1 border-none bg-transparent p-0 text-[12px] text-foreground outline-none placeholder:text-[color:var(--color-text-muted)]"
+                  className="ml-1.5 min-w-0 flex-1 border-none bg-transparent p-0 text-[12px] text-[color:var(--chela-text-primary)] outline-none placeholder:text-[color:var(--chela-text-tertiary)]"
                 />
               </div>
             )}
@@ -546,7 +635,7 @@ export function Sidebar({
               return (
                 <div
                   key={group.id}
-                  className={`mb-2 rounded-[var(--radius-shell)] transition-colors ${isDragOver ? "bg-shell-panel-muted" : "bg-transparent"}`}
+                  className={`mb-2 rounded-[var(--radius-shell)] transition-colors ${isDragOver ? "bg-[color:var(--chela-accent-subtle)]" : "bg-transparent"}`}
                   onDragOver={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
@@ -569,13 +658,13 @@ export function Sidebar({
                   }}
                 >
                   {/* Group header */}
-                  <div className="group flex items-center rounded-[var(--radius-shell)] px-2 py-2 transition hover:bg-shell-hover">
+                  <div className="group flex items-center rounded-[var(--radius-shell)] px-2 py-2 transition hover:bg-[color:var(--chela-accent-subtle)]">
                     <button
                       type="button"
                       onClick={() => toggleGroupCollapse(group.id)}
                       className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5"
                     >
-                      <span className="shrink-0 text-[color:var(--color-text-secondary)]">
+                      <span className="shrink-0 text-[color:var(--chela-text-secondary)]">
                         {collapsed ? (
                           <ChevronRightIcon className="h-3 w-3" />
                         ) : (
@@ -583,7 +672,7 @@ export function Sidebar({
                         )}
                       </span>
                       <FolderIcon
-                        className={`h-3.5 w-3.5 shrink-0 transition-colors ${isDragOver ? "text-foreground" : "text-[color:var(--color-text-secondary)]"}`}
+                        className={`h-3.5 w-3.5 shrink-0 transition-colors ${isDragOver ? "text-[color:var(--chela-text-primary)]" : "text-[color:var(--chela-text-secondary)]"}`}
                       />
                       {isRenaming ? (
                         <input
@@ -601,32 +690,54 @@ export function Sidebar({
                           className="min-w-0 flex-1 border-none bg-transparent p-0 text-[12px] font-medium text-foreground outline-none"
                         />
                       ) : (
-                        <span className="truncate text-[12px] font-medium text-foreground">
+                        <span className="truncate text-[12px] font-medium text-[color:var(--chela-text-primary)]">
                           {group.name}
                         </span>
                       )}
                     </button>
 
-                    {/* Group "..." menu */}
-                    <div className="relative ml-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setGroupMenuOpenFor(
-                            isGroupMenuOpen ? null : group.id,
-                          );
-                          setMovingSessionId(null);
-                        }}
-                        className="cursor-pointer rounded-md p-1 text-[color:var(--color-text-muted)] opacity-0 transition hover:bg-shell-panel hover:text-foreground group-hover:opacity-100"
-                        title="分组操作"
-                      >
-                        <EllipsisHorizontalIcon className="h-3.5 w-3.5" />
-                      </button>
+                    <div className="relative ml-1 flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setGroupMenuOpenFor(
+                                isGroupMenuOpen ? null : group.id,
+                              );
+                              setMovingSessionId(null);
+                            }}
+                            className="cursor-pointer rounded-md p-1 text-[color:var(--chela-text-tertiary)] transition hover:bg-[color:var(--chela-accent-subtle)] hover:text-[color:var(--chela-accent-text)]"
+                            aria-label="分组操作"
+                          >
+                            <EllipsisHorizontalIcon className="h-3.5 w-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">分组操作</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onCreateSessionInGroup(group.id);
+                            }}
+                            className="cursor-pointer rounded-md p-1 text-[color:var(--chela-text-tertiary)] transition hover:bg-[color:var(--chela-accent-subtle)] hover:text-[color:var(--chela-accent-text)]"
+                            aria-label={`在 ${group.name} 中开始新线程`}
+                          >
+                            <SquarePen className="h-3.5 w-3.5" strokeWidth={1.8} />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          {`在 ${group.name} 中开始新线程`}
+                        </TooltipContent>
+                      </Tooltip>
                       {isGroupMenuOpen && (
                         <div
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute right-0 top-full z-20 mt-1 min-w-[88px] rounded-[var(--radius-shell)] bg-shell-panel-elevated py-1 shadow-[0_18px_40px_rgba(0,0,0,0.32)]"
+                          className="absolute right-0 top-full z-20 mt-1 min-w-[88px] rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-surface)] py-1 shadow-[var(--chela-shadow-lg)]"
                         >
                           <button
                             type="button"
@@ -635,7 +746,7 @@ export function Sidebar({
                               setRenameValue(group.name);
                               setGroupMenuOpenFor(null);
                             }}
-                            className="flex w-full cursor-pointer items-center px-3 py-1.5 text-[11px] text-foreground hover:bg-accent"
+                            className="flex w-full cursor-pointer items-center px-3 py-1.5 text-[11px] text-[color:var(--chela-text-primary)] hover:bg-[color:var(--chela-accent-subtle)]"
                           >
                             重命名
                           </button>
@@ -659,7 +770,7 @@ export function Sidebar({
                     <div className="space-y-px">
                       {sessions.length === 0 ? (
                         <p
-                          className={`py-1 pl-7 text-[11px] ${isDragOver ? "text-[color:var(--color-text-secondary)]" : "text-[color:var(--color-text-muted)]"}`}
+                          className={`py-1 pl-7 text-[11px] ${isDragOver ? "text-[color:var(--chela-text-secondary)]" : "text-[color:var(--chela-text-tertiary)]"}`}
                         >
                           {isDragOver ? "松开鼠标放入分组" : "暂无线程"}
                         </p>
@@ -688,7 +799,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={onOpenSettings}
-          className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2 text-[12px] text-[color:var(--color-text-secondary)] transition hover:bg-accent hover:text-foreground"
+          className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2 text-[12px] text-[color:var(--chela-text-secondary)] transition hover:bg-[color:var(--chela-accent-subtle)] hover:text-[color:var(--chela-accent-text)]"
         >
           <Cog6ToothIcon className="h-3.5 w-3.5" />
           设置

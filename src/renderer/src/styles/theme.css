@@ -1,27 +1,166 @@
-/* ── Pi Desktop Agent — Theme Variables ──────────────────────────
+/* ── Chela Theme Variables ─────────────────────────────────────
  * Single source of truth for all colors.
- * Components use semantic Tailwind classes (e.g. bg-step-card)
+ * Components use semantic Tailwind classes (e.g. bg-primary)
  * which resolve to these variables via tailwind.config.ts.
- *
- * To add a dark theme later:
- *   [data-theme="dark"] { --color-bg-primary: #0f172a; ... }
- * To support custom themes:
- *   [data-theme="custom"] variables injected at runtime from settings.
  * ────────────────────────────────────────────────────────────── */
 
 :root {
-  --app-ui-font-family: "Segoe UI Variable", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+  /* === Color Palette === */
+  /* 蟹壳橙 — 从浅到深 */
+  --chela-50: #fff7ed;
+  --chela-100: #ffedd5;
+  --chela-200: #fed7aa;
+  --chela-300: #fdba74;
+  --chela-400: #fb923c;
+  --chela-500: #f97316;
+  --chela-600: #ea580c;
+  --chela-700: #c2410c;
+  --chela-800: #9a3412;
+  --chela-900: #7c2d12;
+  --chela-950: #431407;
+
+  /* 深海蓝灰 — 从浅到深 */
+  --chela-slate-50: #f8fafc;
+  --chela-slate-100: #f1f5f9;
+  --chela-slate-200: #e2e8f0;
+  --chela-slate-300: #cbd5e1;
+  --chela-slate-400: #94a3b8;
+  --chela-slate-500: #64748b;
+  --chela-slate-600: #475569;
+  --chela-slate-700: #334155;
+  --chela-slate-800: #1e293b;
+  --chela-slate-900: #0f172a;
+  --chela-slate-950: #020617;
+
+  /* 贝壳珍珠 */
+  --chela-pearl: #f8f9fa;
+  --chela-shell: #e8edf3;
+  --chela-coral: #ff8a65;
+  --chela-reef: #4dd0e1;
+
+  /* 状态色 */
+  --chela-success: #22c55e;
+  --chela-warning: #eab308;
+  --chela-error: #ef4444;
+  --chela-info: #3b82f6;
+
+  /* 思考色 */
+  --chela-thinking: #a78bfa;
+
+  /* === Light Mode (浅色模式) === */
+  /* === 背景 === */
+  --chela-bg-primary: var(--chela-pearl);
+  --chela-bg-secondary: var(--chela-shell);
+  --chela-bg-tertiary: var(--chela-slate-100);
+  --chela-bg-surface: #ffffff;
+  --chela-bg-muted: var(--chela-slate-50);
+
+  /* === 边框 === */
+  --chela-border: var(--chela-slate-200);
+  --chela-border-muted: var(--chela-slate-100);
+  --chela-border-focus: var(--chela-500);
+
+  /* === 文字 === */
+  --chela-text-primary: var(--chela-slate-900);
+  --chela-text-secondary: var(--chela-slate-600);
+  --chela-text-tertiary: var(--chela-slate-400);
+  --chela-text-muted: var(--chela-slate-400);
+  --chela-text-inverse: #ffffff;
+
+  /* === 主色 === */
+  --chela-accent: var(--chela-500);
+  --chela-accent-hover: var(--chela-600);
+  --chela-accent-active: var(--chela-700);
+  --chela-accent-subtle: var(--chela-100);
+  --chela-accent-text: var(--chela-700);
+
+  /* === 思考状态 === */
+  --chela-thinking-bg: #f3e8ff;
+  --chela-thinking-text: var(--chela-thinking);
+
+  /* === 工具状态 === */
+  --chela-tool-running: var(--chela-accent-subtle);
+  --chela-tool-complete: var(--chela-success);
+  --chela-tool-error: var(--chela-error);
+
+  /* === 阴影 === */
+  --chela-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --chela-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --chela-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --chela-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
+
+  /* === Z-Index === */
+  --chela-z-hide: -1;
+  --chela-z-base: 0;
+  --chela-z-elevated: 10;
+  --chela-z-dropdown: 40;
+  --chela-z-modal: 50;
+  --chela-z-toast: 100;
+  --chela-z-max: 9999;
+
+  /* === Radius === */
+  --chela-radius-sm: 4px;
+  --chela-radius-md: 8px;
+  --chela-radius-lg: 12px;
+  --chela-radius-xl: 16px;
+  --chela-radius-full: 9999px;
+
+  /* === Blur & Glass === */
+  --chela-blur-sm: blur(4px);
+  --chela-blur-md: blur(8px);
+  --chela-blur-lg: blur(16px);
+  --chela-glass-bg: rgba(255, 255, 255, 0.7);
+  --chela-glass-border: rgba(255, 255, 255, 0.4);
+
+  /* === Scrollbar & Selection === */
+  --chela-scrollbar-w: 6px;
+  --chela-scrollbar-track: transparent;
+  --chela-scrollbar-thumb: var(--chela-slate-300);
+  --chela-scrollbar-thumb-hover: var(--chela-slate-400);
+  --chela-selection-bg: var(--chela-200);
+  --chela-selection-text: var(--chela-900);
+
+  /* === Component Tokens === */
+  --chela-message-user-bg: var(--chela-accent);
+  --chela-message-user-text: var(--chela-text-inverse);
+  --chela-message-assistant-bg: transparent;
+  --chela-message-assistant-text: var(--chela-text-primary);
+  --chela-message-radius: 12px;
+
+  --chela-activity-bar-bg: var(--chela-bg-muted);
+  --chela-activity-bar-border: var(--chela-border-muted);
+  --chela-activity-bar-radius: 10px;
+  --chela-activity-bar-padding: 8px 12px;
+  --chela-activity-bar-row-gap: 6px;
+  --chela-activity-bar-font-size: 12px;
+
+  --chela-tool-card-bg: var(--chela-bg-surface);
+  --chela-tool-card-border: var(--chela-border);
+  --chela-tool-card-radius: 8px;
+  --chela-tool-card-padding: 10px 14px;
+
+  --chela-thinking-panel-bg: var(--chela-thinking-bg);
+  --chela-thinking-panel-border: var(--chela-thinking);
+  --chela-thinking-panel-radius: 10px;
+
+  /* Typography */
+  --chela-font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --chela-font-mono: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+
+  --app-ui-font-family: var(--chela-font-sans);
   --app-ui-font-size: 13px;
-  --app-code-font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
+  --app-code-font-family: var(--chela-font-mono);
   --app-code-font-size: 13px;
 
+  /* Legacy / Shadcn mappings */
   --background: 214 25% 96%;
   --foreground: 222 47% 11%;
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
-  --primary: 222 47% 11%;
+  --primary: 24 94% 50%;
+  /* Chela 500 equivalent HSL roughly */
   --primary-foreground: 210 20% 98%;
   --secondary: 210 32% 97%;
   --secondary-foreground: 222 47% 11%;
@@ -33,97 +172,149 @@
   --destructive-foreground: 210 20% 98%;
   --border: 214 20% 84%;
   --input: 214 20% 84%;
-  --ring: 214 16% 68%;
+  --ring: 24 94% 50%;
 
-  /* ── Global Base ─────────────────────────────────────────── */
-  --color-bg-primary:        #ffffff;
-  --color-bg-secondary:      #f8fafc;
-  --color-bg-tertiary:       #f1f5f9;
-  --color-bg-shell:          #f8fafc;
-  --color-shell-window:      #e8edf3;
-  --color-shell-panel:       #ffffff;
-  --color-shell-panel-muted: #f8fafc;
+  /* Old specific semantic variables used in tailwind */
+  --color-bg-primary: var(--chela-bg-primary);
+  --color-bg-secondary: var(--chela-bg-secondary);
+  --color-bg-tertiary: var(--chela-bg-tertiary);
+  --color-bg-shell: var(--chela-bg-primary);
+  --color-shell-window: var(--chela-bg-secondary);
+  --color-shell-panel: var(--chela-bg-surface);
+  --color-shell-panel-muted: var(--chela-bg-muted);
   --color-shell-panel-elevated: #eef3f9;
   --color-shell-panel-contrast: #e8eef5;
-  --color-shell-border:      #d4dce6;
-  --radius-shell:            8px;
-  --color-shell-toolbar:     #f8fafc;
-  --color-shell-toolbar-hover:#eef2f7;
-  --color-shell-hover:       rgba(236, 242, 248, 0.96);
-  --color-shell-terminal:    #fbfcfe;
+  --color-shell-border: var(--chela-border);
+  --radius-shell: var(--chela-radius-md);
+  --color-shell-toolbar: var(--chela-bg-secondary);
+  --color-shell-toolbar-hover: var(--chela-slate-200);
+  --color-shell-hover: rgba(236, 242, 248, 0.96);
+  --color-shell-terminal: var(--chela-bg-surface);
   --color-shell-resize-handle: rgba(15, 23, 42, 0.07);
   --color-shell-resize-handle-hover: rgba(15, 23, 42, 0.14);
-  --color-text-primary:      #111827;
-  --color-text-secondary:    #475569;
-  --color-text-muted:        #55657c;
-  --color-border:            #dce4ed;
-  --color-border-light:      #e8eef5;
-  --color-composer-surface:  #ffffff;
-  --color-composer-control:  #f6f6f3;
-  --color-context-indicator-rest:  #9aa1aa;
-  --color-context-indicator-track: #dde2e7;
 
-  /* ── Step Cards ──────────────────────────────────────────── */
-  --color-step-bg:           #ffffff;
-  --color-step-bg-hover:     #f8fafc;
-  --color-step-border:       #e2e8f0;
+  --color-text-primary: var(--chela-text-primary);
+  --color-text-secondary: var(--chela-text-secondary);
+  --color-text-muted: var(--chela-text-muted);
+  --color-border: var(--chela-border);
+  --color-border-light: var(--chela-border-muted);
 
-  /* ── Status Bars ─────────────────────────────────────────── */
-  --color-status-executing:  #2563eb;
-  --color-status-success:    #16a34a;
-  --color-status-error:      #dc2626;
-  --color-status-thinking:   #7c3aed;
-  --color-status-cancelled:  #94a3b8;
+  --color-composer-surface: var(--chela-bg-surface);
+  --color-composer-control: var(--chela-bg-muted);
+  --color-context-indicator-rest: var(--chela-text-muted);
+  --color-context-indicator-track: var(--chela-border);
 
-  /* ── Code / Terminal ─────────────────────────────────────── */
-  --color-code-bg:           #f8fafc;
-  --color-code-text:         #1e293b;
-  --color-code-border:       #e2e8f0;
-  --color-terminal-bg:       #f8fafc;
-  --color-terminal-text:     #1e293b;
-  --terminal-ansi-black:     #334155;
-  --terminal-ansi-red:       #ef4444;
-  --terminal-ansi-green:     #22c55e;
-  --terminal-ansi-yellow:    #eab308;
-  --terminal-ansi-blue:      #3b82f6;
-  --terminal-ansi-magenta:   #a855f7;
-  --terminal-ansi-cyan:      #06b6d4;
-  --terminal-ansi-white:     #f1f5f9;
-  --terminal-ansi-bright-black:   #64748b;
-  --terminal-ansi-bright-red:     #f87171;
-  --terminal-ansi-bright-green:   #4ade80;
-  --terminal-ansi-bright-yellow:  #facc15;
-  --terminal-ansi-bright-blue:    #60a5fa;
+  --color-step-bg: var(--chela-bg-surface);
+  --color-step-bg-hover: var(--chela-bg-muted);
+  --color-step-border: var(--chela-border);
+
+  --color-status-executing: var(--chela-info);
+  --color-status-success: var(--chela-success);
+  --color-status-error: var(--chela-error);
+  --color-status-thinking: var(--chela-thinking);
+  --color-status-cancelled: var(--chela-slate-400);
+
+  --color-code-bg: var(--chela-bg-muted);
+  --color-code-text: var(--chela-text-primary);
+  --color-code-border: var(--chela-border);
+
+  --color-terminal-bg: var(--chela-slate-900);
+  --color-terminal-text: var(--chela-slate-50);
+
+  --terminal-ansi-black: #334155;
+  --terminal-ansi-red: #ef4444;
+  --terminal-ansi-green: #22c55e;
+  --terminal-ansi-yellow: #eab308;
+  --terminal-ansi-blue: #3b82f6;
+  --terminal-ansi-magenta: #a855f7;
+  --terminal-ansi-cyan: #06b6d4;
+  --terminal-ansi-white: #f1f5f9;
+  --terminal-ansi-bright-black: #64748b;
+  --terminal-ansi-bright-red: #f87171;
+  --terminal-ansi-bright-green: #4ade80;
+  --terminal-ansi-bright-yellow: #facc15;
+  --terminal-ansi-bright-blue: #60a5fa;
   --terminal-ansi-bright-magenta: #c084fc;
-  --terminal-ansi-bright-cyan:    #22d3ee;
-  --terminal-ansi-bright-white:   #ffffff;
+  --terminal-ansi-bright-cyan: #22d3ee;
+  --terminal-ansi-bright-white: #ffffff;
 
-  /* ── Diff ────────────────────────────────────────────────── */
-  --color-diff-add-bg:       #dcfce7;
-  --color-diff-add-text:     #166534;
-  --color-diff-add-marker:   #22c55e;
-  --color-diff-del-bg:       #fee2e2;
-  --color-diff-del-text:     #991b1b;
-  --color-diff-del-marker:   #ef4444;
-  --color-diff-hunk-header:  #eff6ff;
-  --color-diff-context:      var(--color-bg-primary);
-  --color-diff-gutter:       var(--color-bg-secondary);
-  --color-diff-line-number:  var(--color-text-muted);
+  --color-diff-add-bg: #dcfce7;
+  --color-diff-add-text: #166534;
+  --color-diff-add-marker: #22c55e;
+  --color-diff-del-bg: #fee2e2;
+  --color-diff-del-text: #991b1b;
+  --color-diff-del-marker: #ef4444;
+  --color-diff-hunk-header: #eff6ff;
+  --color-diff-context: var(--chela-bg-surface);
+  --color-diff-gutter: var(--chela-bg-muted);
+  --color-diff-line-number: var(--chela-text-muted);
 
-  /* ── Accent / Interactive ────────────────────────────────── */
-  --color-accent:            #2563eb;
-  --color-accent-hover:      #1d4ed8;
-  --color-accent-subtle:     #dbeafe;
+  --color-accent: var(--chela-accent);
+  --color-accent-hover: var(--chela-accent-hover);
+  --color-accent-subtle: var(--chela-accent-subtle);
 }
 
-[data-theme="dark"] {
+[data-theme="dark"],
+.dark {
+  /* === 背景 === */
+  --chela-bg-primary: var(--chela-slate-950);
+  --chela-bg-secondary: var(--chela-slate-900);
+  --chela-bg-tertiary: var(--chela-slate-800);
+  --chela-bg-surface: var(--chela-slate-800);
+  --chela-bg-muted: var(--chela-slate-900);
+
+  /* === 边框 === */
+  --chela-border: var(--chela-slate-700);
+  --chela-border-muted: var(--chela-slate-800);
+  --chela-border-focus: var(--chela-500);
+
+  /* === 文字 === */
+  --chela-text-primary: var(--chela-slate-100);
+  --chela-text-secondary: var(--chela-slate-400);
+  --chela-text-tertiary: var(--chela-slate-500);
+  --chela-text-muted: var(--chela-slate-500);
+  --chela-text-inverse: var(--chela-slate-900);
+
+  /* === 主色 === */
+  --chela-accent: var(--chela-400);
+  --chela-accent-hover: var(--chela-500);
+  --chela-accent-active: var(--chela-600);
+  --chela-accent-subtle: rgba(249, 115, 22, 0.1);
+  --chela-accent-text: var(--chela-400);
+
+  /* === 思考状态 === */
+  --chela-thinking-bg: rgba(167, 139, 250, 0.1);
+  --chela-thinking-text: #c4b5fd;
+
+  /* === 工具状态 === */
+  --chela-tool-running: rgba(249, 115, 22, 0.08);
+  --chela-tool-complete: var(--chela-success);
+  --chela-tool-error: var(--chela-error);
+
+  /* === 阴影 === */
+  --chela-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --chela-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --chela-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+  --chela-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.6);
+
+  /* === Blur & Glass === */
+  --chela-glass-bg: rgba(15, 23, 42, 0.7);
+  --chela-glass-border: rgba(255, 255, 255, 0.1);
+
+  /* === Scrollbar & Selection === */
+  --chela-scrollbar-thumb: var(--chela-slate-700);
+  --chela-scrollbar-thumb-hover: var(--chela-slate-600);
+  --chela-selection-bg: rgba(251, 146, 60, 0.3);
+  --chela-selection-text: var(--chela-slate-100);
+
+  /* Legacy mappings */
   --background: 220 8% 11%;
   --foreground: 210 20% 96%;
   --card: 220 8% 14%;
   --card-foreground: 210 20% 96%;
   --popover: 220 8% 14%;
   --popover-foreground: 210 20% 96%;
-  --primary: 210 20% 96%;
+  --primary: 24 94% 60%;
   --primary-foreground: 220 8% 11%;
   --secondary: 220 10% 18%;
   --secondary-foreground: 210 20% 96%;
@@ -135,78 +326,62 @@
   --destructive-foreground: 210 20% 98%;
   --border: 220 10% 26%;
   --input: 220 10% 26%;
-  --ring: 220 10% 40%;
+  --ring: 24 94% 60%;
 
-  --color-bg-primary:        #181818;
-  --color-bg-secondary:      #202020;
-  --color-bg-tertiary:       #2a2a2a;
-  --color-bg-shell:          #181818;
-  --color-shell-window:      #141414;
-  --color-shell-panel:       #1b1b1b;
-  --color-shell-panel-muted: #212121;
-  --color-shell-panel-elevated: #262626;
+  --color-bg-primary: var(--chela-bg-primary);
+  --color-bg-secondary: var(--chela-bg-secondary);
+  --color-bg-tertiary: var(--chela-bg-tertiary);
+  --color-bg-shell: var(--chela-bg-primary);
+  --color-shell-window: var(--chela-bg-secondary);
+  --color-shell-panel: var(--chela-bg-surface);
+  --color-shell-panel-muted: var(--chela-bg-muted);
+  --color-shell-panel-elevated: var(--chela-bg-tertiary);
   --color-shell-panel-contrast: #2c2c2c;
-  --color-shell-border:      #2f3339;
-  --color-shell-toolbar:     #1a1a1a;
-  --color-shell-toolbar-hover:#2a2a2a;
-  --color-shell-hover:       rgba(255, 255, 255, 0.1);
-  --color-shell-terminal:    #161616;
+  --color-shell-border: var(--chela-border);
+  --color-shell-toolbar: var(--chela-bg-secondary);
+  --color-shell-toolbar-hover: var(--chela-slate-800);
+  --color-shell-hover: rgba(255, 255, 255, 0.1);
+  --color-shell-terminal: var(--chela-slate-900);
   --color-shell-resize-handle: rgba(255, 255, 255, 0.08);
   --color-shell-resize-handle-hover: rgba(255, 255, 255, 0.18);
-  --color-text-primary:      #f5f5f5;
-  --color-text-secondary:    #d4d4d4;
-  --color-text-muted:        #aeb7c6;
-  --color-border:            #32363d;
-  --color-border-light:      #2a2e34;
-  --color-composer-surface:  #1b1b1b;
-  --color-composer-control:  #262626;
-  --color-context-indicator-rest:  #9ea4ad;
+
+  --color-text-primary: var(--chela-text-primary);
+  --color-text-secondary: var(--chela-text-secondary);
+  --color-text-muted: var(--chela-text-muted);
+  --color-border: var(--chela-border);
+  --color-border-light: var(--chela-border-muted);
+
+  --color-composer-surface: var(--chela-bg-surface);
+  --color-composer-control: var(--chela-bg-muted);
+  --color-context-indicator-rest: #9ea4ad;
   --color-context-indicator-track: #3a4048;
 
-  --color-step-bg:           #1f1f1f;
-  --color-step-bg-hover:     #262626;
-  --color-step-border:       #303030;
+  --color-step-bg: var(--chela-bg-surface);
+  --color-step-bg-hover: var(--chela-bg-muted);
+  --color-step-border: var(--chela-border);
 
-  --color-status-executing:  #4ea1ff;
-  --color-status-success:    #47c173;
-  --color-status-error:      #fb7185;
-  --color-status-thinking:   #a78bfa;
-  --color-status-cancelled:  #6b7280;
+  --color-status-executing: var(--chela-info);
+  --color-status-success: var(--chela-success);
+  --color-status-error: var(--chela-error);
+  --color-status-thinking: var(--chela-thinking);
+  --color-status-cancelled: var(--chela-slate-500);
 
-  --color-code-bg:           #161616;
-  --color-code-text:         #f5f5f5;
-  --color-code-border:       #303030;
-  --color-terminal-bg:       #171717;
-  --color-terminal-text:     #f5f5f5;
-  --terminal-ansi-black:     #4b5563;
-  --terminal-ansi-red:       #fb7185;
-  --terminal-ansi-green:     #4ade80;
-  --terminal-ansi-yellow:    #facc15;
-  --terminal-ansi-blue:      #60a5fa;
-  --terminal-ansi-magenta:   #c084fc;
-  --terminal-ansi-cyan:      #22d3ee;
-  --terminal-ansi-white:     #e5e7eb;
-  --terminal-ansi-bright-black:   #9ca3af;
-  --terminal-ansi-bright-red:     #fda4af;
-  --terminal-ansi-bright-green:   #86efac;
-  --terminal-ansi-bright-yellow:  #fde047;
-  --terminal-ansi-bright-blue:    #93c5fd;
-  --terminal-ansi-bright-magenta: #d8b4fe;
-  --terminal-ansi-bright-cyan:    #67e8f9;
-  --terminal-ansi-bright-white:   #ffffff;
+  --color-code-bg: var(--chela-bg-muted);
+  --color-code-text: var(--chela-text-primary);
+  --color-code-border: var(--chela-border);
 
-  --color-diff-add-bg:       rgba(34, 197, 94, 0.16);
-  --color-diff-add-text:     #86efac;
-  --color-diff-add-marker:   #4ade80;
-  --color-diff-del-bg:       rgba(244, 63, 94, 0.16);
-  --color-diff-del-text:     #fda4af;
-  --color-diff-del-marker:   #fb7185;
-  --color-diff-hunk-header:  rgba(59, 130, 246, 0.12);
-  --color-diff-context:      #1d1d1d;
-  --color-diff-gutter:       #171717;
-  --color-diff-line-number:  #6b7280;
+  --color-diff-add-bg: rgba(34, 197, 94, 0.16);
+  --color-diff-add-text: #86efac;
+  --color-diff-add-marker: #4ade80;
+  --color-diff-del-bg: rgba(244, 63, 94, 0.16);
+  --color-diff-del-text: #fda4af;
+  --color-diff-del-marker: #fb7185;
+  --color-diff-hunk-header: rgba(59, 130, 246, 0.12);
+  --color-diff-context: var(--chela-bg-surface);
+  --color-diff-gutter: var(--chela-bg-muted);
+  --color-diff-line-number: var(--chela-text-muted);
 
-  --color-accent:            #339cff;
-  --color-accent-hover:      #1e8cf7;
-  --color-accent-subtle:     rgba(51, 156, 255, 0.18);
+  --color-accent: var(--chela-accent);
+  --color-accent-hover: var(--chela-accent-hover);
+  --color-accent-subtle: var(--chela-accent-subtle);
 }

@@ -171,23 +171,26 @@ function ModelSelectorContent({
       className={cn("min-w-[180px]", className)}
       {...props}
     >
-      {children ?? groupedModels.map((group, index) => (
-        <SelectGroup key={group.id}>
-          {group.label ? (
-            <SelectLabel className="px-3 pb-1.5 pt-2 text-[11px] font-medium tracking-[0.02em] text-[color:var(--color-text-secondary)]">
-              {group.label}
-            </SelectLabel>
-          ) : null}
-          {group.models.map((model) => (
-            <ModelSelectorItem
-              key={model.id}
-              model={model}
-              {...(model.disabled ? { disabled: true } : undefined)}
-            />
-          ))}
-          {index < groupedModels.length - 1 ? <SelectSeparator className="my-2" /> : null}
-        </SelectGroup>
-      ))}
+      {children ??
+        groupedModels.map((group, index) => (
+          <SelectGroup key={group.id}>
+            {group.label ? (
+              <SelectLabel className="px-3 pb-1.5 pt-2 text-[11px] font-medium tracking-[0.02em] text-[color:var(--color-text-secondary)]">
+                {group.label}
+              </SelectLabel>
+            ) : null}
+            {group.models.map((model) => (
+              <ModelSelectorItem
+                key={model.id}
+                model={model}
+                {...(model.disabled ? { disabled: true } : undefined)}
+              />
+            ))}
+            {index < groupedModels.length - 1 ? (
+              <SelectSeparator className="my-2" />
+            ) : null}
+          </SelectGroup>
+        ))}
     </SelectContent>
   );
 }
@@ -211,7 +214,7 @@ function ModelSelectorItem({
       textValue={model.name}
       className={cn(
         "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-lg py-2 pr-9 pl-3 text-sm text-foreground outline-none transition-colors",
-        "data-[state=checked]:bg-shell-panel-contrast data-[state=checked]:shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]",
+        "data-[state=checked]:bg-accent-subtle data-[state=checked]:text-accent-text",
         "data-[highlighted]:bg-shell-panel-muted data-[highlighted]:text-foreground",
         "focus:bg-shell-panel-muted focus:text-foreground",
         "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
@@ -279,7 +282,11 @@ const ModelSelectorImpl = ({
       onValueChange={onValueChange}
       {...forwardedProps}
     >
-      <ModelSelectorTrigger variant={variant} size={size} className={className} />
+      <ModelSelectorTrigger
+        variant={variant}
+        size={size}
+        className={className}
+      />
       <ModelSelectorContent className={contentClassName} />
     </ModelSelectorRoot>
   );

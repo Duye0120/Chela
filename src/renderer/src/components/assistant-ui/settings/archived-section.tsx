@@ -21,19 +21,19 @@ export function ArchivedSection({
     >
       <div className="space-y-3 px-6 py-5">
         {archivedSummaries.length === 0 ? (
-          <div className="rounded-[var(--radius-shell)] border border-shell-border bg-shell-panel-muted px-4 py-8 text-center text-[12px] text-muted-foreground">
+          <div className="rounded-[var(--radius-shell)] bg-shell-panel-muted px-4 py-8 text-center text-[12px] text-muted-foreground">
             暂时没有已归档线程。
           </div>
         ) : (
           archivedSummaries.map((summary) => (
             <div
               key={summary.id}
-              className="flex flex-col gap-3 rounded-[var(--radius-shell)] border border-shell-border bg-shell-panel-muted px-4 py-4 md:flex-row md:items-center md:justify-between"
+              className="flex flex-col gap-3 rounded-[var(--radius-shell)] bg-shell-panel-muted px-4 py-4 md:flex-row md:items-center md:justify-between"
             >
               <button
                 type="button"
                 onClick={() => onOpenArchivedSession(summary.id)}
-                className="min-w-0 cursor-pointer text-left"
+                className="min-w-0 flex-1 cursor-pointer text-left"
               >
                 <p className="truncate text-[13px] font-medium text-foreground">
                   {summary.title}
@@ -48,7 +48,7 @@ export function ArchivedSection({
                   type="button"
                   variant="outline"
                   onClick={() => onUnarchiveSession(summary.id)}
-                  className="h-8 rounded-[var(--radius-shell)] border border-shell-border bg-shell-panel-contrast px-3 text-[12px]"
+                  className="h-8 rounded-[var(--radius-shell)] bg-shell-panel-contrast px-3 text-[12px]"
                 >
                   恢复
                 </Button>

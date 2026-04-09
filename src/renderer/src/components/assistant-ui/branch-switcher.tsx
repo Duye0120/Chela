@@ -324,7 +324,7 @@ export function BranchSwitcher({
                       className={cn(
                         "group flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left text-[14px] transition-all duration-150 focus-visible:outline-none",
                         branch.isCurrent
-                          ? "bg-shell-panel-contrast shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]"
+                          ? "bg-accent-subtle text-accent-text"
                           : "bg-transparent hover:bg-shell-panel-muted focus-visible:bg-shell-panel-muted",
                         !submitting && "cursor-pointer",
                         submitting && "cursor-wait opacity-80",
@@ -370,7 +370,7 @@ export function BranchSwitcher({
             </div>
           ) : null}
 
-          <div className="border-t border-slate-900/10 pt-2 dark:border-white/10">
+          <div className="border-t border-[color:var(--color-border-light)] pt-2">
             {isCreateMode ? (
               <div className="flex flex-col gap-2">
                 <input

@@ -4,9 +4,11 @@ import {
   useLocalRuntime,
   type ChatModelAdapter,
   type ChatModelRunResult,
+  type MessagePartStatus,
   type MessageStatus,
   type ThreadAssistantMessagePart,
   type ThreadMessageLike,
+  type ToolCallMessagePartStatus,
 } from "@assistant-ui/react";
 import type { AgentEvent } from "@shared/agent-events";
 import type {
@@ -140,14 +142,44 @@ function getToolResultDisplay(result: unknown): unknown {
   return getToolResultText(result) ?? result;
 }
 
+type ActivityThreadAssistantMessagePart = ThreadAssistantMessagePart & {
+  status?: MessagePartStatus | ToolCallMessagePartStatus;
+  startedAt?: number;
+  endedAt?: number;
+};
+
+function toPartStatus(
+  step: AgentStep,
+): MessagePartStatus | ToolCallMessagePartStatus {
+  switch (step.status) {
+    case "executing":
+      return { type: "running" };
+    case "success":
+      return { type: "complete" };
+    case "cancelled":
+      return { type: "incomplete", reason: "cancelled" };
+    case "error":
+      return {
+        type: "incomplete",
+        reason: "error",
+        error: step.toolError ?? step.toolResult ?? step.streamOutput,
+      };
+    default:
+      return { type: "complete" };
+  }
+}
+
 function buildAssistantParts(steps: AgentStep[], finalText: string): ThreadAssistantMessagePart[] {
-  const parts: ThreadAssistantMessagePart[] = [];
+  const parts: ActivityThreadAssistantMessagePart[] = [];
 
   for (const step of steps) {
     if (step.kind === "thinking" && step.thinkingText) {
       parts.push({
         type: "reasoning",
         text: step.thinkingText,
+        status: toPartStatus(step),
+        startedAt: step.startedAt,
+        endedAt: step.endedAt,
       });
       continue;
     }
@@ -168,6 +200,9 @@ function buildAssistantParts(steps: AgentStep[], finalText: string): ThreadAssis
         argsText: safeArgsText(step.toolArgs ?? {}),
         result,
         isError: step.status === "error",
+        status: toPartStatus(step),
+        startedAt: step.startedAt,
+        endedAt: step.endedAt,
       });
     }
   }

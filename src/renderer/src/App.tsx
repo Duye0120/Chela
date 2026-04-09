@@ -41,10 +41,14 @@ import {
 } from "@renderer/lib/context-usage";
 import { mergeAttachments, upsertSummary } from "@renderer/lib/session";
 
-const ACTIVE_SESSION_STORAGE_KEY = "first-pi-agent.active-session-id";
-const SIDEBAR_WIDTH_STORAGE_KEY = "first-pi-agent.sidebar-width";
+const ACTIVE_SESSION_STORAGE_KEY = "chela.active-session-id";
+const LEGACY_ACTIVE_SESSION_STORAGE_KEY = "first-pi-agent.active-session-id";
+const SIDEBAR_WIDTH_STORAGE_KEY = "chela.sidebar-width";
+const LEGACY_SIDEBAR_WIDTH_STORAGE_KEY = "first-pi-agent.sidebar-width";
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "chela.sidebar-collapsed";
 const LEGACY_RIGHT_PANEL_SIZE_STORAGE_KEY = "first-pi-agent.right-panel-size";
-const DIFF_PANEL_SIZE_STORAGE_KEY = "first-pi-agent.diff-panel-size";
+const DIFF_PANEL_SIZE_STORAGE_KEY = "chela.diff-panel-size";
+const LEGACY_DIFF_PANEL_SIZE_STORAGE_KEY = "first-pi-agent.diff-panel-size";
 const DEFAULT_SIDEBAR_SIZE = 18;
 const MIN_SIDEBAR_SIZE = 14;
 const MAX_SIDEBAR_SIZE = 28;
@@ -81,26 +85,45 @@ function migrateLegacySidebarWidth(storedWidth: number) {
   return clampSidebarSize((storedWidth / window.innerWidth) * 100);
 }
 
+function readStoredNumber(keys: string[]) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = Number(localStorage.getItem(key));
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function readStoredString(keys: string[]) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = localStorage.getItem(key);
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 function readStoredPanelSize(
   primaryKey: string,
-  fallbackKey: string | null,
+  fallbackKeys: string[],
   defaultSize: number,
   clamp: (size: number) => number,
 ) {
-  if (typeof window === "undefined") {
-    return defaultSize;
-  }
-
-  const primaryValue = Number(localStorage.getItem(primaryKey));
-  if (Number.isFinite(primaryValue)) {
-    return clamp(primaryValue);
-  }
-
-  if (fallbackKey) {
-    const fallbackValue = Number(localStorage.getItem(fallbackKey));
-    if (Number.isFinite(fallbackValue)) {
-      return clamp(fallbackValue);
-    }
+  const storedValue = readStoredNumber([primaryKey, ...fallbackKeys]);
+  if (storedValue !== null) {
+    return clamp(storedValue);
   }
 
   return defaultSize;
@@ -155,21 +178,27 @@ export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [sidebarSize, setSidebarSize] = useState(() => {
-    if (typeof window === "undefined") {
-      return DEFAULT_SIDEBAR_SIZE;
-    }
-
-    const storedWidth = Number(localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY));
-    if (!Number.isFinite(storedWidth)) {
+    const storedWidth = readStoredNumber([
+      SIDEBAR_WIDTH_STORAGE_KEY,
+      LEGACY_SIDEBAR_WIDTH_STORAGE_KEY,
+    ]);
+    if (storedWidth === null) {
       return DEFAULT_SIDEBAR_SIZE;
     }
 
     return migrateLegacySidebarWidth(storedWidth);
   });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
+  });
   const [diffPanelSize, setDiffPanelSize] = useState(() =>
     readStoredPanelSize(
       DIFF_PANEL_SIZE_STORAGE_KEY,
-      LEGACY_RIGHT_PANEL_SIZE_STORAGE_KEY,
+      [LEGACY_DIFF_PANEL_SIZE_STORAGE_KEY, LEGACY_RIGHT_PANEL_SIZE_STORAGE_KEY],
       DEFAULT_DIFF_PANEL_SIZE,
       clampDiffPanelSize,
     ),
@@ -182,6 +211,11 @@ export default function App() {
   const [gitOverviewLoading, setGitOverviewLoading] = useState(false);
 
   const activeSessionId = activeSession?.id ?? null;
+  const sidebarPanelRef = useRef<{
+    collapse: () => void;
+    expand: () => void;
+    isCollapsed: () => boolean;
+  } | null>(null);
   const summariesRef = useRef<ChatSessionSummary[]>([]);
   const activeSessionIdRef = useRef<string | null>(null);
   const sessionCacheRef = useRef<Record<string, ChatSession>>({});
@@ -205,6 +239,26 @@ export default function App() {
       String(clampSidebarSize(sidebarSize)),
     );
   }, [sidebarSize]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      SIDEBAR_COLLAPSED_STORAGE_KEY,
+      sidebarCollapsed ? "1" : "0",
+    );
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    const panel = sidebarPanelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    if (sidebarCollapsed) {
+      panel.collapse();
+    } else {
+      panel.expand();
+    }
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -457,7 +511,10 @@ export default function App() {
         setThinkingLevel(settings.thinkingLevel);
       }
 
-      const storedSessionId = localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+      const storedSessionId = readStoredString([
+        ACTIVE_SESSION_STORAGE_KEY,
+        LEGACY_ACTIVE_SESSION_STORAGE_KEY,
+      ]);
       let nextSession = storedSessionId
         ? await desktopApi.sessions.load(storedSessionId)
         : null;
@@ -501,6 +558,9 @@ export default function App() {
           e.preventDefault();
           setTerminalOpen(true);
         }
+      } else if (mod && e.key === "b") {
+        e.preventDefault();
+        setSidebarCollapsed((current) => !current);
       } else if (mod && e.key === "n") {
         e.preventDefault();
         void createNewSession();
@@ -535,6 +595,27 @@ export default function App() {
     hydrateSession(nextSession);
     void refreshContextSummary(nextSession.id);
   }, [desktopApi, hydrateSession, refreshContextSummary]);
+
+  const createSessionInGroup = useCallback(
+    async (groupId: string) => {
+      if (!desktopApi) {
+        return;
+      }
+
+      const nextSession = await desktopApi.sessions.create();
+      await desktopApi.sessions.setGroup(nextSession.id, groupId);
+      const groupedSession =
+        (await desktopApi.sessions.load(nextSession.id)) ?? {
+          ...nextSession,
+          groupId,
+        };
+
+      await refreshSessionLists();
+      hydrateSession(groupedSession);
+      void refreshContextSummary(groupedSession.id);
+    },
+    [desktopApi, hydrateSession, refreshContextSummary, refreshSessionLists],
+  );
 
   const selectSession = useCallback(
     async (sessionId: string) => {
@@ -733,6 +814,18 @@ export default function App() {
     [desktopApi, refreshSessionLists],
   );
 
+  const setSessionPinned = useCallback(
+    async (sessionId: string, pinned: boolean) => {
+      if (!desktopApi) {
+        return;
+      }
+
+      await desktopApi.sessions.setPinned(sessionId, pinned);
+      await refreshSessionLists();
+    },
+    [desktopApi, refreshSessionLists],
+  );
+
   const setSessionGroup = useCallback(
     async (sessionId: string, groupId: string | null) => {
       if (!desktopApi) return;
@@ -891,8 +984,17 @@ export default function App() {
   const handleShellLayoutChanged = useCallback((layout: Record<string, number>) => {
     const nextSidebarSize = layout["shell-sidebar"];
     if (typeof nextSidebarSize === "number" && Number.isFinite(nextSidebarSize)) {
+      if (nextSidebarSize <= 0.5) {
+        setSidebarCollapsed(true);
+        return;
+      }
+      setSidebarCollapsed(false);
       setSidebarSize(clampSidebarSize(nextSidebarSize));
     }
+  }, []);
+
+  const toggleSidebarCollapsed = useCallback(() => {
+    setSidebarCollapsed((current) => !current);
   }, []);
 
   const handleDiffOnlyLayoutChanged = useCallback((layout: Record<string, number>) => {
@@ -1016,7 +1118,7 @@ export default function App() {
   const threadRuntimeLayer =
     desktopApi ? (
       mountedSessionIds.length > 0 ? (
-        <div className="flex h-full min-h-0 flex-col bg-shell-panel">
+        <div className="flex h-full min-h-0 flex-col bg-[color:var(--chela-bg-surface)]">
           {mountedSessionIds.map((sessionId) => {
             const session = sessionCache[sessionId];
             if (!session) {
@@ -1072,7 +1174,7 @@ export default function App() {
 
   const settingsOverlay =
     mainView === "settings" ? (
-      <div className="absolute inset-0 z-10 min-h-0 bg-shell-panel">
+      <div className="absolute inset-0 z-10 min-h-0 bg-[color:var(--chela-bg-surface)]">
         <SettingsView
           activeSection={settingsSection}
           settings={settings}
@@ -1097,7 +1199,7 @@ export default function App() {
     diffPanelOpen ? (
       <ResizablePanelGroup
         orientation="horizontal"
-        className="min-h-0 bg-shell-panel"
+        className="min-h-0 bg-[color:var(--chela-bg-surface)]"
         onLayoutChanged={handleDiffOnlyLayoutChanged}
         resizeTargetMinimumSize={{ fine: 6, coarse: 24 }}
       >
@@ -1106,7 +1208,7 @@ export default function App() {
           defaultSize={toPercentageSize(100 - normalizedDiffPanelSize)}
           minSize={`${100 - MAX_DIFF_PANEL_SIZE}%`}
         >
-          <section className="flex h-full min-h-0 flex-col bg-shell-panel">
+          <section className="flex h-full min-h-0 flex-col bg-[color:var(--chela-bg-surface)]">
             {threadRuntimeLayer}
           </section>
         </ResizablePanel>
@@ -1125,60 +1227,68 @@ export default function App() {
         </ResizablePanel>
       </ResizablePanelGroup>
     ) : (
-      <section className="flex h-full min-h-0 flex-col bg-shell-panel">
+      <section className="flex h-full min-h-0 flex-col bg-[color:var(--chela-bg-surface)]">
         {threadRuntimeLayer}
       </section>
     );
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden rounded-[var(--radius-shell)] bg-shell-window text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+    <main className="flex h-screen flex-col overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-primary)] text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
       <TitleBar
         isMaximized={frameState.isMaximized}
         onMinimize={() => desktopApi?.window.minimize()}
         onToggleMaximize={handleToggleMaximize}
         onClose={() => desktopApi?.window.close()}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebar={toggleSidebarCollapsed}
       />
-      <ResizablePanelGroup
-        orientation="horizontal"
-        className="min-h-0 flex-1 overflow-hidden bg-shell-window"
-        onLayoutChanged={handleShellLayoutChanged}
-        resizeTargetMinimumSize={{ fine: 6, coarse: 24 }}
-      >
-        <ResizablePanel
-          id="shell-sidebar"
-          defaultSize={toSidebarPercentageSize(sidebarSize)}
-          minSize={`${MIN_SIDEBAR_SIZE}%`}
-          maxSize={`${MAX_SIDEBAR_SIZE}%`}
+      <div className="relative min-h-0 flex-1">
+        <ResizablePanelGroup
+          orientation="horizontal"
+          className="min-h-0 h-full overflow-hidden bg-transparent"
+          onLayoutChanged={handleShellLayoutChanged}
+          resizeTargetMinimumSize={{ fine: 6, coarse: 24 }}
         >
-          <aside className="relative h-full min-h-0 bg-transparent">
-            <Sidebar
-              summaries={summaries}
-              activeSessionId={activeSessionId}
-              runningSessionIds={runningSessionIds}
-              onSelectSession={selectSession}
-              onNewSession={createNewSession}
-              onOpenSettings={() => openSettingsView("general")}
-              onArchiveSession={archiveSession}
-              onUnarchiveSession={unarchiveSession}
-              onDeleteSession={deleteSessionPermanently}
-              onRenameSession={renameSession}
-              archivedSummaries={archivedSummaries}
-              groups={groups}
-              onCreateGroup={createGroup}
-              onRenameGroup={renameGroup}
-              onDeleteGroup={deleteGroup}
-              onSetSessionGroup={setSessionGroup}
-              viewMode={mainView === "settings" ? "settings" : "threads"}
-              activeSettingsSection={settingsSection}
-              onSelectSettingsSection={setSettingsSection}
-              onExitSettings={closeSettingsView}
-            />
-          </aside>
-        </ResizablePanel>
-        <ResizableHandle className="-mx-px w-px" />
-        <ResizablePanel id="shell-main">
-          <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-shell-window">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-l-[var(--radius-shell)] bg-shell-panel">
+          <ResizablePanel
+            id="shell-sidebar"
+            panelRef={sidebarPanelRef}
+            collapsible
+            collapsedSize="0%"
+            defaultSize={toSidebarPercentageSize(sidebarSize)}
+            minSize={`${MIN_SIDEBAR_SIZE}%`}
+            maxSize={`${MAX_SIDEBAR_SIZE}%`}
+          >
+            <aside className="relative h-full min-h-0 bg-transparent">
+              <Sidebar
+                summaries={summaries}
+                activeSessionId={activeSessionId}
+                runningSessionIds={runningSessionIds}
+                onSelectSession={selectSession}
+                onNewSession={createNewSession}
+                onOpenSettings={() => openSettingsView("general")}
+                onArchiveSession={archiveSession}
+                onUnarchiveSession={unarchiveSession}
+                onDeleteSession={deleteSessionPermanently}
+                onRenameSession={renameSession}
+                onToggleSessionPinned={setSessionPinned}
+                onCreateSessionInGroup={createSessionInGroup}
+                archivedSummaries={archivedSummaries}
+                groups={groups}
+                onCreateGroup={createGroup}
+                onRenameGroup={renameGroup}
+                onDeleteGroup={deleteGroup}
+                onSetSessionGroup={setSessionGroup}
+                viewMode={mainView === "settings" ? "settings" : "threads"}
+                activeSettingsSection={settingsSection}
+                onSelectSettingsSection={setSettingsSection}
+                onExitSettings={closeSettingsView}
+              />
+            </aside>
+          </ResizablePanel>
+          <ResizableHandle className="-mx-px w-px" />
+          <ResizablePanel id="shell-main">
+            <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-l-[var(--radius-shell)] bg-[color:var(--chela-bg-surface)]">
             <div className="flex min-h-[52px] items-center justify-end gap-2 px-5 pb-3 pt-4">
               {mainView === "thread" ? (
                 <>
@@ -1206,7 +1316,7 @@ export default function App() {
               ) : null}
             </div>
 
-            <div className="relative min-h-0 flex-1 bg-shell-panel">
+            <div className="relative min-h-0 flex-1 bg-[color:var(--chela-bg-surface)]">
               {threadPanels}
               {settingsOverlay}
             </div>
@@ -1222,6 +1332,7 @@ export default function App() {
         </section>
         </ResizablePanel>
       </ResizablePanelGroup>
+      </div>
     </main>
   );
 }

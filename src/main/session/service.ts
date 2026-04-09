@@ -51,6 +51,7 @@ export type PersistedSessionMeta = {
   updatedAt: string;
   archived?: boolean;
   groupId?: string;
+  pinned?: boolean;
   draft: string;
   attachments: SelectedFile[];
   lastModelEntryId: string | null;
@@ -188,6 +189,7 @@ function createMetaFromSession(session: ChatSession): PersistedSessionMeta {
     updatedAt: session.updatedAt,
     archived: session.archived,
     groupId: session.groupId,
+    pinned: session.pinned,
     draft: session.draft,
     attachments: session.attachments,
     lastModelEntryId: null,
@@ -355,6 +357,7 @@ function materializeSession(meta: PersistedSessionMeta): ChatSession {
     updatedAt: meta.updatedAt,
     archived: meta.archived,
     groupId: meta.groupId,
+    pinned: meta.pinned,
   };
 }
 
@@ -376,14 +379,29 @@ function updateIndexWithMeta(meta: PersistedSessionMeta): void {
     messageCount: countMaterializedMessages(transcript),
     archived: meta.archived,
     groupId: meta.groupId,
+    pinned: meta.pinned,
     lastRunState: meta.lastRunState,
   };
 
   const index = readIndex();
   const filtered = index.summaries.filter((entry) => entry.id !== meta.id);
   filtered.push(summary);
-  filtered.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  filtered.sort((left, right) => {
+    if (Boolean(left.pinned) !== Boolean(right.pinned)) {
+      return left.pinned ? -1 : 1;
+    }
+    return right.updatedAt.localeCompare(left.updatedAt);
+  });
   writeIndex({ summaries: filtered });
+}
+
+function sortSessionSummaries(summaries: ChatSessionSummary[]): ChatSessionSummary[] {
+  return summaries.sort((left, right) => {
+    if (Boolean(left.pinned) !== Boolean(right.pinned)) {
+      return left.pinned ? -1 : 1;
+    }
+    return right.updatedAt.localeCompare(left.updatedAt);
+  });
 }
 
 function removeFromIndex(sessionId: string): void {
@@ -566,15 +584,15 @@ export function ensureSessionStorageReady(): void {
 }
 
 export function listPersistedSessions(): ChatSessionSummary[] {
-  return readIndex().summaries
-    .filter((summary) => !summary.archived)
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  return sortSessionSummaries(
+    readIndex().summaries.filter((summary) => !summary.archived),
+  );
 }
 
 export function listPersistedArchivedSessions(): ChatSessionSummary[] {
-  return readIndex().summaries
-    .filter((summary) => summary.archived)
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  return sortSessionSummaries(
+    readIndex().summaries.filter((summary) => summary.archived),
+  );
 }
 
 export function loadPersistedSession(sessionId: string): ChatSession | null {
@@ -593,6 +611,7 @@ export function saveSessionProjection(session: ChatSession): void {
   meta.updatedAt = session.updatedAt;
   meta.archived = session.archived;
   meta.groupId = session.groupId;
+  meta.pinned = session.pinned;
   meta.draft = session.draft;
   meta.attachments = session.attachments;
   writeMeta(meta);
@@ -650,6 +669,12 @@ export function setPersistedSessionGroup(
     } else {
       meta.groupId = groupId;
     }
+  });
+}
+
+export function setPersistedSessionPinned(sessionId: string, pinned: boolean): void {
+  updateSessionMeta(sessionId, (meta) => {
+    meta.pinned = pinned;
   });
 }
 

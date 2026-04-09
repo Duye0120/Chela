@@ -16,6 +16,7 @@ export const IPC_CHANNELS = {
   sessionsDelete: "sessions:delete",
   sessionsSetGroup: "sessions:set-group",
   sessionsRename: "sessions:rename",
+  sessionsSetPinned: "sessions:set-pinned",
 
   // Groups
   groupsList: "groups:list",

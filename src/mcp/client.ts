@@ -29,7 +29,7 @@ export class McpConnectionManager {
     });
 
     const client = new Client(
-      { name: "pi-desktop-agent", version: "1.0.0" },
+      { name: "chela-desktop-agent", version: "0.1.0" },
       { capabilities: {} },
     );
 
