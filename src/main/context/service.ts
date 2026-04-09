@@ -1138,6 +1138,87 @@ export async function ensureContextSnapshotCoverage(
   }
 }
 
+// ---------------------------------------------------------------------------
+// 上下文预算分层淘汰
+// ---------------------------------------------------------------------------
+//
+// 当总 token 接近预算时，按优先级分层淘汰：
+// 1. 先丢弃旧的短消息（寒暄）
+// 2. 再压缩旧的 tool_result（只保留摘要行）
+// 3. 最后截断旧消息（保留最近 N 轮）
+// ---------------------------------------------------------------------------
+
+function isShortChatter(message: AgentMessage): boolean {
+  const role = getAgentMessageRole(message);
+  if (role !== "user" && role !== "assistant") return false;
+  const text = extractTextFromContent((message as { content?: unknown }).content);
+  return text.length < 60;
+}
+
+function isToolResultMessage(message: AgentMessage): boolean {
+  const role = getAgentMessageRole(message);
+  return role === "tool";
+}
+
+function truncateToolResult(message: AgentMessage): AgentMessage {
+  const content = (message as { content?: unknown }).content;
+  if (typeof content !== "string" && !Array.isArray(content)) return message;
+
+  const text = extractTextFromContent(content);
+  if (text.length <= 200) return message;
+
+  // 保留前 100 字 + 后 50 字
+  const truncated = text.slice(0, 100) + "\n...[已截断]...\n" + text.slice(-50);
+
+  return {
+    ...message,
+    content: truncated,
+  } as AgentMessage;
+}
+
+function applyBudgetAllocation(
+  messages: AgentMessage[],
+  budget: number,
+  protectedTailIndex: number,
+): AgentMessage[] {
+  let working = [...messages];
+  let estimated = estimateMessagesTokens(working);
+
+  if (estimated <= budget) return working;
+
+  // Phase 1: 丢弃不受保护区的短寒暄
+  for (let i = 0; i < protectedTailIndex && estimated > budget; i++) {
+    if (isShortChatter(working[i])) {
+      estimated -= estimateMessageTokens(working[i]);
+      working[i] = null as unknown as AgentMessage;
+    }
+  }
+  working = working.filter(Boolean);
+
+  if (estimated <= budget) return working;
+
+  // Phase 2: 截断不受保护区的 tool_result
+  const newProtectedIndex = findProtectedTailIndex(working);
+  for (let i = 0; i < newProtectedIndex && estimated > budget; i++) {
+    if (isToolResultMessage(working[i])) {
+      const before = estimateMessageTokens(working[i]);
+      working[i] = truncateToolResult(working[i]);
+      const after = estimateMessageTokens(working[i]);
+      estimated -= (before - after);
+    }
+  }
+
+  if (estimated <= budget) return working;
+
+  // Phase 3: 回退到原始截断
+  const finalProtected = findProtectedTailIndex(working);
+  if (finalProtected > 0) {
+    return working.slice(finalProtected);
+  }
+
+  return working;
+}
+
 export function createTransformContext(
   sessionId: string,
   contextWindow: number | null,
@@ -1171,6 +1252,7 @@ export function createTransformContext(
       await ensureContextSnapshotCoverage(sessionId);
     }
 
-    return messages.slice(protectedTailIndex);
+    // 使用分层预算淘汰（寒暄 → tool_result 截断 → 整体截断）
+    return applyBudgetAllocation(messages, budget, protectedTailIndex);
   };
 }

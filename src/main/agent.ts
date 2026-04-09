@@ -20,6 +20,7 @@ import { getSettings } from "./settings.js";
 import { resolveModelEntry } from "./providers.js";
 import { buildToolPool } from "./tools/index.js";
 import { buildSoulPromptSection } from "./soul.js";
+import { buildAmbientContextSection } from "./ambient-context.js";
 import { loadMcpConfig, getActiveServers } from "../mcp/config.js";
 import { McpConnectionManager } from "../mcp/client.js";
 import { wrapToolsWithHarness } from "./harness/tool-execution.js";
@@ -293,6 +294,7 @@ async function buildSystemPrompt(input: {
       thinkingLevel: input.thinkingLevel,
       toolNames: input.toolNames,
     }),
+    buildAmbientContextSection(input.workspacePath),
     buildSemanticMemorySection(semanticMemory),
     buildSessionSnapshotSection(snapshot),
     buildTurnIntentPatchSection(input.latestUserText),

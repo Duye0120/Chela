@@ -81,6 +81,10 @@ import { HarnessRunCancelledError } from "./harness/runtime.js";
 import { harnessRuntime } from "./harness/singleton.js";
 import { bus } from "./event-bus.js";
 import { registerQuickInvoke, unregisterQuickInvoke } from "./quick-invoke.js";
+import { initBusAuditLog } from "./bus-audit.js";
+import { scheduler } from "./scheduler.js";
+import { initSelfDiagnosis } from "./self-diagnosis/service.js";
+import { initMetrics } from "./metrics.js";
 import {
   appLogger,
   attachWindowLogging,
@@ -729,6 +733,10 @@ app.whenReady()
 
     const recoveredRuns = harnessRuntime.hydrateFromDisk();
     recoverInterruptedRuns(recoveredRuns);
+    initBusAuditLog();
+    initMetrics();
+    initSelfDiagnosis();
+    scheduler.start();
     registerIpcHandlers();
     createMainWindow();
     setTerminalWindow(mainWindow!);
@@ -757,6 +765,7 @@ app.on("window-all-closed", () => {
   void destroyAllAgents();
   destroyAllTerminals();
   unregisterQuickInvoke();
+  scheduler.stop();
   if (process.platform !== "darwin") {
     app.quit();
   }
