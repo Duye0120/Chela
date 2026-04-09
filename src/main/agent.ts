@@ -25,6 +25,7 @@ import { loadMcpConfig, getActiveServers } from "../mcp/config.js";
 import { McpConnectionManager } from "../mcp/client.js";
 import { wrapToolsWithHarness } from "./harness/tool-execution.js";
 import { harnessRuntime } from "./harness/singleton.js";
+import { parallelManager, SIDE_EFFECT_FREE_TOOLS } from "./parallel-tools.js";
 import {
   buildUserPromptMessage,
   normalizePersistedSessionMessages,
@@ -58,8 +59,35 @@ const initGenerations = new Map<string, number>();
 function subscribeToAgent(
   agent: Agent,
   adapter: ElectronAdapter,
+  runId?: string | null,
 ): () => void {
   return agent.subscribe((event: CoreAgentEvent) => {
+    // 检测 assistant 消息中的多工具调用，注册并行批次
+    if (
+      event.type === "message_end" &&
+      "message" in event &&
+      event.message &&
+      typeof event.message === "object" &&
+      "role" in event.message &&
+      event.message.role === "assistant" &&
+      "content" in event.message &&
+      Array.isArray(event.message.content)
+    ) {
+      const toolCalls = event.message.content.filter(
+        (c: any) => c.type === "toolCall",
+      );
+      if (toolCalls.length > 1 && runId) {
+        const entries = toolCalls.map((tc: any) => ({
+          toolCallId: tc.id as string,
+          toolName: tc.name as string,
+          args: (tc.arguments ?? {}) as Record<string, unknown>,
+        }));
+        // 使用 agent 的内部 abort signal（通过一个长期 controller）
+        const controller = new AbortController();
+        parallelManager.registerBatch(runId, entries, controller.signal);
+      }
+    }
+
     adapter.handleCoreEvent(event);
   });
 }
@@ -110,11 +138,22 @@ export async function initAgent(
     /* MCP init failure is non-fatal */
   }
 
-  const tools = wrapToolsWithHarness(await buildToolPool({
+  const rawTools = await buildToolPool({
     workspacePath: adapter.workspacePath,
     sessionId,
     mcpManager,
-  }), {
+  });
+
+  // 注册只读工具的执行器供并行预执行使用
+  for (const tool of rawTools) {
+    if (SIDE_EFFECT_FREE_TOOLS.has(tool.name)) {
+      parallelManager.registerExecutor(tool.name, (toolCallId, args, signal) =>
+        tool.execute(toolCallId, args, signal, () => {}),
+      );
+    }
+  }
+
+  const tools = wrapToolsWithHarness(rawTools, {
     sessionId,
     workspacePath: adapter.workspacePath,
     adapter,
@@ -188,7 +227,7 @@ export function bindHandleToRun(
   runId: string,
 ): void {
   handle.unsubscribe();
-  handle.unsubscribe = subscribeToAgent(handle.agent, adapter);
+  handle.unsubscribe = subscribeToAgent(handle.agent, adapter, runId);
   handle.activeRunId = runId;
 }
 
@@ -230,6 +269,7 @@ export function completeRun(handle: AgentHandle, runId: string): void {
   if (handle.activeRunId === runId) {
     handle.activeRunId = null;
   }
+  parallelManager.clearRun(runId);
 }
 
 /**

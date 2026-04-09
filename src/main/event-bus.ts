@@ -34,7 +34,7 @@ export type EventMap = {
   "notification:sent": { title: string; body: string };
   "notification:external": { channel: string; message: string };
 
-  // ── 诊断（Phase 2 预留） ──
+  // ── 诊断 ──
   "diagnosis:healthy": { checkId: string };
   "diagnosis:alert": { checkId: string; message: string; severity: string };
   "diagnosis:repaired": { checkId: string; message: string };
@@ -43,8 +43,21 @@ export type EventMap = {
   "plugin:loaded": { pluginId: string; tools: string[] };
   "plugin:unloaded": { pluginId: string };
 
-  // ── 调度（Phase 2 预留） ──
+  // ── 调度 ──
   "schedule:triggered": { jobId: string; cronExpr: string };
+
+  // ── Webhook ──
+  "webhook:received": { source: string; event: string; payload: unknown };
+
+  // ── 学习 ──
+  "learning:insight": { type: string; toolName?: string; message: string };
+  "learning:applied": { type: string; target: string; message: string };
+
+  // ── 情感 ──
+  "emotion:changed": { from: string; to: string; trigger: string };
+
+  // ── 反思 ──
+  "reflection:completed": { date: string; sessionCount: number; insightCount: number };
 };
 
 // ---------------------------------------------------------------------------

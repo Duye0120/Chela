@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { ElectronAdapter } from "../adapter.js";
 import { bus } from "../event-bus.js";
+import { parallelManager, SIDE_EFFECT_FREE_TOOLS } from "../parallel-tools.js";
 import { evaluateToolPolicy } from "./policy.js";
 import { HarnessRunCancelledError, type HarnessRuntime } from "./runtime.js";
 import type {
@@ -284,8 +285,15 @@ async function executeWithHarness(
     toolCallId,
   });
 
+  // 触发同批次其他只读工具的并行预执行
+  if (SIDE_EFFECT_FREE_TOOLS.has(tool.name)) {
+    parallelManager.startPreExecution(runScope.runId, toolCallId);
+  }
+
   try {
-    const result = await tool.execute(
+    // 优先使用并行预执行的缓存结果
+    const cachedResult = await parallelManager.getCachedResult(toolCallId);
+    const result = cachedResult ?? await tool.execute(
       toolCallId,
       normalizedArgs,
       signal,

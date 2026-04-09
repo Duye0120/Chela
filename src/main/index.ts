@@ -85,6 +85,11 @@ import { initBusAuditLog } from "./bus-audit.js";
 import { scheduler } from "./scheduler.js";
 import { initSelfDiagnosis } from "./self-diagnosis/service.js";
 import { initMetrics } from "./metrics.js";
+import { initActiveLearning } from "./learning/engine.js";
+import { initEmotionalStateMachine } from "./emotional/state-machine.js";
+import { initReflectionService } from "./reflection/service.js";
+import { initPersonalityDrift } from "./reflection/personality-drift.js";
+import { startWebhookServer, stopWebhookServer } from "./webhook.js";
 import {
   appLogger,
   attachWindowLogging,
@@ -736,7 +741,12 @@ app.whenReady()
     initBusAuditLog();
     initMetrics();
     initSelfDiagnosis();
+    initActiveLearning();
+    initPersonalityDrift();
+    initEmotionalStateMachine();
+    initReflectionService();
     scheduler.start();
+    startWebhookServer();
     registerIpcHandlers();
     createMainWindow();
     setTerminalWindow(mainWindow!);
@@ -765,6 +775,7 @@ app.on("window-all-closed", () => {
   void destroyAllAgents();
   destroyAllTerminals();
   unregisterQuickInvoke();
+  stopWebhookServer();
   scheduler.stop();
   if (process.platform !== "darwin") {
     app.quit();
