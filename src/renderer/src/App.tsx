@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CommandLineIcon,
   RectangleGroupIcon,
@@ -599,7 +599,7 @@ export default function App() {
         }
       } else if (mod && e.key === "b") {
         e.preventDefault();
-        setSidebarCollapsed((current) => !current);
+        toggleSidebarCollapsed();
       } else if (mod && e.key === "n") {
         e.preventDefault();
         void createNewSession();
@@ -1061,11 +1061,15 @@ export default function App() {
   }, [desktopApi]);
 
   const openSettingsView = useCallback((section: SettingsSection = "general") => {
-    navigate(`${SETTINGS_ROUTE_PREFIX}/${section}`);
+    startTransition(() => {
+      navigate(`${SETTINGS_ROUTE_PREFIX}/${section}`);
+    });
   }, [navigate]);
 
   const closeSettingsView = useCallback(() => {
-    navigate("/");
+    startTransition(() => {
+      navigate("/");
+    });
   }, [navigate]);
 
   const openArchivedSessionFromSettings = useCallback(
@@ -1414,10 +1418,10 @@ export default function App() {
 
             <div className="relative min-h-0 flex-1 bg-[color:var(--chela-bg-surface)]">
               <div
-                className={`absolute inset-0 min-h-0 transition-[opacity,transform] duration-200 ease-out ${
+                className={`absolute inset-0 min-h-0 will-change-[opacity,transform] transition-[opacity,transform] duration-200 ease-out ${
                   mainView === "thread"
                     ? "pointer-events-auto translate-y-0 opacity-100"
-                    : "pointer-events-none -translate-y-1 opacity-0"
+                    : "pointer-events-none -translate-y-1 opacity-0 [content-visibility:hidden]"
                 }`}
                 aria-hidden={mainView !== "thread"}
               >
@@ -1425,15 +1429,15 @@ export default function App() {
               </div>
 
               <div
-                  className={`absolute inset-0 min-h-0 transition-[opacity,transform] duration-200 ease-out ${
-                    mainView === "settings"
-                      ? "pointer-events-auto translate-y-0 opacity-100"
-                      : "pointer-events-none translate-y-1 opacity-0"
-                  }`}
-                  aria-hidden={mainView !== "settings"}
-                >
-                  {settingsContent}
-                </div>
+                className={`absolute inset-0 min-h-0 will-change-[opacity,transform] transition-[opacity,transform] duration-200 ease-out ${
+                  mainView === "settings"
+                    ? "pointer-events-auto translate-y-0 opacity-100"
+                    : "pointer-events-none translate-y-1 opacity-0 [content-visibility:hidden]"
+                }`}
+                aria-hidden={mainView !== "settings"}
+              >
+                {settingsContent}
+              </div>
             </div>
 
             <div className={mainView === "thread" ? "" : "hidden"}>

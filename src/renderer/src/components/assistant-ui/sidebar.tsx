@@ -465,19 +465,19 @@ export function Sidebar({
   return (
     <div className="relative h-full overflow-hidden">
       <div
-        className={`absolute inset-0 transition-[opacity,transform] duration-200 ease-out ${
+        className={`absolute inset-0 will-change-[opacity,transform] transition-[opacity,transform] duration-200 ease-out ${
           isSettings
             ? "pointer-events-auto translate-x-0 opacity-100"
-            : "pointer-events-none -translate-x-2 opacity-0"
+            : "pointer-events-none -translate-x-2 opacity-0 [content-visibility:hidden]"
         }`}
       >
         {settingsSidebar}
       </div>
       <div
-        className={`absolute inset-0 transition-[opacity,transform] duration-200 ease-out ${
+        className={`absolute inset-0 will-change-[opacity,transform] transition-[opacity,transform] duration-200 ease-out ${
           !isSettings
             ? "pointer-events-auto translate-x-0 opacity-100"
-            : "pointer-events-none translate-x-2 opacity-0"
+            : "pointer-events-none translate-x-2 opacity-0 [content-visibility:hidden]"
         }`}
       >
     <aside className="flex h-full bg-transparent flex-col text-[13px] text-[color:var(--chela-text-primary)]">
