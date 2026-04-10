@@ -214,16 +214,16 @@ function ModelSelectorItem({
       textValue={model.name}
       className={cn(
         "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-[calc(var(--radius-shell)-1px)] py-2 pr-9 pl-3 text-sm text-foreground outline-none transition-colors",
-        "data-[state=checked]:bg-[color:var(--color-control-selected-bg)] data-[state=checked]:text-[color:var(--color-control-selected-text)]",
-        "data-[highlighted]:bg-[color:var(--color-control-bg-hover)] data-[highlighted]:text-foreground",
-        "data-[highlighted]:data-[state=checked]:bg-[color:var(--color-control-selected-bg)] data-[highlighted]:data-[state=checked]:text-[color:var(--color-control-selected-text)]",
-        "focus:bg-[color:var(--color-control-bg-hover)] focus:text-foreground",
+        "data-[state=checked]:bg-[color:var(--color-selection-bg)] data-[state=checked]:text-[color:var(--color-selection-fg)]",
+        "data-[highlighted]:bg-[color:var(--color-selection-muted-bg)] data-[highlighted]:text-foreground",
+        "data-[highlighted]:data-[state=checked]:bg-[color:var(--color-selection-bg)] data-[highlighted]:data-[state=checked]:text-[color:var(--color-selection-fg)]",
+        "focus:bg-[color:var(--color-selection-muted-bg)] focus:text-foreground",
         "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className,
       )}
       {...props}
     >
-      <span className="absolute right-3 flex size-4 items-center justify-center text-foreground">
+      <span className="absolute right-3 flex size-4 items-center justify-center text-current">
         <SelectPrimitive.ItemIndicator>
           <CheckIcon className="size-4" />
         </SelectPrimitive.ItemIndicator>

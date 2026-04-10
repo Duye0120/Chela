@@ -270,8 +270,8 @@ export function BranchSwitcher({
               : `当前分支 ${branchLabel}`
           }
           className={cn(
-            "h-8 min-w-0 max-w-[260px] rounded-full bg-[color:var(--color-control-bg)] px-3 text-[12px] font-medium text-foreground shadow-[var(--color-control-shadow)] ring-1 ring-[color:var(--color-control-border)] hover:bg-[color:var(--color-control-bg-hover)]",
-            "disabled:bg-[color:var(--color-control-bg)] disabled:text-[color:var(--color-text-secondary)] disabled:opacity-100",
+            "h-8 min-w-0 max-w-[260px] rounded-[var(--radius-shell)] bg-[color:var(--color-shell-panel)]/92 px-3 text-[12px] font-medium text-foreground shadow-[var(--shadow-inset-soft)] ring-1 ring-[color:var(--color-control-border)]/70 hover:bg-[color:var(--color-shell-panel-elevated)]",
+            "disabled:bg-[color:var(--color-shell-panel)]/84 disabled:text-[color:var(--color-text-secondary)] disabled:opacity-100",
           )}
         >
           <GitBranchIcon className="size-3.5 shrink-0 text-[color:var(--color-text-secondary)]" />
@@ -284,24 +284,24 @@ export function BranchSwitcher({
         side="top"
         align="start"
         sideOffset={10}
-        className="w-[372px] rounded-[20px] border border-[color:var(--color-control-border)] bg-[color:var(--color-control-panel-bg)] px-4 py-4 shadow-[var(--color-control-panel-shadow)]"
+        className="w-[344px] rounded-[var(--radius-shell)] bg-[color:var(--color-shell-overlay)] p-3.5 shadow-[var(--shadow-flyout)] backdrop-blur-[10px]"
       >
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3.5">
           <div className="relative">
             <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[color:var(--color-text-secondary)]" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="搜索分支"
-              className="h-10 w-full rounded-[14px] bg-[color:var(--color-control-bg)] pl-9 pr-3 text-[13px] text-foreground outline-none placeholder:text-[color:var(--color-text-secondary)] shadow-[var(--color-control-shadow)] ring-1 ring-[color:var(--color-control-border)] focus-visible:bg-[color:var(--color-control-bg-active)] focus-visible:ring-2 focus-visible:ring-[color:var(--color-control-focus-ring)]"
+              className="h-10 w-full rounded-[var(--radius-shell)] bg-[color:var(--color-shell-panel-elevated)] pl-9 pr-3 text-[13px] text-foreground outline-none placeholder:text-[color:var(--color-text-secondary)] shadow-[var(--shadow-inset-soft)] ring-1 ring-[color:var(--color-control-border)]/60 focus-visible:bg-[color:var(--color-shell-panel)] focus-visible:ring-2 focus-visible:ring-[color:var(--color-focus-ring)]"
             />
           </div>
 
           <div className="flex flex-col gap-2">
-            <p className="px-1 text-[12px] font-medium text-[color:var(--color-text-secondary)]">
+            <p className="px-1 text-[11px] font-medium tracking-[0.12em] text-[color:var(--color-text-muted)]">
               分支
             </p>
-            <div className="max-h-[220px] overflow-y-auto rounded-[16px] border border-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)]/72 p-1.5">
+            <div className="max-h-[220px] overflow-y-auto rounded-[var(--radius-shell)] bg-[color:var(--color-shell-panel-muted)] px-2 py-2">
               {loading ? (
                 <div className="flex items-center gap-2 px-3 py-3 text-[12px] text-[color:var(--color-text-secondary)]">
                   <LoaderCircleIcon className="size-3.5 animate-spin" />
@@ -322,10 +322,10 @@ export function BranchSwitcher({
                         void handleSwitchBranch(branch.name);
                       }}
                       className={cn(
-                        "group flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left text-[14px] transition-all duration-150 focus-visible:outline-none",
+                        "group flex w-full items-center gap-3 rounded-[var(--radius-shell)] px-3 py-2.5 text-left text-[14px] transition-all duration-fast ease-standard focus-visible:outline-none",
                         branch.isCurrent
-                          ? "bg-[color:var(--color-control-selected-bg)] text-[color:var(--color-control-selected-text)]"
-                          : "bg-transparent hover:bg-[color:var(--color-control-bg-hover)] focus-visible:bg-[color:var(--color-control-bg-hover)]",
+                          ? "bg-[color:var(--color-selection-bg)] text-[color:var(--color-selection-fg)] shadow-[var(--shadow-inset-soft)]"
+                          : "bg-transparent hover:bg-[color:var(--color-selection-muted-bg)] focus-visible:bg-[color:var(--color-selection-muted-bg)]",
                         !submitting && "cursor-pointer",
                         submitting && "cursor-wait opacity-80",
                       )}
@@ -334,7 +334,7 @@ export function BranchSwitcher({
                         className={cn(
                           "size-3.5 shrink-0 transition-colors",
                           branch.isCurrent
-                            ? "text-foreground"
+                            ? "text-[color:var(--color-selection-fg)]"
                             : "text-[color:var(--color-text-secondary)] group-hover:text-foreground",
                         )}
                       />
@@ -342,14 +342,14 @@ export function BranchSwitcher({
                         className={cn(
                           "min-w-0 flex-1 truncate transition-colors",
                           branch.isCurrent
-                            ? "font-medium text-foreground"
+                            ? "font-medium text-[color:var(--color-selection-fg)]"
                             : "text-foreground/88 group-hover:text-foreground",
                         )}
                       >
                         {branch.name}
                       </span>
                       {branch.isCurrent ? (
-                        <span className="flex size-4 shrink-0 items-center justify-center text-foreground">
+                        <span className="flex size-4 shrink-0 items-center justify-center text-[color:var(--color-selection-fg)]">
                           <CheckIcon className="size-4" />
                         </span>
                       ) : null}
@@ -365,12 +365,12 @@ export function BranchSwitcher({
           </div>
 
           {error ? (
-            <div className="rounded-[14px] bg-rose-500/8 px-3 py-2.5 text-[12px] leading-5 text-rose-700">
+            <div className="rounded-[var(--radius-shell)] bg-rose-500/8 px-3 py-2.5 text-[12px] leading-5 text-rose-700">
               {error}
             </div>
           ) : null}
 
-          <div className="border-t border-[color:var(--color-border-light)] pt-2">
+          <div className="border-t border-[color:var(--color-border-light)]/70 pt-3">
             {isCreateMode ? (
               <div className="flex flex-col gap-2">
                 <input
@@ -379,7 +379,7 @@ export function BranchSwitcher({
                   onChange={(event) => setDraftBranchName(event.target.value)}
                   onKeyDown={handleDraftKeyDown}
                   placeholder="输入新分支名"
-                  className="h-10 w-full rounded-[12px] bg-white/72 px-3 text-[13px] text-foreground outline-none placeholder:text-[color:var(--color-text-secondary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] focus:bg-white/84"
+                  className="h-10 w-full rounded-[var(--radius-shell)] bg-[color:var(--color-shell-panel-elevated)] px-3 text-[13px] text-foreground outline-none placeholder:text-[color:var(--color-text-secondary)] shadow-[var(--shadow-inset-soft)] ring-1 ring-[color:var(--color-control-border)]/60 focus-visible:bg-[color:var(--color-shell-panel)] focus-visible:ring-2 focus-visible:ring-[color:var(--color-focus-ring)]"
                 />
                 <div className="flex items-center justify-end gap-2">
                   <Button
@@ -392,7 +392,7 @@ export function BranchSwitcher({
                       setDraftBranchName("");
                       setError(null);
                     }}
-                  className="rounded-full px-3 text-[12px]"
+                    className="rounded-[var(--radius-shell)] px-3 text-[12px]"
                   >
                     取消
                   </Button>
@@ -403,7 +403,7 @@ export function BranchSwitcher({
                     onClick={() => {
                       void handleCreateBranch();
                     }}
-                    className="rounded-full px-3 text-[12px]"
+                    className="rounded-[var(--radius-shell)] px-3 text-[12px]"
                   >
                     {submitting ? (
                       <LoaderCircleIcon className="size-3.5 animate-spin" />
@@ -422,7 +422,7 @@ export function BranchSwitcher({
                   setIsCreateMode(true);
                   setError(null);
                 }}
-                className="group flex w-full items-center gap-2 rounded-[12px] px-3 py-2.5 text-left text-[13px] font-medium text-foreground transition-all duration-150 hover:bg-[color:var(--color-control-bg-hover)] focus-visible:bg-[color:var(--color-control-bg-hover)] focus-visible:outline-none"
+                className="group flex w-full items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2.5 text-left text-[13px] font-medium text-foreground transition-all duration-fast ease-standard hover:bg-[color:var(--color-selection-muted-bg)] focus-visible:bg-[color:var(--color-selection-muted-bg)] focus-visible:outline-none"
               >
                 <PlusIcon className="size-4 shrink-0 transition-transform duration-150 group-hover:translate-x-[1px]" />
                 <span>创建并检出新分支…</span>

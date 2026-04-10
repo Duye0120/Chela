@@ -163,6 +163,18 @@
   --app-ui-font-size: 13px;
   --app-code-font-family: var(--chela-font-mono);
   --app-code-font-size: 13px;
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 18px;
+  --radius-pill: 9999px;
+  --radius-shell: 8px;
+  --motion-duration-fast: 160ms;
+  --motion-duration-base: 200ms;
+  --motion-duration-slow: 260ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
 
   /* Legacy / Shadcn mappings */
   --background: 214 25% 96%;
@@ -196,6 +208,7 @@
   --color-shell-panel-muted: var(--chela-bg-muted);
   --color-shell-panel-elevated: #eef3f9;
   --color-shell-panel-contrast: #e8eef5;
+  --color-shell-overlay: var(--chela-control-panel-bg);
   --color-shell-border: var(--chela-border);
   --radius-shell: var(--chela-radius-md);
   --color-shell-toolbar: var(--chela-bg-secondary);
@@ -226,6 +239,13 @@
   --color-control-panel-shadow: var(--chela-control-panel-shadow);
   --color-context-indicator-rest: var(--chela-text-muted);
   --color-context-indicator-track: var(--chela-border);
+  --color-focus-ring: var(--chela-control-focus-ring);
+  --color-selection-bg: var(--chela-control-selected-bg);
+  --color-selection-fg: var(--chela-control-selected-text);
+  --color-selection-muted-bg: var(--chela-control-bg-hover);
+  --shadow-subtle: var(--chela-shadow-md);
+  --shadow-flyout: var(--chela-control-panel-shadow);
+  --shadow-inset-soft: var(--chela-control-shadow);
 
   --color-step-bg: var(--chela-bg-surface);
   --color-step-bg-hover: var(--chela-bg-muted);
@@ -372,6 +392,7 @@
   --color-shell-panel-muted: var(--chela-bg-muted);
   --color-shell-panel-elevated: var(--chela-bg-tertiary);
   --color-shell-panel-contrast: #2c2c2c;
+  --color-shell-overlay: var(--chela-control-panel-bg);
   --color-shell-border: var(--chela-border);
   --color-shell-toolbar: var(--chela-bg-secondary);
   --color-shell-toolbar-hover: var(--chela-slate-800);
@@ -399,8 +420,15 @@
   --color-control-selected-text: var(--chela-control-selected-text);
   --color-control-shadow: var(--chela-control-shadow);
   --color-control-panel-shadow: var(--chela-control-panel-shadow);
-  --color-context-indicator-rest: #9ea4ad;
-  --color-context-indicator-track: #3a4048;
+  --color-context-indicator-rest: var(--chela-text-muted);
+  --color-context-indicator-track: var(--chela-border);
+  --color-focus-ring: var(--chela-control-focus-ring);
+  --color-selection-bg: var(--chela-control-selected-bg);
+  --color-selection-fg: var(--chela-control-selected-text);
+  --color-selection-muted-bg: var(--chela-control-bg-hover);
+  --shadow-subtle: var(--chela-shadow-lg);
+  --shadow-flyout: var(--chela-control-panel-shadow);
+  --shadow-inset-soft: var(--chela-control-shadow);
 
   --color-step-bg: var(--chela-bg-surface);
   --color-step-bg-hover: var(--chela-bg-muted);

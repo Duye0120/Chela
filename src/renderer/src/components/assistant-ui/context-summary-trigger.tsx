@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { Button } from "@renderer/components/assistant-ui/button";
@@ -123,19 +123,62 @@ function getDetailRows(summary: ContextUsageSummary) {
   ];
 }
 
+function ContextSection({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={cn(
+        "rounded-[var(--radius-shell)] bg-[color:var(--color-shell-panel-muted)] px-3.5 py-3",
+        className,
+      )}
+    >
+      <p className="text-[10px] font-medium tracking-[0.18em] text-[color:var(--color-text-muted)]">
+        {label}
+      </p>
+      {children}
+    </section>
+  );
+}
+
+function ContextStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="bg-[color:var(--color-shell-panel)] px-3 py-2.5">
+      <p className="text-[10px] font-medium tracking-[0.18em] text-[color:var(--color-text-muted)]">
+        {label}
+      </p>
+      <p className="mt-1 text-[13px] font-semibold text-foreground [font-variant-numeric:tabular-nums]">
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function ContextHoverSummary({ summary }: ContextSummaryTriggerProps) {
   return (
-    <div className="flex min-w-[196px] flex-col items-start text-left">
-      <p className="text-[12px] font-medium text-[color:var(--color-text-secondary)]">
+    <div className="flex min-w-[208px] flex-col items-start text-left">
+      <p className="text-[11px] font-medium tracking-[0.12em] text-[color:var(--color-text-muted)]">
         背景信息窗口：
       </p>
-      <p className="mt-2 text-[15px] font-semibold leading-none tracking-[-0.02em] text-foreground [font-variant-numeric:tabular-nums]">
+      <p className="mt-2 text-[16px] font-semibold leading-none tracking-[-0.02em] text-foreground [font-variant-numeric:tabular-nums]">
         {getContextStatusCopy(summary)}
       </p>
       <p className="mt-2 text-[13px] font-medium leading-5 text-[color:var(--color-text-secondary)] [font-variant-numeric:tabular-nums]">
         {getUsageLine(summary)}
       </p>
-      <p className="mt-2 line-clamp-3 text-[12px] leading-5 text-[color:var(--color-text-muted)]">
+      <p className="mt-2 line-clamp-3 text-[12px] leading-5 text-[color:var(--color-text-secondary)]">
         {getContinuityHeadline(summary)}
       </p>
       {summary.autoCompactBlocked ? (
@@ -153,125 +196,126 @@ function ContextExpandedSummary({
 }: ContextSummaryTriggerProps) {
   const usedPercent = formatUsedPercent(summary);
   const remainingPercent = formatRemainingPercent(summary);
+  const continuityRows = getContinuityRows(summary);
+  const detailRows = getDetailRows(summary);
 
   return (
-    <div className="flex w-[240px] flex-col gap-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[12px] font-medium text-[color:var(--color-text-secondary)]">
-            背景信息窗口：
-          </p>
-          <p className="mt-1.5 text-[16px] font-semibold text-foreground [font-variant-numeric:tabular-nums]">
-            {getContextStatusCopy(summary)}
-          </p>
-          <p className="mt-1 text-[13px] text-[color:var(--color-text-secondary)] [font-variant-numeric:tabular-nums]">
-            {getUsageLine(summary)}
-          </p>
-        </div>
-        <ContextUsageIndicator
-          summary={summary}
-          size={30}
-          strokeWidth={3.2}
-          className="mt-0.5"
-        />
-      </div>
-
-      {(usedPercent || remainingPercent) && (
-        <div className="grid grid-cols-2 gap-2 rounded-[14px] border border-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] px-3 py-2.5 shadow-[var(--color-control-shadow)]">
-          <div>
-            <p className="text-[10px] tracking-[0.18em] text-[color:var(--color-text-muted)]">
-              已用
+    <div className="flex w-[268px] flex-col gap-2.5">
+      <section className="rounded-[var(--radius-shell)] bg-[color:var(--color-shell-panel-elevated)] px-3.5 py-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium tracking-[0.12em] text-[color:var(--color-text-muted)]">
+              背景信息窗口：
             </p>
-            <p className="mt-1 text-[13px] font-semibold text-foreground [font-variant-numeric:tabular-nums]">
-              {usedPercent ?? "—"}
+            <p className="mt-1.5 text-[18px] font-semibold leading-[1.3] text-foreground [font-variant-numeric:tabular-nums]">
+              {getContextStatusCopy(summary)}
+            </p>
+            <p className="mt-1.5 text-[13px] leading-5 text-[color:var(--color-text-secondary)] [font-variant-numeric:tabular-nums]">
+              {getUsageLine(summary)}
             </p>
           </div>
-          <div>
-            <p className="text-[10px] tracking-[0.18em] text-[color:var(--color-text-muted)]">
-              剩余
-            </p>
-            <p className="mt-1 text-[13px] font-semibold text-foreground [font-variant-numeric:tabular-nums]">
-              {remainingPercent ?? "—"}
-            </p>
+          <div className="rounded-[var(--radius-pill)] bg-[color:var(--color-shell-panel)] p-1 shadow-[var(--shadow-inset-soft)]">
+            <ContextUsageIndicator
+              summary={summary}
+              size={30}
+              strokeWidth={3.2}
+              className="mt-0.5"
+            />
           </div>
         </div>
-      )}
 
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[12px] [font-variant-numeric:tabular-nums]">
-        {getDetailRows(summary).map((row) => (
-          <div key={row.label} className="contents">
-            <span className="text-[color:var(--color-text-muted)]">
-              {row.label}
-            </span>
-            <span className="text-right text-[color:var(--color-text-secondary)]">
-              {row.value}
-            </span>
+        {(usedPercent || remainingPercent) && (
+          <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--color-border-light)]/80">
+            <ContextStat label="已用" value={usedPercent ?? "—"} />
+            <ContextStat label="剩余" value={remainingPercent ?? "—"} />
           </div>
-        ))}
-      </div>
+        )}
+      </section>
 
-      <div className="rounded-[14px] border border-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] px-3 py-2.5 shadow-[var(--color-control-shadow)]">
-        <p className="text-[10px] tracking-[0.18em] text-[color:var(--color-text-muted)]">
-          续接摘要
-        </p>
-        <p className="mt-1.5 whitespace-pre-line text-[12px] leading-5 text-[color:var(--color-text-secondary)]">
-          {summary.snapshotSummary ?? getContinuityHeadline(summary)}
-        </p>
-      </div>
-
-      {getContinuityRows(summary).length > 0 ? (
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
-          {getContinuityRows(summary).map((row) => (
-            <div key={row.label} className="contents">
-              <span className="text-[color:var(--color-text-muted)]">
-                {row.label}
-              </span>
-              <span className="text-right text-[color:var(--color-text-secondary)]">
+      <ContextSection label="窗口明细">
+        <dl className="mt-2 flex flex-col gap-1.5 text-[12px] [font-variant-numeric:tabular-nums]">
+          {detailRows.map((row) => (
+            <div
+              key={row.label}
+              className="grid grid-cols-[1fr_auto] items-baseline gap-4"
+            >
+              <dt className="text-[color:var(--color-text-muted)]">{row.label}</dt>
+              <dd className="text-right text-[color:var(--color-text-secondary)]">
                 {row.value}
-              </span>
+              </dd>
             </div>
           ))}
-        </div>
-      ) : null}
+        </dl>
+      </ContextSection>
 
-      {summary.openLoops.length > 0 ? (
-        <div className="rounded-[14px] bg-shell-toolbar-hover px-3 py-2.5">
-          <p className="text-[10px] tracking-[0.18em] text-[color:var(--color-text-muted)]">
-            未闭环
+      <ContextSection label="续接摘要">
+        <p className="mt-2 text-[13px] leading-5 text-foreground">
+          {getContinuityHeadline(summary)}
+        </p>
+        {summary.snapshotSummary &&
+        summary.snapshotSummary !== getContinuityHeadline(summary) ? (
+          <p className="mt-2 whitespace-pre-line text-[12px] leading-5 text-[color:var(--color-text-secondary)]">
+            {summary.snapshotSummary}
           </p>
-          <div className="mt-1.5 flex flex-col gap-1.5">
-            {summary.openLoops.map((item) => (
-              <p
-                key={item}
-                className="text-[12px] leading-5 text-[color:var(--color-text-secondary)]"
+        ) : null}
+        {continuityRows.length > 0 ? (
+          <dl className="mt-3 flex flex-col gap-1.5 text-[12px]">
+            {continuityRows.map((row) => (
+              <div
+                key={row.label}
+                className="grid grid-cols-[1fr_auto] items-baseline gap-4"
               >
-                {item}
-              </p>
+                <dt className="text-[color:var(--color-text-muted)]">{row.label}</dt>
+                <dd className="text-right text-[color:var(--color-text-secondary)]">
+                  {row.value}
+                </dd>
+              </div>
             ))}
-          </div>
-        </div>
-      ) : null}
+          </dl>
+        ) : null}
+      </ContextSection>
 
-      {summary.nextActions.length > 0 ? (
-        <div className="rounded-[14px] border border-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] px-3 py-2.5 shadow-[var(--color-control-shadow)]">
-          <p className="text-[10px] tracking-[0.18em] text-[color:var(--color-text-muted)]">
-            下一步
-          </p>
-          <div className="mt-1.5 flex flex-col gap-1.5">
-            {summary.nextActions.map((item) => (
-              <p key={item} className="text-[12px] leading-5 text-foreground">
-                {item}
+      {summary.openLoops.length > 0 || summary.nextActions.length > 0 ? (
+        <ContextSection label="任务推进">
+          {summary.nextActions.length > 0 ? (
+            <div>
+              <p className="mt-2 text-[11px] font-medium text-[color:var(--color-text-muted)]">
+                下一步
               </p>
-            ))}
-          </div>
-        </div>
+              <div className="mt-1.5 flex flex-col gap-1.5">
+                {summary.nextActions.map((item) => (
+                  <p key={item} className="text-[12px] leading-5 text-foreground">
+                    {item}
+                  </p>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {summary.openLoops.length > 0 ? (
+            <div className={cn(summary.nextActions.length > 0 ? "mt-3" : "mt-2")}>
+              <p className="text-[11px] font-medium text-[color:var(--color-text-muted)]">
+                未闭环
+              </p>
+              <div className="mt-1.5 flex flex-col gap-1.5">
+                {summary.openLoops.map((item) => (
+                  <p
+                    key={item}
+                    className="text-[12px] leading-5 text-[color:var(--color-text-secondary)]"
+                  >
+                    {item}
+                  </p>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </ContextSection>
       ) : null}
 
       {summary.risks.length > 0 || summary.importantFiles.length > 0 ? (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <ContextSection label="辅助信息">
           {summary.risks.length > 0 ? (
-            <div className="rounded-[14px] border border-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] px-3 py-2.5 shadow-[var(--color-control-shadow)]">
-              <p className="text-[10px] tracking-[0.18em] text-[color:var(--color-text-muted)]">
+            <div>
+              <p className="mt-2 text-[11px] font-medium text-[color:var(--color-text-muted)]">
                 风险
               </p>
               <div className="mt-1.5 flex flex-col gap-1.5">
@@ -286,10 +330,9 @@ function ContextExpandedSummary({
               </div>
             </div>
           ) : null}
-
           {summary.importantFiles.length > 0 ? (
-            <div className="rounded-[14px] border border-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] px-3 py-2.5 shadow-[var(--color-control-shadow)]">
-              <p className="text-[10px] tracking-[0.18em] text-[color:var(--color-text-muted)]">
+            <div className={cn(summary.risks.length > 0 ? "mt-3" : "mt-2")}>
+              <p className="text-[11px] font-medium text-[color:var(--color-text-muted)]">
                 关键文件
               </p>
               <div className="mt-1.5 flex flex-col gap-1.5">
@@ -304,23 +347,19 @@ function ContextExpandedSummary({
               </div>
             </div>
           ) : null}
-        </div>
+        </ContextSection>
       ) : null}
 
       {summary.autoCompactBlocked ? (
-        <div className="rounded-[14px] border border-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] px-3 py-2.5 shadow-[var(--color-control-shadow)]">
-          <p className="text-[10px] tracking-[0.18em] text-[color:var(--color-text-muted)]">
-            自动 Compact
+        <ContextSection label="自动 Compact">
+          <p className="mt-2 text-[12px] leading-5 text-[color:var(--color-text-secondary)]">
+            已因连续失败暂停自动 compact。手动执行一次成功 compact 后会自动恢复。
           </p>
-          <p className="mt-1.5 text-[12px] leading-5 text-[color:var(--color-text-secondary)]">
-            已因连续失败暂停自动 compact。手动执行一次成功 compact
-            后会自动恢复。
-          </p>
-        </div>
+        </ContextSection>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[12px] text-[color:var(--color-text-muted)]">
+      <section className="flex items-center justify-between gap-3 rounded-[var(--radius-shell)] bg-[color:var(--color-shell-panel-elevated)] px-3.5 py-3">
+        <p className="min-w-0 flex-1 text-[12px] leading-5 text-[color:var(--color-text-muted)]">
           {getCompactStatusCopy(summary)}
         </p>
         <Button
@@ -333,11 +372,11 @@ function ContextExpandedSummary({
             }
           }}
           disabled={!summary.canCompact || summary.isCompacting}
-          className="h-8 rounded-full px-3 text-[12px]"
+          className="h-8 shrink-0 rounded-[var(--radius-shell)] px-3 text-[12px]"
         >
           {summary.isCompacting ? "Compacting…" : "Compact"}
         </Button>
-      </div>
+      </section>
     </div>
   );
 }
@@ -423,7 +462,7 @@ export function ContextSummaryTrigger({
               opacity: 1,
               y: 0,
               scale: 1,
-              width: expanded ? 280 : 224,
+              width: expanded ? 292 : 232,
             }}
             exit={{
               opacity: 0,
@@ -458,8 +497,8 @@ export function ContextSummaryTrigger({
             className={cn(
               "absolute bottom-full left-1/2 z-50 mb-3 -translate-x-1/2 origin-bottom overflow-hidden will-change-transform",
               expanded
-                ? "rounded-[20px] bg-shell-panel shadow-xl"
-                : "rounded-[16px] bg-shell-panel shadow-lg",
+                ? "rounded-[var(--radius-shell)] bg-[color:var(--color-shell-overlay)] shadow-[var(--shadow-flyout)]"
+                : "rounded-[var(--radius-shell)] bg-[color:var(--color-shell-overlay)] shadow-[var(--shadow-flyout)]",
             )}
             layout
             role={expanded ? "dialog" : "tooltip"}
@@ -470,7 +509,7 @@ export function ContextSummaryTrigger({
               initial={{ opacity: 0, y: expanded ? 8 : 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-              className={expanded ? "px-4 py-3" : "px-4 py-3.5"}
+              className="px-3.5 py-3.5"
             >
               {expanded ? (
                 <ContextExpandedSummary

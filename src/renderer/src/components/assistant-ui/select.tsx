@@ -148,10 +148,10 @@ const SelectItem = ({
     data-slot="select-item"
     className={cn(
       "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-[calc(var(--radius-shell)-1px)] py-2 pr-9 pl-3 text-[13px] font-medium text-foreground outline-none transition-colors",
-      "data-[state=checked]:bg-[color:var(--color-control-selected-bg)] data-[state=checked]:text-[color:var(--color-control-selected-text)]",
-      "data-[highlighted]:bg-[color:var(--color-control-bg-hover)] data-[highlighted]:text-foreground",
-      "data-[highlighted]:data-[state=checked]:bg-[color:var(--color-control-selected-bg)] data-[highlighted]:data-[state=checked]:text-[color:var(--color-control-selected-text)]",
-      "focus:bg-[color:var(--color-control-bg-hover)] focus:text-foreground",
+      "data-[state=checked]:bg-[color:var(--color-selection-bg)] data-[state=checked]:text-[color:var(--color-selection-fg)]",
+      "data-[highlighted]:bg-[color:var(--color-selection-muted-bg)] data-[highlighted]:text-foreground",
+      "data-[highlighted]:data-[state=checked]:bg-[color:var(--color-selection-bg)] data-[highlighted]:data-[state=checked]:text-[color:var(--color-selection-fg)]",
+      "focus:bg-[color:var(--color-selection-muted-bg)] focus:text-foreground",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       "[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
       className,
@@ -173,7 +173,7 @@ const SelectSeparator = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Separator>) => (
   <SelectPrimitive.Separator
     data-slot="select-separator"
-    className={cn("-mx-1 my-1 h-px bg-border dark:bg-white/10", className)}
+    className={cn("-mx-1 my-1 h-px bg-[color:var(--color-border-light)]", className)}
     {...props}
   />
 );
