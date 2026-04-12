@@ -1,6 +1,7 @@
 import { app } from "electron";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { PRIMARY_AGENT_OWNER, buildSystemOwnerId } from "../agent-owners.js";
 import type { HarnessRunSnapshot } from "./types.js";
 
 type PersistedHarnessRuns = {
@@ -36,7 +37,13 @@ export function loadPersistedHarnessRuns(): HarnessRunSnapshot[] {
     return Array.isArray(parsed.runs)
       ? parsed.runs.map((run) => ({
           ...run,
+          ownerId: typeof run.ownerId === "string" && run.ownerId.trim()
+            ? run.ownerId
+            : run.runKind === "chat"
+              ? PRIMARY_AGENT_OWNER
+              : buildSystemOwnerId(run.runKind ?? "system"),
           runKind: run.runKind ?? "chat",
+          lane: run.lane ?? "foreground",
           pendingApproval: run.pendingApproval
             ? {
                 requestId:

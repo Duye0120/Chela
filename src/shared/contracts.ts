@@ -302,6 +302,7 @@ export type SessionTranscriptEvent =
       seq: number;
       sessionId: string;
       runId: string;
+      ownerId?: string;
       timestamp: string;
       type: "run_started";
       runKind: RunKind;
@@ -381,6 +382,7 @@ export type SessionTranscriptEvent =
       seq: number;
       sessionId: string;
       runId: string;
+      ownerId?: string;
       timestamp: string;
       type: "run_finished";
       finalState: "completed" | "aborted" | "failed";
@@ -390,6 +392,23 @@ export type SessionTranscriptEvent =
 export type AgentRunScope = {
   sessionId: string;
   runId: string;
+};
+
+export type InterruptedApprovalNotice = {
+  sessionId: string;
+  runId: string;
+  ownerId: string;
+  interruptedAt: number;
+  approval: {
+    requestId: string;
+    kind: "shell" | "file_write" | "mcp";
+    payloadHash: string;
+    reason: string;
+    createdAt: number;
+    title: string;
+    description: string;
+    detail?: string;
+  };
 };
 
 export type SendMessageInput = AgentRunScope & {
@@ -516,6 +535,10 @@ export type DesktopApi = {
     onEvent: (callback: (event: AgentEvent) => void) => () => void;
     cancel: (scope: AgentRunScope) => Promise<void>;
     confirmResponse: (response: ConfirmationResponse) => Promise<void>;
+    listInterruptedApprovals: (
+      sessionId?: string,
+    ) => Promise<InterruptedApprovalNotice[]>;
+    dismissInterruptedApproval: (runId: string) => Promise<boolean>;
   };
   settings: {
     get: () => Promise<Settings>;

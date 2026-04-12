@@ -1,6 +1,11 @@
 import type { AgentHandle } from "../agent.js";
 import type { ConfirmationResponse } from "../../shared/agent-events.js";
 import type { RunKind } from "../../shared/contracts.js";
+import { PRIMARY_AGENT_OWNER, buildSystemOwnerId } from "../agent-owners.js";
+import {
+  loadInterruptedApprovals,
+  saveInterruptedApprovals,
+} from "./approvals-store.js";
 import { appendHarnessAuditEvent } from "./audit.js";
 import { loadPersistedHarnessRuns, savePersistedHarnessRuns } from "./store.js";
 import { bus } from "../event-bus.js";
@@ -8,10 +13,12 @@ import type {
   HarnessApprovalResolution,
   HarnessApprovalSource,
   HarnessAuditEvent,
+  HarnessRunLane,
   HarnessPendingApproval,
   HarnessRunScope,
   HarnessRunSnapshot,
   HarnessRunState,
+  InterruptedApprovalRecord,
 } from "./types.js";
 
 type ActiveHarnessRun = HarnessRunSnapshot & {
@@ -19,8 +26,10 @@ type ActiveHarnessRun = HarnessRunSnapshot & {
 };
 
 type CreateRunInput = HarnessRunScope & {
+  ownerId?: string;
   modelEntryId: string;
   runKind: RunKind;
+  lane?: HarnessRunLane;
 };
 
 type PendingApprovalWaiter = {
@@ -42,15 +51,8 @@ export class HarnessRunCancelledError extends Error {
   }
 }
 
-export type InterruptedApprovalRecord = {
-  sessionId: string;
-  runId: string;
-  approval: HarnessPendingApproval;
-  interruptedAt: number;
-};
-
 export class HarnessRuntime {
-  private readonly activeRunsBySession = new Map<string, ActiveHarnessRun>();
+  private readonly activeForegroundRunsBySession = new Map<string, ActiveHarnessRun>();
   private readonly activeRunsById = new Map<string, ActiveHarnessRun>();
   private readonly approvalWaitersByRequestId = new Map<string, PendingApprovalWaiter>();
   private readonly interruptedApprovals: InterruptedApprovalRecord[] = [];
@@ -69,6 +71,7 @@ export class HarnessRuntime {
     const idx = this.interruptedApprovals.findIndex((r) => r.runId === runId);
     if (idx >= 0) {
       this.interruptedApprovals.splice(idx, 1);
+      this.persistInterruptedApprovals();
       return true;
     }
     return false;
@@ -82,9 +85,11 @@ export class HarnessRuntime {
     this.hydrated = true;
     const persistedRuns = loadPersistedHarnessRuns();
     if (persistedRuns.length === 0) {
+      this.restoreInterruptedApprovalsFromStore();
       return [];
     }
 
+    this.restoreInterruptedApprovalsFromStore();
     const now = Date.now();
 
     for (const run of persistedRuns) {
@@ -98,12 +103,14 @@ export class HarnessRuntime {
         : "应用启动时发现未完成 run，已标记为失败。";
 
       if (wasAwaitingConfirmation && run.pendingApproval) {
-        this.interruptedApprovals.push({
+        const record = {
           sessionId: run.sessionId,
           runId: run.runId,
+          ownerId: run.ownerId,
           approval: run.pendingApproval,
           interruptedAt: now,
-        });
+        };
+        this.upsertInterruptedApproval(record);
       }
 
       this.audit({
@@ -128,32 +135,42 @@ export class HarnessRuntime {
   }
 
   getActiveRunBySession(sessionId: string): HarnessRunSnapshot | null {
-    const run = this.activeRunsBySession.get(sessionId);
+    const run = this.activeForegroundRunsBySession.get(sessionId);
     return run ? this.toSnapshot(run) : null;
   }
 
   createRun(input: CreateRunInput): HarnessRunSnapshot {
-    const existing = this.activeRunsBySession.get(input.sessionId);
-    if (existing && !existing.cancelled) {
-      throw new Error("当前线程仍在生成中，请先停止当前回复。");
-    }
-    if (existing?.cancelled) {
-      this.activeRunsById.delete(existing.runId);
+    const lane = input.lane ?? "foreground";
+    const ownerId =
+      input.ownerId ??
+      (lane === "foreground" ? PRIMARY_AGENT_OWNER : buildSystemOwnerId(input.runKind));
+    if (lane === "foreground") {
+      const existing = this.activeForegroundRunsBySession.get(input.sessionId);
+      if (existing && !existing.cancelled) {
+        throw new Error("当前线程仍在生成中，请先停止当前回复。");
+      }
+      if (existing?.cancelled) {
+        this.activeRunsById.delete(existing.runId);
+      }
     }
 
     const run: ActiveHarnessRun = {
       requestId: crypto.randomUUID(),
       runId: input.runId,
       sessionId: input.sessionId,
+      ownerId,
       modelEntryId: input.modelEntryId,
       runKind: input.runKind,
+      lane,
       state: "running",
       startedAt: Date.now(),
       cancelled: false,
       handle: null,
     };
 
-    this.activeRunsBySession.set(run.sessionId, run);
+    if (run.lane === "foreground") {
+      this.activeForegroundRunsBySession.set(run.sessionId, run);
+    }
     this.activeRunsById.set(run.runId, run);
     this.persistActiveRuns();
     this.audit({
@@ -165,7 +182,9 @@ export class HarnessRuntime {
       metadata: {
         modelEntryId: run.modelEntryId,
         requestId: run.requestId,
+        ownerId: run.ownerId,
         runKind: run.runKind,
+        lane: run.lane,
       },
     });
 
@@ -270,6 +289,7 @@ export class HarnessRuntime {
 
     waiter.settled = true;
     this.approvalWaitersByRequestId.delete(response.requestId);
+    this.dismissInterruptedApproval(waiter.scope.runId);
     waiter.resolve({
       requestId: response.requestId,
       allowed: response.allowed,
@@ -353,10 +373,11 @@ export class HarnessRuntime {
     if (run.pendingApproval?.requestId) {
       this.approvalWaitersByRequestId.delete(run.pendingApproval.requestId);
     }
+    this.dismissInterruptedApproval(run.runId);
 
     this.activeRunsById.delete(run.runId);
-    if (this.activeRunsBySession.get(run.sessionId)?.requestId === run.requestId) {
-      this.activeRunsBySession.delete(run.sessionId);
+    if (this.activeForegroundRunsBySession.get(run.sessionId)?.requestId === run.requestId) {
+      this.activeForegroundRunsBySession.delete(run.sessionId);
     }
     this.persistActiveRuns();
 
@@ -402,13 +423,37 @@ export class HarnessRuntime {
     });
   }
 
+  private restoreInterruptedApprovalsFromStore(): void {
+    const persisted = loadInterruptedApprovals();
+    this.interruptedApprovals.splice(0, this.interruptedApprovals.length, ...persisted);
+  }
+
+  private persistInterruptedApprovals(): void {
+    saveInterruptedApprovals(this.interruptedApprovals);
+  }
+
+  private upsertInterruptedApproval(record: InterruptedApprovalRecord): void {
+    const existingIndex = this.interruptedApprovals.findIndex(
+      (item) => item.runId === record.runId,
+    );
+    if (existingIndex >= 0) {
+      this.interruptedApprovals[existingIndex] = record;
+    } else {
+      this.interruptedApprovals.push(record);
+    }
+    this.persistInterruptedApprovals();
+  }
+
   private getActiveRun(scope: HarnessRunScope): ActiveHarnessRun | null {
     const run = this.activeRunsById.get(scope.runId);
     if (!run || run.sessionId !== scope.sessionId) {
       return null;
     }
 
-    if (this.activeRunsBySession.get(scope.sessionId)?.requestId !== run.requestId) {
+    if (
+      run.lane === "foreground" &&
+      this.activeForegroundRunsBySession.get(scope.sessionId)?.requestId !== run.requestId
+    ) {
       return null;
     }
 
@@ -420,8 +465,10 @@ export class HarnessRuntime {
       requestId: run.requestId,
       runId: run.runId,
       sessionId: run.sessionId,
+      ownerId: run.ownerId,
       modelEntryId: run.modelEntryId,
       runKind: run.runKind,
+      lane: run.lane,
       state: run.state,
       startedAt: run.startedAt,
       endedAt: run.endedAt,
@@ -436,7 +483,7 @@ export class HarnessRuntime {
   }
 
   private persistActiveRuns(): void {
-    const snapshots = [...this.activeRunsBySession.values()].map((run) =>
+    const snapshots = [...this.activeRunsById.values()].map((run) =>
       this.toSnapshot(run),
     );
     savePersistedHarnessRuns(snapshots);

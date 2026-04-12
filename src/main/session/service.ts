@@ -770,6 +770,7 @@ export function appendUserMessageEvent(input: {
 export function appendRunStartedEvent(input: {
   sessionId: string;
   runId: string;
+  ownerId?: string;
   runKind: RunKind;
   modelEntryId: string;
   thinkingLevel: string;
@@ -778,6 +779,7 @@ export function appendRunStartedEvent(input: {
     seq: nextSeq,
     sessionId: input.sessionId,
     runId: input.runId,
+    ownerId: input.ownerId,
     timestamp: new Date().toISOString(),
     type: "run_started",
     runKind: input.runKind,
@@ -938,6 +940,7 @@ export function appendCompactAppliedEvent(input: {
 export function appendRunFinishedEvent(input: {
   sessionId: string;
   runId: string;
+  ownerId?: string;
   finalState: "completed" | "aborted" | "failed";
   reason?: string;
 }): SessionTranscriptEvent {
@@ -945,6 +948,7 @@ export function appendRunFinishedEvent(input: {
     seq: nextSeq,
     sessionId: input.sessionId,
     runId: input.runId,
+    ownerId: input.ownerId,
     timestamp: new Date().toISOString(),
     type: "run_finished",
     finalState: input.finalState,
@@ -976,7 +980,9 @@ export function recoverInterruptedRuns(runs: HarnessRunSnapshot[]): void {
     appendRunFinishedEvent({
       sessionId: run.sessionId,
       runId: run.runId,
-      finalState: "failed",
+      ownerId: run.ownerId,
+      finalState:
+        run.state === "awaiting_confirmation" ? "aborted" : "failed",
       reason: "app_restart_interrupted",
     });
   }

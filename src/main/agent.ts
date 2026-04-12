@@ -1,26 +1,13 @@
 import { Agent } from "@mariozechner/pi-agent-core";
 import type { AgentEvent as CoreAgentEvent } from "@mariozechner/pi-agent-core";
 import type { ElectronAdapter } from "./adapter.js";
+import { PRIMARY_AGENT_OWNER } from "./agent-owners.js";
 import {
+  buildContextSystemPrompt,
   createTransformContext,
-  ensureContextSnapshotCoverage,
-  getSessionMemoryPromptSection,
 } from "./context/service.js";
-import { getSemanticMemoryPromptSection } from "./memory/service.js";
-import {
-  assemblePromptSections,
-  buildPlatformConstitutionSection,
-  buildRuntimeCapabilitySection,
-  buildSemanticMemorySection,
-  buildSessionSnapshotSection,
-  buildTurnIntentPatchSection,
-  buildWorkspacePolicySection,
-} from "./prompt-control-plane.js";
 import { getSettings } from "./settings.js";
-import { resolveModelEntry } from "./providers.js";
 import { buildToolPool } from "./tools/index.js";
-import { buildSoulPromptSection } from "./soul.js";
-import { buildAmbientContextSection } from "./ambient-context.js";
 import { loadMcpConfig, getActiveServers } from "../mcp/config.js";
 import { McpConnectionManager } from "../mcp/client.js";
 import { wrapToolsWithHarness } from "./harness/tool-execution.js";
@@ -31,11 +18,14 @@ import {
   normalizePersistedSessionMessages,
 } from "./chat-message-adapter.js";
 import type { ChatMessage, SelectedFile } from "../shared/contracts.js";
+import type { ResolvedRuntimeModel } from "./model-resolution.js";
 
 export interface AgentHandle {
   agent: Agent;
   unsubscribe: () => void;
+  adapter: ElectronAdapter;
   sessionId: string;
+  ownerId: string;
   modelEntryId: string;
   runtimeSignature: string;
   thinkingLevel: string;
@@ -53,8 +43,12 @@ export interface AgentHandle {
   };
 }
 
-const handlesBySession = new Map<string, AgentHandle>();
+const handlesByOwner = new Map<string, AgentHandle>();
 const initGenerations = new Map<string, number>();
+
+function getHandleOwnerKey(sessionId: string, ownerId = PRIMARY_AGENT_OWNER): string {
+  return `${sessionId}:${ownerId}`;
+}
 
 function subscribeToAgent(
   agent: Agent,
@@ -98,29 +92,26 @@ function subscribeToAgent(
 export async function initAgent(
   sessionId: string,
   adapter: ElectronAdapter,
+  resolved: ResolvedRuntimeModel,
+  ownerId = PRIMARY_AGENT_OWNER,
   existingMessages?: ChatMessage[],
 ): Promise<AgentHandle> {
-  const generation = (initGenerations.get(sessionId) ?? 0) + 1;
-  initGenerations.set(sessionId, generation);
+  const ownerKey = getHandleOwnerKey(sessionId, ownerId);
+  const generation = (initGenerations.get(ownerKey) ?? 0) + 1;
+  initGenerations.set(ownerKey, generation);
 
-  const existingHandle = handlesBySession.get(sessionId);
+  const existingHandle = handlesByOwner.get(ownerKey);
   if (existingHandle) {
     await destroyAgent(existingHandle);
   }
 
   const settings = getSettings();
 
-  let resolved;
-  try {
-    resolved = resolveModelEntry(settings.defaultModelId);
-  } catch {
-    resolved = resolveModelEntry("builtin:anthropic:claude-sonnet-4-20250514");
-  }
-
   const normalizedMessages = await normalizePersistedSessionMessages(
     existingMessages ?? [],
     resolved.model,
   );
+  const handleRef: { current: AgentHandle | null } = { current: null };
 
   // Load MCP tools
   const mcpManager = new McpConnectionManager();
@@ -154,10 +145,18 @@ export async function initAgent(
   }
 
   const tools = wrapToolsWithHarness(rawTools, {
-    sessionId,
     workspacePath: adapter.workspacePath,
-    adapter,
     runtime: harnessRuntime,
+    getAdapter: () => handleRef.current?.adapter ?? adapter,
+    getRunScope: () => {
+      const activeRunId = handleRef.current?.activeRunId;
+      return activeRunId
+        ? {
+            sessionId,
+            runId: activeRunId,
+          }
+        : null;
+    },
   });
 
   const promptRuntime = {
@@ -200,7 +199,9 @@ export async function initAgent(
   const handle: AgentHandle = {
     agent,
     unsubscribe,
+    adapter,
     sessionId,
+    ownerId,
     modelEntryId: resolved.entry.id,
     runtimeSignature: resolved.runtimeSignature,
     thinkingLevel: settings.thinkingLevel,
@@ -209,15 +210,16 @@ export async function initAgent(
     activeRunId: null,
     promptRuntime,
   };
+  handleRef.current = handle;
 
-  if (initGenerations.get(sessionId) !== generation) {
+  if (initGenerations.get(ownerKey) !== generation) {
     unsubscribe();
     agent.abort();
     await mcpManager.disconnectAll();
     throw new Error("Agent initialization superseded.");
   }
 
-  handlesBySession.set(sessionId, handle);
+  handlesByOwner.set(ownerKey, handle);
   return handle;
 }
 
@@ -228,6 +230,7 @@ export function bindHandleToRun(
 ): void {
   handle.unsubscribe();
   handle.unsubscribe = subscribeToAgent(handle.agent, adapter, runId);
+  handle.adapter = adapter;
   handle.activeRunId = runId;
 }
 
@@ -279,8 +282,9 @@ export async function destroyAgent(handle: AgentHandle): Promise<void> {
   handle.unsubscribe();
   handle.agent.abort();
   handle.activeRunId = null;
-  if (handlesBySession.get(handle.sessionId) === handle) {
-    handlesBySession.delete(handle.sessionId);
+  const ownerKey = getHandleOwnerKey(handle.sessionId, handle.ownerId);
+  if (handlesByOwner.get(ownerKey) === handle) {
+    handlesByOwner.delete(ownerKey);
   }
   await handle.mcpManager.disconnectAll();
 }
@@ -290,15 +294,18 @@ export async function destroyAgent(handle: AgentHandle): Promise<void> {
  */
 export async function destroyAllAgents(): Promise<void> {
   await Promise.allSettled(
-    [...handlesBySession.values()].map((handle) => destroyAgent(handle)),
+    [...handlesByOwner.values()].map((handle) => destroyAgent(handle)),
   );
 }
 
 /**
  * Get the current handle for a session (if any).
  */
-export function getHandle(sessionId: string): AgentHandle | null {
-  return handlesBySession.get(sessionId) ?? null;
+export function getHandle(
+  sessionId: string,
+  ownerId = PRIMARY_AGENT_OWNER,
+): AgentHandle | null {
+  return handlesByOwner.get(getHandleOwnerKey(sessionId, ownerId)) ?? null;
 }
 
 async function buildSystemPrompt(input: {
@@ -309,34 +316,5 @@ async function buildSystemPrompt(input: {
   thinkingLevel: string;
   promptRuntime: AgentHandle["promptRuntime"];
 }): Promise<string> {
-  await ensureContextSnapshotCoverage(input.sessionId);
-  const settings = getSettings();
-  const workspacePolicy = buildSoulPromptSection(input.workspacePath);
-  const snapshot = await getSessionMemoryPromptSection(input.sessionId);
-  const semanticMemory = await getSemanticMemoryPromptSection({
-    sessionId: input.sessionId,
-    query: input.latestUserText ?? null,
-  });
-
-  return assemblePromptSections([
-    buildPlatformConstitutionSection(),
-    buildWorkspacePolicySection(workspacePolicy),
-    buildRuntimeCapabilitySection({
-      workspacePath: input.workspacePath,
-      shell: settings.terminal.shell,
-      sourceName: input.promptRuntime.sourceName,
-      providerType: input.promptRuntime.providerType,
-      modelName: input.promptRuntime.modelName,
-      modelId: input.promptRuntime.modelId,
-      contextWindow: input.promptRuntime.contextWindow,
-      supportsVision: input.promptRuntime.supportsVision,
-      supportsToolCalling: input.promptRuntime.supportsToolCalling,
-      thinkingLevel: input.thinkingLevel,
-      toolNames: input.toolNames,
-    }),
-    buildAmbientContextSection(input.workspacePath),
-    buildSemanticMemorySection(semanticMemory),
-    buildSessionSnapshotSection(snapshot),
-    buildTurnIntentPatchSection(input.latestUserText),
-  ]);
+  return buildContextSystemPrompt(input);
 }

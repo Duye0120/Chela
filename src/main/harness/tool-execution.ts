@@ -12,10 +12,10 @@ import type {
 } from "./types.js";
 
 type HarnessToolExecutionContext = {
-  sessionId: string;
   workspacePath: string;
-  adapter: ElectronAdapter;
   runtime: HarnessRuntime;
+  getAdapter: () => ElectronAdapter;
+  getRunScope: () => HarnessRunScope | null;
 };
 
 function buildPayloadHash(toolName: string, args: Record<string, unknown>): string {
@@ -84,17 +84,15 @@ function buildApprovalRequestId(
 
 function ensureRunScope(
   runtime: HarnessRuntime,
-  sessionId: string,
+  getRunScope: () => HarnessRunScope | null,
 ): HarnessRunScope {
-  const activeRun = runtime.getActiveRunBySession(sessionId);
-  if (!activeRun) {
+  const runScope = getRunScope();
+  if (!runScope) {
     throw new Error("当前工具调用没有关联到有效 run。");
   }
 
-  return {
-    sessionId: activeRun.sessionId,
-    runId: activeRun.runId,
-  };
+  runtime.assertRunActive(runScope);
+  return runScope;
 }
 
 async function executeWithHarness(
@@ -105,10 +103,11 @@ async function executeWithHarness(
   signal?: AbortSignal,
   onUpdate?: (update: any) => void,
 ) {
-  const runScope = ensureRunScope(context.runtime, context.sessionId);
+  const runScope = ensureRunScope(context.runtime, context.getRunScope);
+  const adapter = context.getAdapter();
   context.runtime.assertRunActive(runScope);
   const emitRunStateChanged = (state: string, reason?: string) => {
-    context.adapter.sendRunStateChanged({
+    adapter.sendRunStateChanged({
       sessionId: runScope.sessionId,
       runId: runScope.runId,
       state,
@@ -193,7 +192,7 @@ async function executeWithHarness(
       emitRunStateChanged(pendingRun.state, evaluation.decision.reason);
     }
 
-    void context.adapter
+    void adapter
       .presentConfirmationRequest({
         requestId: pendingApproval.requestId,
         title: confirmCopy.title,
@@ -214,7 +213,7 @@ async function executeWithHarness(
       });
 
     const approvalResolution = await pendingResponse;
-    context.adapter.recordConfirmationResolution(approvalResolution);
+    adapter.recordConfirmationResolution(approvalResolution);
     const allowed = approvalResolution.allowed;
     bus.emit("approval:resolved", {
       sessionId: runScope.sessionId,

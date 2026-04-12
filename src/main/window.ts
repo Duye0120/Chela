@@ -1,0 +1,164 @@
+import { cpSync, existsSync, readdirSync, renameSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { app, BrowserWindow } from "electron";
+import { IPC_CHANNELS } from "../shared/ipc.js";
+import { appLogger, attachWindowLogging } from "./logger.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const MIN_WINDOW_WIDTH = 920;
+const MIN_WINDOW_HEIGHT = 600;
+const APP_PRODUCT_NAME = "Chela";
+const LEGACY_USER_DATA_DIR_NAMES = ["first-pi-agent", "first_pi_agent"];
+
+let mainWindow: BrowserWindow | null = null;
+
+export function configureAppIdentity(): void {
+  app.setName(APP_PRODUCT_NAME);
+}
+
+function getPreloadPath() {
+  return join(__dirname, "../preload/index.mjs");
+}
+
+function getRendererPath() {
+  return join(__dirname, "../renderer/index.html");
+}
+
+function getDevServerUrl() {
+  return process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_SERVER_URL;
+}
+
+export function migrateLegacyUserData(): void {
+  const currentUserDataPath = app.getPath("userData");
+  const hasCurrentData = existsSync(currentUserDataPath)
+    && readdirSync(currentUserDataPath).length > 0;
+
+  if (hasCurrentData) {
+    return;
+  }
+
+  const appDataPath = app.getPath("appData");
+
+  for (const legacyDirName of LEGACY_USER_DATA_DIR_NAMES) {
+    const legacyUserDataPath = join(appDataPath, legacyDirName);
+    if (legacyUserDataPath === currentUserDataPath || !existsSync(legacyUserDataPath)) {
+      continue;
+    }
+
+    if (!existsSync(currentUserDataPath)) {
+      renameSync(legacyUserDataPath, currentUserDataPath);
+      return;
+    }
+
+    cpSync(legacyUserDataPath, currentUserDataPath, {
+      recursive: true,
+      force: false,
+      errorOnExist: false,
+    });
+    return;
+  }
+}
+
+export function getMainWindow(): BrowserWindow | null {
+  return mainWindow;
+}
+
+export function requireMainWindow(): BrowserWindow {
+  if (!mainWindow) {
+    throw new Error("Main window is not ready yet.");
+  }
+
+  return mainWindow;
+}
+
+export function computeWindowFrameState() {
+  const window = requireMainWindow();
+  return {
+    isMaximized: window.isMaximized(),
+  };
+}
+
+function notifyWindowState() {
+  if (!mainWindow) {
+    return;
+  }
+
+  mainWindow.webContents.send(
+    IPC_CHANNELS.windowStateChanged,
+    computeWindowFrameState(),
+  );
+}
+
+export function createMainWindow(): BrowserWindow {
+  mainWindow = new BrowserWindow({
+    width: 1480,
+    height: 920,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
+    frame: false,
+    backgroundColor: "#e8edf3",
+    title: APP_PRODUCT_NAME,
+    webPreferences: {
+      preload: getPreloadPath(),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  attachWindowLogging(mainWindow);
+
+  mainWindow.on("maximize", notifyWindowState);
+  mainWindow.on("unmaximize", notifyWindowState);
+  mainWindow.on("ready-to-show", notifyWindowState);
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+
+    const isDevToolsShortcut =
+      input.key === "F12" ||
+      ((input.control || input.meta) &&
+        input.shift &&
+        input.key.toUpperCase() === "I");
+
+    if (isDevToolsShortcut) {
+      event.preventDefault();
+      if (mainWindow?.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+      } else {
+        mainWindow?.webContents.openDevTools({ mode: "detach" });
+      }
+      return;
+    }
+
+    const isReloadShortcut =
+      input.key === "F5" ||
+      ((input.control || input.meta) &&
+        !input.shift &&
+        input.key.toUpperCase() === "R");
+
+    if (isReloadShortcut) {
+      event.preventDefault();
+      mainWindow?.webContents.reload();
+      return;
+    }
+  });
+
+  const devServerUrl = getDevServerUrl();
+
+  if (devServerUrl) {
+    void mainWindow.loadURL(devServerUrl);
+  } else {
+    void mainWindow.loadFile(getRendererPath());
+  }
+
+  appLogger.info({
+    scope: "app.window",
+    message: "主窗口已创建",
+    data: {
+      devServerUrl: devServerUrl ?? null,
+    },
+  });
+
+  return mainWindow;
+}

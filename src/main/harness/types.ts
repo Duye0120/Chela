@@ -12,6 +12,7 @@ export type HarnessRiskLevel = "safe" | "guarded" | "dangerous";
 
 export type HarnessApprovalKind = "shell" | "file_write" | "mcp";
 export type HarnessApprovalSource = "dialog" | "renderer" | "system";
+export type HarnessRunLane = "foreground" | "background";
 
 export type HarnessRunScope = {
   sessionId: string;
@@ -39,14 +40,24 @@ export type HarnessApprovalResolution = {
 
 export type HarnessRunSnapshot = HarnessRunScope & {
   requestId: string;
+  ownerId: string;
   modelEntryId: string;
   runKind: RunKind;
+  lane: HarnessRunLane;
   state: HarnessRunState;
   startedAt: number;
   endedAt?: number;
   currentStepId?: string;
   pendingApproval?: HarnessPendingApproval;
   cancelled: boolean;
+};
+
+export type InterruptedApprovalRecord = {
+  sessionId: string;
+  runId: string;
+  ownerId: string;
+  approval: HarnessPendingApproval;
+  interruptedAt: number;
 };
 
 export type HarnessPolicyDecision =

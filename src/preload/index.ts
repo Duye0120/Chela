@@ -3,6 +3,7 @@ import type {
   AgentRunScope,
   ChatSession,
   DesktopApi,
+  InterruptedApprovalNotice,
   SessionGroup,
   WindowFrameState,
   SendMessageInput,
@@ -56,6 +57,10 @@ const desktopApi: DesktopApi = {
     cancel: (scope: AgentRunScope) => ipcRenderer.invoke(IPC_CHANNELS.agentCancel, scope),
     confirmResponse: (response: ConfirmationResponse) =>
       ipcRenderer.invoke(IPC_CHANNELS.agentConfirmResponse, response),
+    listInterruptedApprovals: (sessionId?: string): Promise<InterruptedApprovalNotice[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.agentListInterruptedApprovals, sessionId),
+    dismissInterruptedApproval: (runId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.agentDismissInterruptedApproval, runId),
   },
 
   // ── Settings (wired in Phase 1) ───────────────────────────
