@@ -148,6 +148,16 @@ samp,
   }
 }
 
+/* ── Override browser native accent color (form controls, select highlights) ── */
+select,
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+option,
+optgroup {
+  accent-color: var(--chela-accent) !important;
+}
+
 ::-webkit-scrollbar {
   width: var(--scrollbar-size);
   height: var(--scrollbar-size);
