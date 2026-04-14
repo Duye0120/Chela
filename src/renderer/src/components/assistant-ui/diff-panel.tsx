@@ -446,9 +446,11 @@ function DiffPanelInner({
   function ResizeHandle() {
     return (
       <div 
-        className="absolute left-[-2px] top-0 bottom-0 w-[6px] cursor-col-resize hover:bg-[color:var(--color-control-bg-hover)] active:bg-[color:var(--color-border-focus)] transition-colors z-50 opacity-0 hover:opacity-100 active:opacity-100"
+        className="absolute left-[-2px] w-[5px] top-0 bottom-0 cursor-col-resize z-50 group flex justify-center"
         onMouseDown={handleMouseDown}
-      />
+      >
+        <div className="w-[2px] h-full bg-blue-500 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity duration-200" />
+      </div>
     );
   }
 
