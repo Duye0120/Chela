@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createTwoFilesPatch, parsePatch } from "diff";
 import type { StructuredPatch } from "diff";
 import type { GitDiffFile } from "@shared/contracts";
+import { cn } from "@renderer/lib/utils";
 
 type SharedProps = {
   fileName?: string;
@@ -11,6 +12,7 @@ type SharedProps = {
   kind?: GitDiffFile["kind"];
   previewPath?: string;
   status?: GitDiffFile["status"];
+  layout?: "vertical" | "horizontal";
 };
 
 type Props =
@@ -170,10 +172,53 @@ function DiffBinaryPreview({ status }: { status?: GitDiffFile["status"] }) {
   );
 }
 
-function TextDiffView({ diffState, maxHunks, maxLines }: {
+type DiffSplitRow = {
+  isMeta?: boolean;
+  meta?: DiffLine;
+  left?: DiffLine | null;
+  right?: DiffLine | null;
+};
+
+function buildSplitRows(lines: DiffLine[]): DiffSplitRow[] {
+  const rows: DiffSplitRow[] = [];
+  let delBuffer: DiffLine[] = [];
+  let addBuffer: DiffLine[] = [];
+
+  function flush() {
+    const max = Math.max(delBuffer.length, addBuffer.length);
+    for (let i = 0; i < max; i++) {
+      rows.push({
+        left: delBuffer[i] || null,
+        right: addBuffer[i] || null,
+      });
+    }
+    delBuffer = [];
+    addBuffer = [];
+  }
+
+  for (const line of lines) {
+    if (line.type === "del") {
+      delBuffer.push(line);
+    } else if (line.type === "add") {
+      addBuffer.push(line);
+    } else {
+      flush();
+      if (line.type === "meta") {
+        rows.push({ isMeta: true, meta: line });
+      } else if (line.type === "context") {
+        rows.push({ left: line, right: line });
+      }
+    }
+  }
+  flush();
+  return rows;
+}
+
+function TextDiffView({ diffState, maxHunks, maxLines, layout = "vertical" }: {
   diffState: DiffState;
   maxHunks?: number;
   maxLines?: number;
+  layout?: "vertical" | "horizontal";
 }) {
   const { lines, totalHunks, shownHunks, totalLines, shownLines } = diffState;
 
@@ -195,48 +240,110 @@ function TextDiffView({ diffState, maxHunks, maxLines }: {
     );
   }
 
-  return (
-    <div className="overflow-hidden rounded-[16px] bg-code-bg">
-      <div className="max-h-[420px] overflow-auto">
-        <div className="diff-view-code min-w-full w-max font-mono text-xs leading-5">
-          {lines.map((line, index) => {
-            if (line.type === "meta" && line.content.startsWith("@@")) {
-              return (
-                <div
-                  key={index}
-                  className="bg-[var(--color-diff-hunk-header)] px-3 py-1 text-[11px] text-[var(--color-accent)]"
-                >
-                  {line.content}
-                </div>
-              );
-            }
-
-            if (line.type === "meta") {
-              return (
-                <div key={index} className="px-3 py-0.5 text-[11px] text-text-muted">
-                  {line.content}
-                </div>
-              );
-            }
-
+  const renderHorizontal = () => {
+    const splitRows = buildSplitRows(lines);
+    return (
+      <div className="diff-view-code min-w-full w-max font-mono text-[11px] leading-5">
+        {splitRows.map((row, index) => {
+          if (row.isMeta && row.meta) {
+            const isHunkHeader = row.meta.content.startsWith("@@");
             return (
-              <div key={index} className={`grid min-w-full grid-cols-[3.5rem_3.5rem_1.5rem_auto] ${LINE_COLORS[line.type]}`}>
-                <span className={`select-none px-2 py-0.5 text-right text-[10px] ${GUTTER_COLORS[line.type]}`}>
-                  {line.oldNum ?? ""}
+              <div
+                key={index}
+                className={cn(
+                  "w-full px-3 py-1",
+                  isHunkHeader ? "bg-[var(--color-diff-hunk-header)] text-[var(--color-accent)]" : "text-text-muted"
+                )}
+              >
+                {row.meta.content}
+              </div>
+            );
+          }
+
+          const renderSide = (line: DiffLine | null | undefined, isRight: boolean) => {
+            if (!line) {
+              return (
+                <div className="grid h-full grid-cols-[2.5rem_1.25rem_auto] bg-transparent">
+                  <span className="bg-transparent" />
+                  <span className="bg-transparent" />
+                  <span className="bg-transparent" />
+                </div>
+              );
+            }
+            return (
+              <div className={`grid h-full grid-cols-[2.5rem_1.25rem_auto] ${LINE_COLORS[line.type as Exclude<DiffLineType, "meta">]}`}>
+                <span className={`select-none px-1.5 py-0.5 text-right text-[9px] ${GUTTER_COLORS[line.type]}`}>
+                  {isRight ? (line.newNum ?? "") : (line.oldNum ?? "")}
                 </span>
-                <span className={`select-none px-2 py-0.5 text-right text-[10px] ${GUTTER_COLORS[line.type]}`}>
-                  {line.newNum ?? ""}
-                </span>
-                <span className="select-none py-0.5 text-center">
+                <span className="select-none py-0.5 text-center text-[10px]">
                   {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
                 </span>
-                <span className="whitespace-pre py-0.5 pr-4">
+                <span className="whitespace-pre py-0.5 pr-2">
                   {line.content}
                 </span>
               </div>
             );
-          })}
-        </div>
+          };
+
+          return (
+            <div key={index} className="grid min-w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] divide-x divide-border">
+              {renderSide(row.left, false)}
+              {renderSide(row.right, true)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderVertical = () => {
+    return (
+      <div className="diff-view-code min-w-full w-max font-mono text-xs leading-5">
+        {lines.map((line, index) => {
+          if (line.type === "meta" && line.content.startsWith("@@")) {
+            return (
+              <div
+                key={index}
+                className="bg-[var(--color-diff-hunk-header)] px-3 py-1 text-[11px] text-[var(--color-accent)]"
+              >
+                {line.content}
+              </div>
+            );
+          }
+
+          if (line.type === "meta") {
+            return (
+              <div key={index} className="px-3 py-0.5 text-[11px] text-text-muted">
+                {line.content}
+              </div>
+            );
+          }
+
+          return (
+            <div key={index} className={`grid min-w-full grid-cols-[3.5rem_3.5rem_1.5rem_auto] ${LINE_COLORS[line.type]}`}>
+              <span className={`select-none px-2 py-0.5 text-right text-[10px] ${GUTTER_COLORS[line.type]}`}>
+                {line.oldNum ?? ""}
+              </span>
+              <span className={`select-none px-2 py-0.5 text-right text-[10px] ${GUTTER_COLORS[line.type]}`}>
+                {line.newNum ?? ""}
+              </span>
+              <span className="select-none py-0.5 text-center">
+                {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
+              </span>
+              <span className="whitespace-pre py-0.5 pr-4">
+                {line.content}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div className="overflow-hidden rounded-[16px] bg-code-bg">
+      <div className="max-h-[420px] overflow-auto">
+        {layout === "horizontal" ? renderHorizontal() : renderVertical()}
       </div>
 
       {(maxHunks && totalHunks > shownHunks) || (maxLines && totalLines > shownLines) ? (
@@ -320,6 +427,7 @@ export function DiffView(props: Props) {
       diffState={diffState}
       maxHunks={props.maxHunks}
       maxLines={props.maxLines}
+      layout={props.layout}
     />
   );
 }
