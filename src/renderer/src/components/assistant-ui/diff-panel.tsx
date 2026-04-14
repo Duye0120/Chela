@@ -226,10 +226,12 @@ function DiffFileCard({
   file,
   expanded,
   onExpandedChange,
+  layout,
 }: {
   file: GitDiffFile;
   expanded: boolean;
   onExpandedChange: (open: boolean) => void;
+  layout?: "vertical" | "horizontal";
 }) {
   return (
     <Collapsible
@@ -275,6 +277,7 @@ function DiffFileCard({
             status={file.status}
             maxHunks={12}
             maxLines={420}
+            layout={layout}
           />
         </div>
       </CollapsibleContent>
@@ -436,7 +439,7 @@ function DiffPanelInner({
 
   // Drawer shell — fixed overlay that slides in/out via translate-x
   const drawerBase =
-    "fixed right-0 top-0 bottom-0 z-50 flex h-full min-h-0 flex-col bg-background shadow-2xl px-4 py-4 transform transition-transform duration-300 ease-in-out";
+    "fixed right-0 top-0 bottom-0 z-50 flex h-full min-h-0 flex-col bg-background shadow-2xl px-4 py-4 rounded-[8px] transform transition-transform duration-300 ease-in-out";
   const drawerClosed = `${drawerBase} translate-x-full`;
   const drawerOpen = `${drawerBase} translate-x-0`;
 
@@ -444,7 +447,7 @@ function DiffPanelInner({
 
   function ResizeHandle() {
     return (
-      <div 
+      <div
         className="absolute left-[-2px] w-[5px] top-0 bottom-0 cursor-col-resize z-50 group flex justify-center"
         onMouseDown={handleMouseDown}
       >
@@ -546,7 +549,7 @@ function DiffPanelInner({
           aria-label="切换布局"
         >
           {layout === "vertical" ? <LayoutGridIcon className="size-3.5" /> : <ListIcon className="size-3.5" />}
-          <span>{layout === "vertical" ? "网格" : "列表"}</span>
+          <span>{layout === "vertical" ? "分栏" : "统一"}</span>
         </Button>
       </div>
 
@@ -621,7 +624,7 @@ function DiffPanelInner({
               </div>
 
               <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
-                <div className={layout === "vertical" ? "flex flex-col gap-3" : "grid grid-cols-2 gap-3"}>
+                <div className="flex flex-col gap-3">
                   {currentSourceSnapshot.files.map((file) => (
                     <div
                       key={file.path}
@@ -629,6 +632,7 @@ function DiffPanelInner({
                     >
                       <DiffFileCard
                         file={file}
+                        layout={layout}
                         expanded={expandedPathSet.has(file.path)}
                         onExpandedChange={(open) => handleToggleFile(file.path, open)}
                       />
