@@ -4,6 +4,7 @@ import {
   FileIcon,
   ImageIcon,
   RefreshCwIcon,
+  XIcon,
 } from "lucide-react";
 import type {
   GitDiffFile,
@@ -52,6 +53,8 @@ const DIFF_SOURCE_META: Record<GitDiffSource, { label: string; description: stri
 type ExpandedDiffState = Partial<Record<GitDiffSource, string[]>>;
 
 type DiffPanelProps = {
+  open: boolean;
+  onClose: () => void;
   overview: GitDiffOverview | null;
   isLoading: boolean;
   onRefresh: () => void | Promise<void>;
@@ -328,7 +331,9 @@ function hydrateExpandedState(current: ExpandedDiffState, overview: GitDiffOverv
   return changed ? next : current;
 }
 
-export function DiffPanel({
+function DiffPanelInner({
+  open,
+  onClose,
   overview,
   isLoading,
   onRefresh,
@@ -404,10 +409,38 @@ export function DiffPanel({
     diffCardRefs.current[`${selectedDiffSource}:${path}`] = element;
   }, [selectedDiffSource]);
 
+  // Drawer shell — fixed overlay that slides in/out via translate-x
+  const drawerBase =
+    "fixed right-0 top-0 bottom-0 z-50 flex h-full min-h-0 flex-col bg-background border-l shadow-xl px-4 py-4 transform transition-transform duration-300 ease-in-out";
+  const drawerClosed = `${drawerBase} translate-x-full`;
+  const drawerOpen = `${drawerBase} translate-x-0 w-[24rem]`;
+
+  const drawerClass = open ? drawerOpen : drawerClosed;
+
+  function DrawerHeader({ children }: { children: React.ReactNode }) {
+    return (
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">{children}</div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          className="size-7 shrink-0 rounded-[10px] text-muted-foreground hover:bg-[color:var(--color-control-bg-hover)]"
+          aria-label="关闭 Diff 面板"
+        >
+          <XIcon className="size-4" />
+        </Button>
+      </div>
+    );
+  }
+
   if (!overview) {
     return (
-      <aside className="flex h-full min-h-0 flex-col bg-[color:var(--chela-bg-secondary)] px-4 py-4">
-        <p className="text-[11px] uppercase tracking-[0.22em] text-[color:var(--color-text-secondary)]">Diff</p>
+      <aside className={drawerClass}>
+        <DrawerHeader>
+          <p className="text-[11px] uppercase tracking-[0.22em] text-[color:var(--color-text-secondary)]">Diff</p>
+        </DrawerHeader>
         <div className="mt-4">
           <EmptyPanelState
             title={isLoading ? "正在读取变更" : "准备读取变更"}
@@ -420,8 +453,10 @@ export function DiffPanel({
 
   if (!overview.isGitRepo) {
     return (
-      <aside className="flex h-full min-h-0 flex-col bg-[color:var(--chela-bg-secondary)] px-4 py-4">
-        <p className="text-[11px] uppercase tracking-[0.22em] text-[color:var(--color-text-secondary)]">Diff</p>
+      <aside className={drawerClass}>
+        <DrawerHeader>
+          <p className="text-[11px] uppercase tracking-[0.22em] text-[color:var(--color-text-secondary)]">Diff</p>
+        </DrawerHeader>
         <div className="mt-2">
           <h3 className="text-lg font-semibold text-foreground">工作区 Diff</h3>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -443,24 +478,26 @@ export function DiffPanel({
   const expandedPathSet = new Set(currentExpandedPaths);
 
   return (
-    <aside className="flex h-full min-h-0 flex-col bg-[color:var(--chela-bg-secondary)] px-4 py-4">
-      <p className="text-[11px] uppercase tracking-[0.22em] text-[color:var(--color-text-secondary)]">Diff</p>
-      <div className="mt-2 flex items-start justify-between gap-3">
-        <div className="min-w-0">
+    <aside className={drawerClass}>
+      <DrawerHeader>
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.22em] text-[color:var(--color-text-secondary)]">Diff</p>
           <h3 className="text-lg font-semibold text-foreground">工作区 Diff</h3>
           <p className="mt-1 text-xs text-muted-foreground">
             {meta.description}
           </p>
         </div>
+      </DrawerHeader>
+      <div className="flex items-center gap-2">
         <Button
           type="button"
           variant="outline"
           size="icon"
           onClick={onRefresh}
-          className="size-8 rounded-[14px] px-0 text-muted-foreground"
+          className="size-7 shrink-0 rounded-[12px] px-0 text-muted-foreground"
           aria-label="刷新 diff"
         >
-          <RefreshCwIcon className={cn("size-4", isLoading && "animate-spin")} />
+          <RefreshCwIcon className={cn("size-3.5", isLoading && "animate-spin")} />
         </Button>
       </div>
 
@@ -557,3 +594,20 @@ export function DiffPanel({
     </aside>
   );
 }
+
+export function DiffPanel(props: DiffPanelProps) {
+  return (
+    <>
+      <div
+        className={cn(
+          "fixed inset-0 z-40 bg-black/10 transition-opacity duration-300",
+          props.open ? "opacity-100" : "pointer-events-none opacity-0"
+        )}
+        onClick={props.onClose}
+        aria-hidden="true"
+      />
+      <DiffPanelInner {...props} />
+    </>
+  );
+}
+

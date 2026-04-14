@@ -45,14 +45,9 @@ const SIDEBAR_WIDTH_STORAGE_KEY = "chela.sidebar-width";
 const LEGACY_SIDEBAR_WIDTH_STORAGE_KEY = "first-pi-agent.sidebar-width";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "chela.sidebar-collapsed";
 const LEGACY_RIGHT_PANEL_SIZE_STORAGE_KEY = "first-pi-agent.right-panel-size";
-const DIFF_PANEL_SIZE_STORAGE_KEY = "chela.diff-panel-size";
-const LEGACY_DIFF_PANEL_SIZE_STORAGE_KEY = "first-pi-agent.diff-panel-size";
 const DEFAULT_SIDEBAR_SIZE = 18;
 const MIN_SIDEBAR_SIZE = 14;
 const MAX_SIDEBAR_SIZE = 28;
-const DEFAULT_DIFF_PANEL_SIZE = 28;
-const MIN_DIFF_PANEL_SIZE = 20;
-const MAX_DIFF_PANEL_SIZE = 44;
 const ROOT_UI_THEME_DATASET = "theme";
 const SETTINGS_ROUTE_PREFIX = "/settings";
 const SETTINGS_SECTION_IDS: SettingsSection[] = [
@@ -84,16 +79,8 @@ function clampSidebarSize(size: number) {
   return Math.min(MAX_SIDEBAR_SIZE, Math.max(MIN_SIDEBAR_SIZE, size));
 }
 
-function clampDiffPanelSize(size: number) {
-  return Math.min(MAX_DIFF_PANEL_SIZE, Math.max(MIN_DIFF_PANEL_SIZE, size));
-}
-
 function toSidebarPercentageSize(size: number) {
   return `${clampSidebarSize(size)}%`;
-}
-
-function toPercentageSize(size: number) {
-  return `${size}%`;
 }
 
 function migrateLegacySidebarWidth(storedWidth: number) {
@@ -229,14 +216,6 @@ export default function App() {
 
     return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
   });
-  const [diffPanelSize, setDiffPanelSize] = useState(() =>
-    readStoredPanelSize(
-      DIFF_PANEL_SIZE_STORAGE_KEY,
-      [LEGACY_DIFF_PANEL_SIZE_STORAGE_KEY, LEGACY_RIGHT_PANEL_SIZE_STORAGE_KEY],
-      DEFAULT_DIFF_PANEL_SIZE,
-      clampDiffPanelSize,
-    ),
-  );
   const [currentModelId, setCurrentModelId] = useState(
     "builtin:anthropic:claude-sonnet-4-20250514",
   );
@@ -306,13 +285,6 @@ export default function App() {
       panel.expand();
     }
   }, [sidebarCollapsed]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      DIFF_PANEL_SIZE_STORAGE_KEY,
-      String(clampDiffPanelSize(diffPanelSize)),
-    );
-  }, [diffPanelSize]);
 
   useEffect(() => {
     if (!settings) {
@@ -1193,13 +1165,6 @@ export default function App() {
     setSidebarCollapsed((current) => !current);
   }, []);
 
-  const handleDiffOnlyLayoutChanged = useCallback((layout: Record<string, number>) => {
-    const nextDiffPanelSize = layout["thread-diff"];
-    if (typeof nextDiffPanelSize === "number" && Number.isFinite(nextDiffPanelSize)) {
-      setDiffPanelSize(clampDiffPanelSize(nextDiffPanelSize));
-    }
-  }, []);
-
   const handleToggleMaximize = useCallback(() => {
     if (!desktopApi) {
       return;
@@ -1275,7 +1240,6 @@ export default function App() {
     await refreshGitOverview();
   }, [refreshGitOverview]);
 
-  const normalizedDiffPanelSize = clampDiffPanelSize(diffPanelSize);
   const hasAnyRunningSessions = runningSessionIds.length > 0;
   const mountedSessionIds = useMemo(() => {
     const ids = new Set<string>();
@@ -1458,51 +1422,12 @@ export default function App() {
   );
 
   const threadPanels = useMemo(
-    () =>
-      diffPanelOpen ? (
-        <ResizablePanelGroup
-          orientation="horizontal"
-          className="min-h-0 bg-[color:var(--chela-bg-surface)]"
-          onLayoutChanged={handleDiffOnlyLayoutChanged}
-          resizeTargetMinimumSize={{ fine: 6, coarse: 24 }}
-        >
-          <ResizablePanel
-            id="thread-main"
-            defaultSize={toPercentageSize(100 - normalizedDiffPanelSize)}
-            minSize={`${100 - MAX_DIFF_PANEL_SIZE}%`}
-          >
-            <section className="flex h-full min-h-0 flex-col bg-[color:var(--chela-bg-surface)]">
-              {threadRuntimeLayer}
-            </section>
-          </ResizablePanel>
-          <ResizableHandle className="-mx-px w-px" />
-          <ResizablePanel
-            id="thread-diff"
-            defaultSize={toPercentageSize(normalizedDiffPanelSize)}
-            minSize={`${MIN_DIFF_PANEL_SIZE}%`}
-            maxSize={`${MAX_DIFF_PANEL_SIZE}%`}
-          >
-              <DiffPanel
-                overview={gitOverview}
-                isLoading={gitOverviewLoading}
-                onRefresh={handleRefreshGitOverview}
-              />
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      ) : (
-        <section className="flex h-full min-h-0 flex-col bg-[color:var(--chela-bg-surface)]">
-          {threadRuntimeLayer}
-        </section>
-      ),
-    [
-      diffPanelOpen,
-      gitOverview,
-      gitOverviewLoading,
-      handleRefreshGitOverview,
-      handleDiffOnlyLayoutChanged,
-      normalizedDiffPanelSize,
-      threadRuntimeLayer,
-    ],
+    () => (
+      <section className="flex h-full min-h-0 flex-col bg-[color:var(--chela-bg-surface)]">
+        {threadRuntimeLayer}
+      </section>
+    ),
+    [threadRuntimeLayer],
   );
 
   if (booting) {
@@ -1628,10 +1553,13 @@ export default function App() {
                 variant="ghost"
                 size="icon"
                 onClick={toggleDiffPanel}
-                className={`h-9 w-9 cursor-pointer rounded-[var(--radius-shell)] border-none bg-transparent shadow-none ring-0 hover:bg-shell-toolbar-hover ${diffPanelOpen ? "bg-shell-toolbar-hover text-foreground" : "text-muted-foreground"}`}
+                className={`relative h-9 w-9 cursor-pointer rounded-[var(--radius-shell)] border-none bg-transparent shadow-none ring-0 hover:bg-shell-toolbar-hover ${diffPanelOpen ? "bg-shell-toolbar-hover text-foreground" : "text-muted-foreground"}`}
                 aria-label={diffPanelOpen ? "收起 Diff 面板" : "展开 Diff 面板"}
               >
                 <GitCompareArrows className="h-4 w-4" />
+                {gitBranchSummary?.hasChanges && !diffPanelOpen && (
+                  <span className="absolute right-1 top-1 size-1.5 rounded-full bg-red-500" />
+                )}
               </Button>
             </div>
 
@@ -1662,6 +1590,18 @@ export default function App() {
         </ResizablePanel>
       </ResizablePanelGroup>
       </div>
+
+      {/* Diff slide-out drawer */}
+      <DiffPanel
+        open={diffPanelOpen}
+        onClose={() => {
+          setDiffPanelOpen(false);
+          void desktopApi?.ui.setDiffPanelOpen(false);
+        }}
+        overview={gitOverview}
+        isLoading={gitOverviewLoading}
+        onRefresh={handleRefreshGitOverview}
+      />
     </main>
   );
 }
