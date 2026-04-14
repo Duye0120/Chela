@@ -1,5 +1,5 @@
 import { FileImageIcon, FileWarningIcon, ImageOffIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { createTwoFilesPatch, parsePatch } from "diff";
 import type { StructuredPatch } from "diff";
 import type { GitDiffFile } from "@shared/contracts";
@@ -222,6 +222,17 @@ function TextDiffView({ diffState, maxHunks, maxLines, layout = "vertical" }: {
 }) {
   const { lines, totalHunks, shownHunks, totalLines, shownLines } = diffState;
 
+  const leftScrollRef = useRef<HTMLDivElement>(null);
+  const rightScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = (source: 'left' | 'right') => (e: React.UIEvent<HTMLDivElement>) => {
+    if (source === 'left' && rightScrollRef.current && rightScrollRef.current.scrollLeft !== e.currentTarget.scrollLeft) {
+      rightScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    } else if (source === 'right' && leftScrollRef.current && leftScrollRef.current.scrollLeft !== e.currentTarget.scrollLeft) {
+      leftScrollRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
+  };
+
   if (lines.length === 0) {
     if (diffState.rawPatch) {
       return (
@@ -243,55 +254,104 @@ function TextDiffView({ diffState, maxHunks, maxLines, layout = "vertical" }: {
   const renderHorizontal = () => {
     const splitRows = buildSplitRows(lines);
     return (
-      <div className="diff-view-code w-full font-mono text-[11px] leading-5">
-        {splitRows.map((row, index) => {
-          if (row.isMeta && row.meta) {
-            const isHunkHeader = row.meta.content.startsWith("@@");
-            return (
-              <div
-                key={index}
-                className={cn(
-                  "w-full px-3 py-1",
-                  isHunkHeader ? "bg-[var(--color-diff-hunk-header)] text-[var(--color-accent)]" : "text-text-muted"
-                )}
-              >
-                {row.meta.content}
-              </div>
-            );
-          }
-
-          const renderSide = (line: DiffLine | null | undefined, isRight: boolean) => {
-            if (!line) {
+      <div className="flex w-full divide-x divide-border">
+        {/* Left Pane */}
+        <div 
+          ref={leftScrollRef} 
+          className="flex-1 overflow-x-auto pb-4" 
+          onScroll={handleScroll('left')}
+        >
+          <div className="diff-view-code w-max min-w-full font-mono text-[11px] leading-5">
+            {splitRows.map((row, index) => {
+              if (row.isMeta && row.meta) {
+                const isHunkHeader = row.meta.content.startsWith("@@");
+                return (
+                  <div
+                    key={index}
+                    className={cn(
+                      "sticky left-0 w-full min-w-full px-3 py-1",
+                      isHunkHeader ? "bg-[var(--color-diff-hunk-header)] text-[var(--color-accent)]" : "text-text-muted bg-transparent"
+                    )}
+                  >
+                    {row.meta.content}
+                  </div>
+                );
+              }
+              const line = row.left;
+              if (!line) {
+                return (
+                  <div key={index} className="flex h-5 min-w-full items-center bg-transparent">
+                    <span className="w-10 shrink-0 bg-transparent" />
+                    <span className="w-6 shrink-0 bg-transparent" />
+                    <span className="bg-transparent" />
+                  </div>
+                );
+              }
               return (
-                <div className="grid h-full grid-cols-[2.5rem_1.25rem_minmax(0,1fr)] bg-transparent">
-                  <span className="bg-transparent" />
-                  <span className="bg-transparent" />
-                  <span className="bg-transparent" />
+                <div key={index} className={`flex h-5 min-w-full items-center ${LINE_COLORS[line.type as Exclude<DiffLineType, "meta">]}`}>
+                  <span className={`w-10 shrink-0 select-none px-1.5 text-right text-[9px] ${GUTTER_COLORS[line.type]}`}>
+                    {line.oldNum ?? ""}
+                  </span>
+                  <span className="w-6 shrink-0 select-none text-center text-[10px]">
+                    {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
+                  </span>
+                  <span className="whitespace-pre pr-4 pt-[1px]">
+                    {line.content}
+                  </span>
                 </div>
               );
-            }
-            return (
-              <div className={`grid h-full grid-cols-[2.5rem_1.25rem_minmax(0,1fr)] ${LINE_COLORS[line.type as Exclude<DiffLineType, "meta">]}`}>
-                <span className={`select-none px-1.5 py-0.5 text-right text-[9px] ${GUTTER_COLORS[line.type]}`}>
-                  {isRight ? (line.newNum ?? "") : (line.oldNum ?? "")}
-                </span>
-                <span className="select-none py-0.5 text-center text-[10px]">
-                  {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
-                </span>
-                <span className="whitespace-pre-wrap break-all py-0.5 pr-2 min-w-0">
-                  {line.content}
-                </span>
-              </div>
-            );
-          };
+            })}
+          </div>
+        </div>
 
-          return (
-            <div key={index} className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] divide-x divide-border">
-              {renderSide(row.left, false)}
-              {renderSide(row.right, true)}
-            </div>
-          );
-        })}
+        {/* Right Pane */}
+        <div 
+          ref={rightScrollRef} 
+          className="flex-1 overflow-x-auto pb-4" 
+          onScroll={handleScroll('right')}
+        >
+          <div className="diff-view-code w-max min-w-full font-mono text-[11px] leading-5">
+            {splitRows.map((row, index) => {
+              if (row.isMeta && row.meta) {
+                const isHunkHeader = row.meta.content.startsWith("@@");
+                return (
+                  <div
+                    key={index}
+                    className={cn(
+                      "pointer-events-none w-full min-w-full select-none py-1 text-transparent",
+                      isHunkHeader ? "bg-[var(--color-diff-hunk-header)]" : "bg-transparent"
+                    )}
+                  >
+                    {row.meta.content}
+                  </div>
+                );
+              }
+              const line = row.right;
+              if (!line) {
+                return (
+                  <div key={index} className="flex h-5 min-w-full items-center bg-transparent">
+                    <span className="w-10 shrink-0 bg-transparent" />
+                    <span className="w-6 shrink-0 bg-transparent" />
+                    <span className="bg-transparent" />
+                  </div>
+                );
+              }
+              return (
+                <div key={index} className={`flex h-5 min-w-full items-center ${LINE_COLORS[line.type as Exclude<DiffLineType, "meta">]}`}>
+                  <span className={`w-10 shrink-0 select-none px-1.5 text-right text-[9px] ${GUTTER_COLORS[line.type]}`}>
+                    {line.newNum ?? ""}
+                  </span>
+                  <span className="w-6 shrink-0 select-none text-center text-[10px]">
+                    {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
+                  </span>
+                  <span className="whitespace-pre pr-4 pt-[1px]">
+                    {line.content}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     );
   };
