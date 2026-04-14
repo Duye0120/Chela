@@ -6,7 +6,6 @@ import type {
 } from "@shared/contracts";
 import { Button } from "@renderer/components/assistant-ui/button";
 import { cn } from "@renderer/lib/utils";
-import { SettingsCard } from "./shared";
 
 function formatBytes(sizeBytes: number): string {
   if (sizeBytes < 1024) {
@@ -134,82 +133,79 @@ export function LogsSection() {
   }, [desktopApi, selectedLogId]);
 
   return (
-    <SettingsCard>
-      <div className="space-y-4 px-6 pb-6 pt-1">
-        <div className="flex flex-wrap items-center gap-2">
-          {(bundle?.files ?? []).map((file) => {
-            const active = currentFile?.id === file.id;
-            return (
-              <button
-                key={file.id}
-                type="button"
-                onClick={() => setSelectedLogId(file.id)}
-                className={cn(
-                  "rounded-[var(--radius-shell)] px-3 py-2 text-[12px] transition",
-                  active
-                    ? "bg-[color:var(--color-control-bg-active)] text-foreground shadow-[var(--color-control-shadow)]"
-                    : "bg-[color:var(--color-control-panel-bg)] text-muted-foreground hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground",
-                )}
-              >
-                {file.label}
-              </button>
-            );
-          })}
-
-          <div className="ml-auto flex items-center gap-2">
-            <Button
+    <div className="flex flex-col gap-4 pt-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-foreground mr-4">日志</h2>
+        {(bundle?.files ?? []).map((file) => {
+          const active = currentFile?.id === file.id;
+          return (
+            <button
+              key={file.id}
               type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void handleOpenFolder()}
-              disabled={openingFolder}
+              onClick={() => setSelectedLogId(file.id)}
+              className={cn(
+                "rounded-[var(--radius-shell)] px-3 py-1.5 text-[13px] font-medium transition",
+                active
+                  ? "bg-[color:var(--color-control-bg-active)] text-foreground shadow-sm ring-1 ring-[color:var(--color-control-border)]"
+                  : "bg-transparent text-muted-foreground hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground",
+              )}
             >
-              {openingFolder ? "打开中…" : "打开文件夹"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void loadLogs()}
-              disabled={loading}
-            >
-              {loading ? "刷新中…" : "刷新"}
-            </Button>
-          </div>
+              {file.label}
+            </button>
+          );
+        })}
+
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void handleOpenFolder()}
+            disabled={openingFolder}
+          >
+            {openingFolder ? "打开中…" : "打开文件夹"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void loadLogs()}
+            disabled={loading}
+          >
+            {loading ? "刷新中…" : "刷新"}
+          </Button>
         </div>
-
-        <div className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-4 py-3">
-          <div className="grid gap-3 md:grid-cols-4">
-            <MetaItem label="路径" value={currentFile?.path ?? "—"} />
-            <MetaItem
-              label="大小"
-              value={currentFile ? formatBytes(currentFile.sizeBytes) : "—"}
-            />
-            <MetaItem
-              label="更新时间"
-              value={formatTimestamp(currentFile?.updatedAt ?? null)}
-            />
-            <MetaItem
-              label="尾部行数"
-              value={String(currentFile?.lineCount ?? 0)}
-            />
-          </div>
-        </div>
-
-        {error ? (
-          <div className="rounded-[var(--radius-shell)] bg-[color:rgba(239,68,68,0.08)] px-4 py-3 text-[12px] leading-6 text-[color:rgb(185,28,28)]">
-            {error}
-          </div>
-        ) : null}
-
-        <pre className="max-h-[36rem] overflow-auto rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-4 py-3 font-mono text-[11px] leading-5 text-foreground whitespace-pre-wrap break-words">
-          {formattedTail.trim()
-            ? formattedTail
-            : currentFile?.exists
-              ? "当前日志为空。"
-              : "日志文件还没生成。"}
-        </pre>
       </div>
-    </SettingsCard>
+
+      <div className="grid gap-3 md:grid-cols-4 px-2">
+        <MetaItem label="路径" value={currentFile?.path ?? "—"} />
+        <MetaItem
+          label="大小"
+          value={currentFile ? formatBytes(currentFile.sizeBytes) : "—"}
+        />
+        <MetaItem
+          label="更新时间"
+          value={formatTimestamp(currentFile?.updatedAt ?? null)}
+        />
+        <MetaItem
+          label="尾部行数"
+          value={String(currentFile?.lineCount ?? 0)}
+        />
+      </div>
+
+      {error ? (
+        <div className="rounded-[var(--radius-shell)] bg-[color:rgba(239,68,68,0.08)] px-4 py-3 text-[12px] leading-6 text-[color:rgb(185,28,28)]">
+          {error}
+        </div>
+      ) : null}
+
+      <pre className="max-h-[36rem] overflow-auto rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] border border-[color:var(--color-control-border)] px-4 py-4 font-mono text-[11px] leading-5 text-foreground whitespace-pre-wrap break-words shadow-xs">
+        {formattedTail.trim()
+          ? formattedTail
+          : currentFile?.exists
+            ? "当前日志为空。"
+            : "日志文件还没生成。"}
+      </pre>
+    </div>
   );
 }
