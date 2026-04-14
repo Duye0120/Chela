@@ -395,6 +395,35 @@ function DiffPanelInner({
     document.addEventListener('mouseup', handleMouseUp);
   }, []);
 
+  const [treeWidth, setTreeWidth] = useState(180);
+  const treeDraggingRef = useRef(false);
+
+  const handleTreeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    treeDraggingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    const startX = e.clientX;
+    const startWidth = treeWidth;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!treeDraggingRef.current) return;
+      const deltaX = ev.clientX - startX;
+      setTreeWidth(Math.max(100, Math.min(startWidth + deltaX, width - 200)));
+    };
+
+    const handleMouseUp = () => {
+      if (!treeDraggingRef.current) return;
+      treeDraggingRef.current = false;
+      document.body.style.cursor = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [treeWidth, width]);
+
   const handleToggleFile = useCallback((path: string, open: boolean) => {
     setExpandedDiffPaths((current) => {
       const sourcePaths = current[selectedDiffSource] ?? [];
@@ -600,11 +629,21 @@ function DiffPanelInner({
             </div>
           ) : (
             <>
-              <div className="mt-4 flex min-h-0 flex-1 overflow-hidden border-t border-border pt-4">
-                <div className="w-[180px] shrink-0 overflow-y-auto pr-3">
+              <div className="relative mt-4 flex min-h-0 flex-1 overflow-hidden border-t border-border pt-4">
+                <div 
+                  className="shrink-0 overflow-y-auto pr-3"
+                  style={{ width: treeWidth }}
+                >
                   <FileTreeView files={currentSourceSnapshot.files} onSelectFile={(path) => handleJumpToFile(path)} />
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto pr-1 pl-4 border-l border-border/50">
+                
+                {/* 侧边栏拖拽把手 (Tree Resizer) */}
+                <div 
+                  className="w-2 cursor-col-resize hover:bg-black/10 active:bg-black/20 transition-colors z-10 -ml-1 mr-1 shrink-0" 
+                  onMouseDown={handleTreeMouseDown}
+                />
+                
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1 pl-2 border-l border-border/50">
                   <div className="flex flex-col gap-3">
                     {currentSourceSnapshot.files.map((file) => (
                       <div
