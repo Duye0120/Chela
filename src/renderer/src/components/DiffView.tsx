@@ -243,7 +243,7 @@ function TextDiffView({ diffState, maxHunks, maxLines, layout = "vertical" }: {
   const renderHorizontal = () => {
     const splitRows = buildSplitRows(lines);
     return (
-      <div className="diff-view-code min-w-full w-max font-mono text-[11px] leading-5">
+      <div className="diff-view-code w-full font-mono text-[11px] leading-5">
         {splitRows.map((row, index) => {
           if (row.isMeta && row.meta) {
             const isHunkHeader = row.meta.content.startsWith("@@");
@@ -263,7 +263,7 @@ function TextDiffView({ diffState, maxHunks, maxLines, layout = "vertical" }: {
           const renderSide = (line: DiffLine | null | undefined, isRight: boolean) => {
             if (!line) {
               return (
-                <div className="grid h-full grid-cols-[2.5rem_1.25rem_auto] bg-transparent">
+                <div className="grid h-full grid-cols-[2.5rem_1.25rem_minmax(0,1fr)] bg-transparent">
                   <span className="bg-transparent" />
                   <span className="bg-transparent" />
                   <span className="bg-transparent" />
@@ -271,14 +271,14 @@ function TextDiffView({ diffState, maxHunks, maxLines, layout = "vertical" }: {
               );
             }
             return (
-              <div className={`grid h-full grid-cols-[2.5rem_1.25rem_auto] ${LINE_COLORS[line.type as Exclude<DiffLineType, "meta">]}`}>
+              <div className={`grid h-full grid-cols-[2.5rem_1.25rem_minmax(0,1fr)] ${LINE_COLORS[line.type as Exclude<DiffLineType, "meta">]}`}>
                 <span className={`select-none px-1.5 py-0.5 text-right text-[9px] ${GUTTER_COLORS[line.type]}`}>
                   {isRight ? (line.newNum ?? "") : (line.oldNum ?? "")}
                 </span>
                 <span className="select-none py-0.5 text-center text-[10px]">
                   {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
                 </span>
-                <span className="whitespace-pre py-0.5 pr-2">
+                <span className="whitespace-pre-wrap break-all py-0.5 pr-2 min-w-0">
                   {line.content}
                 </span>
               </div>
@@ -286,7 +286,7 @@ function TextDiffView({ diffState, maxHunks, maxLines, layout = "vertical" }: {
           };
 
           return (
-            <div key={index} className="grid min-w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] divide-x divide-border">
+            <div key={index} className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] divide-x divide-border">
               {renderSide(row.left, false)}
               {renderSide(row.right, true)}
             </div>
