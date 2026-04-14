@@ -396,6 +396,44 @@ export type AgentRunScope = {
   runId: string;
 };
 
+export type PendingApprovalNotice = {
+  sessionId: string;
+  runId: string;
+  ownerId: string;
+  modelEntryId: string | null;
+  runKind: RunKind | null;
+  runSource: RunSource | null;
+  lane: "foreground" | "background" | null;
+  state:
+    | "running"
+    | "awaiting_confirmation"
+    | "executing_tool"
+    | "completed"
+    | "aborted"
+    | "failed"
+    | null;
+  startedAt: number | null;
+  currentStepId: string | null;
+  approval: {
+    requestId: string;
+    kind: "shell" | "file_write" | "mcp";
+    payloadHash: string;
+    reason: string;
+    createdAt: number;
+    title: string;
+    description: string;
+    detail?: string;
+  };
+};
+
+export type PendingApprovalGroup = {
+  sessionId: string;
+  ownerId: string;
+  count: number;
+  latestCreatedAt: number;
+  approvals: PendingApprovalNotice[];
+};
+
 export type InterruptedApprovalNotice = {
   sessionId: string;
   runId: string;
@@ -571,6 +609,9 @@ export type DesktopApi = {
     onEvent: (callback: (event: AgentEvent) => void) => () => void;
     cancel: (scope: AgentRunScope) => Promise<void>;
     confirmResponse: (response: ConfirmationResponse) => Promise<void>;
+    listPendingApprovalGroups: (
+      sessionId?: string,
+    ) => Promise<PendingApprovalGroup[]>;
     listInterruptedApprovals: (
       sessionId?: string,
     ) => Promise<InterruptedApprovalNotice[]>;

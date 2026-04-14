@@ -39,6 +39,8 @@ import type {
   InterruptedApprovalGroup,
   InterruptedApprovalNotice,
   ModelEntry,
+  PendingApprovalGroup,
+  PendingApprovalNotice,
   ProviderSource,
   SelectedFile,
   ThinkingLevel,
@@ -51,6 +53,10 @@ import {
 } from "@renderer/components/assistant-ui/attachment";
 import { BranchSwitcher } from "@renderer/components/assistant-ui/branch-switcher";
 import { Button } from "@renderer/components/assistant-ui/button";
+import {
+  InterruptedApprovalNoticeBar,
+  PendingApprovalNoticeBar,
+} from "@renderer/components/assistant-ui/approval-notice-bar";
 import { ContextSummaryTrigger } from "@renderer/components/assistant-ui/context-summary-trigger";
 import { MarkdownText } from "@renderer/components/assistant-ui/markdown-text";
 import {
@@ -72,6 +78,11 @@ import {
 } from "@renderer/components/assistant-ui/select";
 import { ToolFallback } from "@renderer/components/assistant-ui/tool-fallback";
 import { TooltipIconButton } from "@renderer/components/assistant-ui/tooltip-icon-button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@renderer/components/ui/tooltip";
 import {
   selectedFileToCreateAttachment,
   toPersistedMessageAttachment,
@@ -111,8 +122,13 @@ type ThreadProps = {
   branchSummary?: GitBranchSummary | null;
   contextSummary?: ContextUsageSummary;
   interruptedApprovalGroups?: InterruptedApprovalGroup[];
+  pendingApprovalGroups?: PendingApprovalGroup[];
   onDismissInterruptedApproval?: (runId: string) => void | Promise<void>;
   onResumeInterruptedApproval?: (runId: string) => Promise<string>;
+  onResolvePendingApproval?: (
+    requestId: string,
+    allowed: boolean,
+  ) => Promise<void>;
   onCompactContext?: () => void | Promise<void>;
   onBranchChanged?: () => void | Promise<void>;
   disableGlobalSideEffects?: boolean;
@@ -138,8 +154,13 @@ type ThreadResolvedProps = {
   branchSummary: GitBranchSummary | null;
   contextSummary: ContextUsageSummary;
   interruptedApprovalGroups: InterruptedApprovalGroup[];
+  pendingApprovalGroups: PendingApprovalGroup[];
   onDismissInterruptedApproval: (runId: string) => void | Promise<void>;
   onResumeInterruptedApproval: (runId: string) => Promise<string>;
+  onResolvePendingApproval: (
+    requestId: string,
+    allowed: boolean,
+  ) => Promise<void>;
   onCompactContext: () => void | Promise<void>;
   onBranchChanged: () => void | Promise<void>;
   disableGlobalSideEffects: boolean;
@@ -252,10 +273,12 @@ export const Thread: FC<ThreadProps> = ({
   branchSummary = null,
   contextSummary = EMPTY_CONTEXT_USAGE_SUMMARY,
   interruptedApprovalGroups = [],
+  pendingApprovalGroups = [],
   onDismissInterruptedApproval = () => undefined,
   onResumeInterruptedApproval = async () => {
     throw new Error("恢复执行当前不可用。");
   },
+  onResolvePendingApproval = async () => undefined,
   onCompactContext = () => undefined,
   onBranchChanged = () => undefined,
   disableGlobalSideEffects = false,
@@ -352,8 +375,10 @@ export const Thread: FC<ThreadProps> = ({
               branchSummary={branchSummary}
               contextSummary={contextSummary}
               interruptedApprovalGroups={interruptedApprovalGroups}
+              pendingApprovalGroups={pendingApprovalGroups}
               onDismissInterruptedApproval={onDismissInterruptedApproval}
               onResumeInterruptedApproval={onResumeInterruptedApproval}
+              onResolvePendingApproval={onResolvePendingApproval}
               onCompactContext={onCompactContext}
               onBranchChanged={onBranchChanged}
               disableGlobalSideEffects={disableGlobalSideEffects}
@@ -420,8 +445,10 @@ const Composer: FC<ThreadResolvedProps> = ({
   branchSummary,
   contextSummary,
   interruptedApprovalGroups,
+  pendingApprovalGroups,
   onDismissInterruptedApproval,
   onResumeInterruptedApproval,
+  onResolvePendingApproval,
   onCompactContext,
   onBranchChanged,
   disableGlobalSideEffects,
@@ -507,9 +534,8 @@ const Composer: FC<ThreadResolvedProps> = ({
         <ComposerPrimitive.Input
           placeholder="向 Chela 提问..."
           ref={composerInputRef}
-          className={`min-h-0 w-full resize-none bg-transparent px-1 py-1 text-[15px] leading-6 text-foreground outline-none placeholder:text-[color:var(--color-text-secondary)]/85 ${
-            inputScrollable ? "overflow-y-auto pr-2" : "overflow-y-hidden"
-          }`}
+          className={`min-h-0 w-full resize-none bg-transparent px-1 py-1 text-[15px] leading-6 text-foreground outline-none placeholder:text-[color:var(--color-text-secondary)]/85 ${inputScrollable ? "overflow-y-auto pr-2" : "overflow-y-hidden"
+            }`}
           minRows={1}
           maxRows={5}
           autoFocus={visible}
@@ -543,6 +569,14 @@ const Composer: FC<ThreadResolvedProps> = ({
           </p>
         ) : null}
       </div>
+      {pendingApprovalGroups.length > 0 ? (
+        <PendingApprovalNoticeBar
+          groups={pendingApprovalGroups}
+          onResolve={async (approval: PendingApprovalNotice, allowed: boolean) => {
+            await onResolvePendingApproval(approval.approval.requestId, allowed);
+          }}
+        />
+      ) : null}
       {interruptedApprovalGroups.length > 0 ? (
         <InterruptedApprovalNoticeBar
           groups={interruptedApprovalGroups}
@@ -560,181 +594,6 @@ const Composer: FC<ThreadResolvedProps> = ({
         disableGlobalSideEffects={disableGlobalSideEffects}
       />
     </ComposerPrimitive.Root>
-  );
-};
-
-const InterruptedApprovalNoticeBar: FC<{
-  groups: InterruptedApprovalGroup[];
-  onDismiss: (runId: string) => void | Promise<void>;
-  onUseRecoveryPrompt: (approval: InterruptedApprovalNotice) => void;
-  onResume: (approval: InterruptedApprovalNotice) => Promise<void>;
-}> = ({ groups, onDismiss, onUseRecoveryPrompt, onResume }) => {
-  const [resumingRunId, setResumingRunId] = useState<string | null>(null);
-
-  return (
-    <div className="flex flex-col gap-2 px-1">
-      {groups.map((group) => {
-        const latestApproval = group.approvals[0];
-        if (!latestApproval) {
-          return null;
-        }
-
-        const isResuming = resumingRunId === latestApproval.runId;
-
-        return (
-          <div
-            key={`${group.sessionId}:${group.ownerId}:${latestApproval.runId}`}
-            className="flex items-start justify-between gap-3 rounded-[10px] bg-[color:var(--color-control-panel-bg)] px-3 py-2.5 text-[13px] text-[color:var(--color-text-secondary)] shadow-[var(--color-control-shadow)]"
-          >
-            <div className="min-w-0 space-y-2">
-              <InterruptedApprovalSummary
-                approval={latestApproval}
-                count={group.count}
-              />
-              <InterruptedApprovalDetails approval={latestApproval} />
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              {latestApproval.canResume ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={isResuming}
-                  onClick={() => {
-                    setResumingRunId(latestApproval.runId);
-                    void onResume(latestApproval)
-                      .catch(() => undefined)
-                      .finally(() => {
-                        setResumingRunId((current) =>
-                          current === latestApproval.runId ? null : current,
-                        );
-                      });
-                  }}
-                >
-                  恢复执行
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={isResuming}
-                onClick={() => {
-                  onUseRecoveryPrompt(latestApproval);
-                }}
-              >
-                填入输入框
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={isResuming}
-                onClick={() => {
-                  void onDismiss(latestApproval.runId);
-                }}
-              >
-                知道了
-              </Button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
-const approvalKindLabels: Record<
-  InterruptedApprovalNotice["approval"]["kind"],
-  string
-> = {
-  shell: "Shell",
-  file_write: "文件写入",
-  mcp: "MCP",
-};
-
-function formatInterruptedApprovalTime(timestamp: number | null): string {
-  if (!timestamp) {
-    return "未知时间";
-  }
-
-  return new Date(timestamp).toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatRunKind(runKind: InterruptedApprovalNotice["runKind"]): string {
-  if (!runKind) {
-    return "未知 run";
-  }
-
-  return runKind;
-}
-
-function formatShortId(value: string): string {
-  return value.length > 12 ? `${value.slice(0, 12)}…` : value;
-}
-
-const InterruptedApprovalSummary: FC<{
-  approval: InterruptedApprovalNotice;
-  count: number;
-}> = ({ approval, count }) => {
-  const kindLabel = approvalKindLabels[approval.approval.kind];
-
-  return (
-    <div className="space-y-1">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="rounded-full bg-[color:var(--color-control-bg)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--color-text-secondary)]">
-          {kindLabel}
-        </span>
-        <p className="font-medium text-[color:var(--color-text-primary)]">
-          待确认操作在应用重启时中断
-        </p>
-      </div>
-      <p className="line-clamp-2 leading-5">
-        {approval.approval.title}：{approval.approval.description}
-      </p>
-      <p className="text-[12px] leading-5 text-[color:var(--color-text-secondary)]/85">
-        原 run 已标记为中断，当前保留决策上下文。{count > 1 ? `同组记录 ${count} 条。` : ""}
-      </p>
-    </div>
-  );
-};
-
-const InterruptedApprovalDetails: FC<{
-  approval: InterruptedApprovalNotice;
-}> = ({ approval }) => {
-  const metaItems = [
-    `run ${formatShortId(approval.runId)}`,
-    formatRunKind(approval.runKind),
-    `模型 ${approval.modelEntryId ? formatShortId(approval.modelEntryId) : "未知"}`,
-    `中断 ${formatInterruptedApprovalTime(approval.interruptedAt)}`,
-  ];
-
-  return (
-    <details className="group">
-      <summary className="cursor-pointer select-none text-[12px] leading-5 text-[color:var(--color-text-secondary)]/85 outline-none transition-colors hover:text-[color:var(--color-text-primary)]">
-        查看审批上下文
-      </summary>
-      <div className="mt-2 space-y-2 rounded-[8px] bg-[color:var(--color-control-bg)] px-2.5 py-2">
-        <p className="text-[12px] leading-5">
-          触发原因：{approval.approval.reason}
-        </p>
-        {approval.approval.detail ? (
-          <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded-[6px] bg-[color:var(--color-control-panel-bg)] px-2 py-1.5 text-[11px] leading-4 text-[color:var(--color-text-secondary)]">
-            {approval.approval.detail}
-          </pre>
-        ) : null}
-        <div className="flex flex-wrap gap-x-2 gap-y-1 text-[11px] leading-4 text-[color:var(--color-text-secondary)]/80">
-          {metaItems.map((item) => (
-            <span key={item}>{item}</span>
-          ))}
-        </div>
-      </div>
-    </details>
   );
 };
 
@@ -771,159 +630,159 @@ const ComposerAction: FC<
   isCancelling,
   isVisionBlocked,
 }) => {
-  const isThreadRunning = useAuiState((s) => s.thread.isRunning);
-  const composerHasText = useAuiState(
-    (s) => s.composer.text.trim().length > 0,
-  );
-  const currentModel = modelOptions.find((model) => model.id === currentModelId);
-  const normalizedThinkingLevel = normalizeThinkingLevel(thinkingLevel);
-  const effectiveThinkingLevel = getEffectiveThinkingLevel(
-    currentModelEntry,
-    normalizedThinkingLevel,
-  );
-  const thinkingOptions = getThinkingOptionsForModel(
-    currentModelEntry,
-    effectiveThinkingLevel,
-  );
-  const thinkingEnabled = canConfigureThinking(currentModelEntry);
-  const thinkingTitle = thinkingEnabled
-    ? getThinkingLevelLabel(effectiveThinkingLevel)
-    : getThinkingHint(currentModelEntry);
-  const showStopAction = isThreadRunning || isCancelling;
-  const disableSend =
-    isVisionBlocked ||
-    (!showStopAction && attachments.length === 0 && !composerHasText);
+    const isThreadRunning = useAuiState((s) => s.thread.isRunning);
+    const composerHasText = useAuiState(
+      (s) => s.composer.text.trim().length > 0,
+    );
+    const currentModel = modelOptions.find((model) => model.id === currentModelId);
+    const normalizedThinkingLevel = normalizeThinkingLevel(thinkingLevel);
+    const effectiveThinkingLevel = getEffectiveThinkingLevel(
+      currentModelEntry,
+      normalizedThinkingLevel,
+    );
+    const thinkingOptions = getThinkingOptionsForModel(
+      currentModelEntry,
+      effectiveThinkingLevel,
+    );
+    const thinkingEnabled = canConfigureThinking(currentModelEntry);
+    const thinkingTitle = thinkingEnabled
+      ? getThinkingLevelLabel(effectiveThinkingLevel)
+      : getThinkingHint(currentModelEntry);
+    const showStopAction = isThreadRunning || isCancelling;
+    const disableSend =
+      isVisionBlocked ||
+      (!showStopAction && attachments.length === 0 && !composerHasText);
 
-  return (
-    <div className="relative flex items-center justify-between pt-1">
-      <div className="flex items-center gap-1.5">
-        <DesktopComposerAddAttachment
-          isPickingFiles={isPickingFiles}
-          onAttachFiles={onAttachFiles}
-        />
-        <ModelSelector.Root
-          models={modelOptions}
-          value={currentModelId}
-          onValueChange={onModelChange}
-        >
-          <ModelSelector.Trigger
-            variant="outline"
-            size="sm"
-            title={currentModel?.name ?? "选择模型"}
-            aria-label={currentModel?.name ? `当前模型：${currentModel.name}` : "选择模型"}
-            className="h-8 rounded-[var(--radius-shell)] px-2 text-[12px]"
-          >
-            <BotIcon className="size-4 shrink-0" />
-          </ModelSelector.Trigger>
-          <ModelSelector.Content
-            side="top"
-            align="start"
-            sideOffset={8}
-            className="min-w-[220px]"
+    return (
+      <div className="relative flex items-center justify-between pt-1">
+        <div className="flex items-center gap-1.5">
+          <DesktopComposerAddAttachment
+            isPickingFiles={isPickingFiles}
+            onAttachFiles={onAttachFiles}
           />
-        </ModelSelector.Root>
-        {thinkingEnabled ? (
-          <SelectRoot
-            value={effectiveThinkingLevel}
-            onValueChange={(value) =>
-              onThinkingLevelChange(value as ThinkingLevel)
-            }
+          <ModelSelector.Root
+            models={modelOptions}
+            value={currentModelId}
+            onValueChange={onModelChange}
           >
-            <SelectTrigger
+            <ModelSelector.Trigger
               variant="outline"
               size="sm"
-              title={thinkingTitle}
-              aria-label={`当前思考强度：${thinkingTitle}`}
+              title={currentModel?.name ?? "选择模型"}
+              aria-label={currentModel?.name ? `当前模型：${currentModel.name}` : "选择模型"}
               className="h-8 rounded-[var(--radius-shell)] px-2 text-[12px]"
             >
-              <BrainCircuitIcon className="size-4 shrink-0" />
-            </SelectTrigger>
-            <SelectContent side="top" align="start" sideOffset={8}>
-              {thinkingOptions.map((level) => (
-                <SelectItem
-                  key={level.value}
-                  value={level.value}
-                  textValue={level.label}
-                >
-                  <span className="flex items-center gap-2">
-                    <BrainCircuitIcon className="size-4 shrink-0" />
-                    <span>{level.label}</span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </SelectRoot>
-        ) : (
-          <div
-            title={thinkingTitle}
-            aria-label={thinkingTitle}
-            className="flex h-8 items-center justify-center rounded-md px-2 text-[color:var(--color-text-secondary)]"
-          >
-            <BrainCircuitIcon className="size-4 shrink-0 opacity-55" />
-          </div>
-        )}
-      </div>
-      {showStopAction ? (
-        <Button
-          type="button"
-          variant="default"
-          onClick={() => {
-            if (!isCancelling) {
-              onCancelRun();
-            }
-          }}
-          disabled={isCancelling}
-          className="flex h-9 items-center gap-2 rounded-full bg-[var(--color-accent)] px-3 text-white shadow-none hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-100"
-          aria-label={isCancelling ? runStatusLabel || "正在停止…" : "停止生成"}
-        >
-          {isCancelling ? (
-            <LoaderCircleIcon className="size-3.5 animate-spin" />
-          ) : (
-            <SquareIcon className="size-3 fill-current" />
-          )}
-          <span className="text-[13px] font-medium">
-            {isCancelling ? runStatusLabel || "正在停止…" : "停止"}
-          </span>
-        </Button>
-      ) : (
-        <>
-          {disableSend ? (
-            <TooltipIconButton
-              tooltip={
-                isVisionBlocked
-                  ? "当前模型不支持图片"
-                  : "请输入消息或附加文件后再发送"
+              <BotIcon className="size-4 shrink-0" />
+            </ModelSelector.Trigger>
+            <ModelSelector.Content
+              side="top"
+              align="start"
+              sideOffset={8}
+              className="min-w-[220px]"
+            />
+          </ModelSelector.Root>
+          {thinkingEnabled ? (
+            <SelectRoot
+              value={effectiveThinkingLevel}
+              onValueChange={(value) =>
+                onThinkingLevelChange(value as ThinkingLevel)
               }
-              side="bottom"
-              type="button"
-              variant="default"
-              size="icon"
-              disabled
-              className="size-9 rounded-full bg-[var(--color-accent)] text-white shadow-none hover:bg-[var(--color-accent-hover)]"
-              aria-label="Send message"
             >
-              <ArrowUpIcon className="size-4" />
-            </TooltipIconButton>
+              <SelectTrigger
+                variant="outline"
+                size="sm"
+                title={thinkingTitle}
+                aria-label={`当前思考强度：${thinkingTitle}`}
+                className="h-8 rounded-[var(--radius-shell)] px-2 text-[12px]"
+              >
+                <BrainCircuitIcon className="size-4 shrink-0" />
+              </SelectTrigger>
+              <SelectContent side="top" align="start" sideOffset={8}>
+                {thinkingOptions.map((level) => (
+                  <SelectItem
+                    key={level.value}
+                    value={level.value}
+                    textValue={level.label}
+                  >
+                    <span className="flex items-center gap-2">
+                      <BrainCircuitIcon className="size-4 shrink-0" />
+                      <span>{level.label}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </SelectRoot>
           ) : (
-            <ComposerPrimitive.Send asChild>
+            <div
+              title={thinkingTitle}
+              aria-label={thinkingTitle}
+              className="flex h-8 items-center justify-center rounded-md px-2 text-[color:var(--color-text-secondary)]"
+            >
+              <BrainCircuitIcon className="size-4 shrink-0 opacity-55" />
+            </div>
+          )}
+        </div>
+        {showStopAction ? (
+          <Button
+            type="button"
+            variant="default"
+            onClick={() => {
+              if (!isCancelling) {
+                onCancelRun();
+              }
+            }}
+            disabled={isCancelling}
+            className="flex h-9 items-center gap-2 rounded-full bg-[var(--color-accent)] px-3 text-white shadow-none hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-100"
+            aria-label={isCancelling ? runStatusLabel || "正在停止…" : "停止生成"}
+          >
+            {isCancelling ? (
+              <LoaderCircleIcon className="size-3.5 animate-spin" />
+            ) : (
+              <SquareIcon className="size-3 fill-current" />
+            )}
+            <span className="text-[13px] font-medium">
+              {isCancelling ? runStatusLabel || "正在停止…" : "停止"}
+            </span>
+          </Button>
+        ) : (
+          <>
+            {disableSend ? (
               <TooltipIconButton
-                tooltip="发送"
+                tooltip={
+                  isVisionBlocked
+                    ? "当前模型不支持图片"
+                    : "请输入消息或附加文件后再发送"
+                }
                 side="bottom"
                 type="button"
                 variant="default"
                 size="icon"
+                disabled
                 className="size-9 rounded-full bg-[var(--color-accent)] text-white shadow-none hover:bg-[var(--color-accent-hover)]"
                 aria-label="Send message"
               >
                 <ArrowUpIcon className="size-4" />
               </TooltipIconButton>
-            </ComposerPrimitive.Send>
-          )}
-        </>
-      )}
-    </div>
-  );
-};
+            ) : (
+              <ComposerPrimitive.Send asChild>
+                <TooltipIconButton
+                  tooltip="发送"
+                  side="bottom"
+                  type="button"
+                  variant="default"
+                  size="icon"
+                  className="size-9 rounded-full bg-[var(--color-accent)] text-white shadow-none hover:bg-[var(--color-accent-hover)]"
+                  aria-label="Send message"
+                >
+                  <ArrowUpIcon className="size-4" />
+                </TooltipIconButton>
+              </ComposerPrimitive.Send>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
 
 const ComposerStatusBar: FC<{
   branchSummary: GitBranchSummary | null;
@@ -940,73 +799,85 @@ const ComposerStatusBar: FC<{
   onBranchChanged,
   disableGlobalSideEffects,
 }) => {
-  const isThreadRunning = useAuiState((s) => s.thread.isRunning);
-  const composerText = useAuiState((s) => s.composer.text);
-  const { runStage, isCancelling } = useThreadRunStatus();
-  const usedPercent = formatUsedPercent(contextSummary);
-  const showUsage =
-    typeof contextSummary.latestInputTokens === "number" ||
-    typeof contextSummary.latestOutputTokens === "number";
-  const totalUsageTokens =
-    contextSummary.usageTotalInputTokens + contextSummary.usageTotalOutputTokens;
-  const showBtw = isBtwCommand(composerText);
-  const branchInteractionDisabled =
-    disableGlobalSideEffects ||
-    isThreadRunning ||
-    isCancelling ||
-    runStage !== "idle";
+    const isThreadRunning = useAuiState((s) => s.thread.isRunning);
+    const composerText = useAuiState((s) => s.composer.text);
+    const { runStage, isCancelling } = useThreadRunStatus();
+    const usedPercent = formatUsedPercent(contextSummary);
+    const showUsage =
+      typeof contextSummary.latestInputTokens === "number" ||
+      typeof contextSummary.latestOutputTokens === "number";
+    const totalUsageTokens =
+      contextSummary.usageTotalInputTokens + contextSummary.usageTotalOutputTokens;
+    const showBtw = isBtwCommand(composerText);
+    const branchInteractionDisabled =
+      disableGlobalSideEffects ||
+      isThreadRunning ||
+      isCancelling ||
+      runStage !== "idle";
 
-  return (
-    <div className="flex items-center justify-between gap-3 px-1">
-      <BranchSwitcher
-        branchSummary={branchSummary}
-        disabled={branchInteractionDisabled}
-        onBranchChanged={onBranchChanged}
-      />
+    return (
+      <div className="flex items-center justify-between gap-3 px-1">
+        <BranchSwitcher
+          branchSummary={branchSummary}
+          disabled={branchInteractionDisabled}
+          onBranchChanged={onBranchChanged}
+        />
 
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-hidden">
-        {showBtw ? (
-          <span className="shrink-0 rounded-full bg-[var(--color-accent-subtle)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-accent)]">
-            /btw 旁路补充
-          </span>
-        ) : null}
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-hidden">
+          {showBtw ? (
+            <span className="shrink-0 rounded-full bg-[var(--color-accent-subtle)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-accent)]">
+              /btw 旁路补充
+            </span>
+          ) : null}
 
-        {runStage !== "idle" && runStatusLabel ? (
-          <span className="min-w-0 truncate rounded-full bg-shell-panel px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-text-secondary)] dark:bg-white/8">
-            {runStatusLabel}
-          </span>
-        ) : null}
+          {runStage !== "idle" && runStatusLabel ? (
+            <span className="min-w-0 truncate rounded-full bg-shell-panel px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-text-secondary)] dark:bg-white/8">
+              {runStatusLabel}
+            </span>
+          ) : null}
 
-        {showUsage ? (
-          <span
-            className="shrink-0 rounded-full bg-shell-panel px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-text-secondary)] [font-variant-numeric:tabular-nums] dark:bg-white/8"
-            title={`最近输入 ${formatTokenCount(contextSummary.latestInputTokens)} / 最近输出 ${formatTokenCount(contextSummary.latestOutputTokens)}`}
-          >
-            in {formatStatusTokenCount(contextSummary.latestInputTokens)} · out{" "}
-            {formatStatusTokenCount(contextSummary.latestOutputTokens)}
-          </span>
-        ) : null}
+          {showUsage ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="shrink-0 cursor-help rounded-full bg-shell-panel px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-text-secondary)] [font-variant-numeric:tabular-nums] dark:bg-white/8"
+                >
+                  in {formatStatusTokenCount(contextSummary.latestInputTokens)} · out{" "}
+                  {formatStatusTokenCount(contextSummary.latestOutputTokens)}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                最近输入 {formatTokenCount(contextSummary.latestInputTokens)} / 最近输出 {formatTokenCount(contextSummary.latestOutputTokens)}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
 
-        {contextSummary.usageMessageCount > 0 ? (
-          <span
-            className="hidden shrink-0 rounded-full bg-shell-panel px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-text-secondary)] [font-variant-numeric:tabular-nums] dark:bg-white/8 md:inline-flex"
-            title={`累计 ${contextSummary.usageMessageCount} 轮，输入 ${formatTokenCount(contextSummary.usageTotalInputTokens)} / 输出 ${formatTokenCount(contextSummary.usageTotalOutputTokens)}`}
-          >
-            total {formatStatusTokenCount(totalUsageTokens)}
-          </span>
-        ) : null}
+          {contextSummary.usageMessageCount > 0 ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="hidden shrink-0 cursor-help rounded-full bg-shell-panel px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-text-secondary)] [font-variant-numeric:tabular-nums] dark:bg-white/8 md:inline-flex"
+                >
+                  total {formatStatusTokenCount(totalUsageTokens)}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                累计 {contextSummary.usageMessageCount} 轮，输入 {formatTokenCount(contextSummary.usageTotalInputTokens)} / 输出 {formatTokenCount(contextSummary.usageTotalOutputTokens)}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
 
-        {usedPercent ? (
-          <span className="hidden shrink-0 rounded-full bg-shell-panel px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-text-secondary)] [font-variant-numeric:tabular-nums] dark:bg-white/8 sm:inline-flex">
-            ctx {usedPercent}
-          </span>
-        ) : null}
+          {usedPercent ? (
+            <span className="hidden shrink-0 rounded-full bg-shell-panel px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-text-secondary)] [font-variant-numeric:tabular-nums] dark:bg-white/8 sm:inline-flex">
+              ctx {usedPercent}
+            </span>
+          ) : null}
+        </div>
+
+        <ContextSummaryTrigger summary={contextSummary} onCompact={onCompactContext} />
       </div>
-
-      <ContextSummaryTrigger summary={contextSummary} onCompact={onCompactContext} />
-    </div>
-  );
-};
+    );
+  };
 
 const AssistantRunningNotice: FC<{ label: string; compact?: boolean }> = ({
   label,
@@ -1109,7 +980,7 @@ const MessageError: FC = () => {
 const AssistantMessage: FC = () => {
   return (
     <MessagePrimitive.Root
-      className="fade-in slide-in-from-bottom-1 relative mx-auto w-full max-w-(--thread-max-width) animate-in py-4 duration-150"
+      className="fade-in slide-in-from-bottom-1 relative mx-auto w-full max-w-(--thread-max-width) animate-in py-5 duration-150"
       data-role="assistant"
     >
       <div className="wrap-break-word px-1 py-1 text-[15px] leading-7 text-foreground">
@@ -1189,10 +1060,10 @@ const MessageBranchPicker: FC<{ className?: string }> = ({ className }) => {
 const EditComposer: FC = () => {
   const aui = useAui();
   const text = useAuiState((s) => s.composer.text);
-  
+
   return (
     <ComposerPrimitive.Root className="relative col-start-2 min-w-0">
-      <div className="wrap-break-word peer grid rounded-[var(--radius-shell)] bg-slate-100/80 px-4 py-3 text-slate-900 shadow-sm dark:bg-slate-800/80 dark:text-slate-100">
+      <div className="wrap-break-word peer grid rounded-[var(--radius-shell)] bg-slate-100/80 px-4 py-3.5 text-[15px] leading-7 text-slate-900 shadow-sm dark:bg-slate-800/80 dark:text-slate-100">
         <div className="pointer-events-none col-start-1 row-start-1 invisible break-words whitespace-pre-wrap">
           {text + "\u200b"}
         </div>
@@ -1209,7 +1080,7 @@ const EditComposer: FC = () => {
 const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
-      className="fade-in slide-in-from-bottom-1 mx-auto grid w-full max-w-(--thread-max-width) animate-in auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 py-3 duration-150 [&:where(>*)]:col-start-2"
+      className="fade-in slide-in-from-bottom-1 mx-auto grid w-full max-w-(--thread-max-width) animate-in auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 py-5 duration-150 [&:where(>*)]:col-start-2"
       data-role="user"
     >
       <UserMessageAttachments />
@@ -1219,7 +1090,7 @@ const UserMessage: FC = () => {
 
       <ComposerPrimitive.If editing={false}>
         <div className="relative col-start-2 min-w-0">
-          <div className="wrap-break-word peer rounded-[var(--radius-shell)] bg-slate-100/80 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 shadow-sm empty:hidden">
+          <div className="wrap-break-word peer rounded-[var(--radius-shell)] bg-slate-100/80 dark:bg-slate-800/80 px-4 py-3.5 text-[15px] leading-7 text-slate-900 dark:text-slate-100 shadow-sm empty:hidden">
             <MessagePrimitive.Parts />
           </div>
           <div className="mt-1 flex min-h-6 justify-end">

@@ -3,6 +3,7 @@ import type {
   AgentRunScope,
   ChatSession,
   DesktopApi,
+  PendingApprovalGroup,
   InterruptedApprovalGroup,
   InterruptedApprovalNotice,
   SessionGroup,
@@ -61,6 +62,8 @@ const desktopApi: DesktopApi = {
     cancel: (scope: AgentRunScope) => ipcRenderer.invoke(IPC_CHANNELS.agentCancel, scope),
     confirmResponse: (response: ConfirmationResponse) =>
       ipcRenderer.invoke(IPC_CHANNELS.agentConfirmResponse, response),
+    listPendingApprovalGroups: (sessionId?: string): Promise<PendingApprovalGroup[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.agentListPendingApprovalGroups, sessionId),
     listInterruptedApprovals: (sessionId?: string): Promise<InterruptedApprovalNotice[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.agentListInterruptedApprovals, sessionId),
     listInterruptedApprovalGroups: (sessionId?: string): Promise<InterruptedApprovalGroup[]> =>

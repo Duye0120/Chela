@@ -91,7 +91,7 @@ export function getContextStatusCopy(summary: ContextUsageSummary) {
   }
 
   if (summary.state === "usage-only") {
-    return "当前模型未提供 context window";
+    return "模型未提供视窗上限";
   }
 
   return "未知";

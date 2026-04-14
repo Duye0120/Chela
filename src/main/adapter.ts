@@ -144,7 +144,7 @@ export class ElectronAdapter {
     title: string;
     description: string;
     detail?: string;
-  }): Promise<ConfirmationResponse> {
+  }): Promise<ConfirmationResponse | null> {
     appendConfirmationRequestedEvent({
       sessionId: this.scope.sessionId,
       runId: this.scope.runId,
@@ -171,6 +171,10 @@ export class ElectronAdapter {
       };
     }
 
+    if (this.prefersInlineConfirmation()) {
+      return null;
+    }
+
     const result = await dialog.showMessageBox(this.window, {
       type: "warning",
       buttons: ["拒绝", "允许"],
@@ -186,6 +190,10 @@ export class ElectronAdapter {
       requestId: input.requestId,
       allowed: result.response === 1,
     };
+  }
+
+  prefersInlineConfirmation(): boolean {
+    return !this.window.isDestroyed();
   }
 
   recordConfirmationResolution(resolution: HarnessApprovalResolution): void {

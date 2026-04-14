@@ -35,6 +35,7 @@ export const IPC_CHANNELS = {
   agentCancel: "agent:cancel",
   agentConfirmRequest: "agent:confirm-request",
   agentConfirmResponse: "agent:confirm-response",
+  agentListPendingApprovalGroups: "agent:list-pending-approval-groups",
   agentListInterruptedApprovals: "agent:list-interrupted-approvals",
   agentListInterruptedApprovalGroups: "agent:list-interrupted-approval-groups",
   agentDismissInterruptedApproval: "agent:dismiss-interrupted-approval",

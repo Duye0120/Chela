@@ -91,6 +91,40 @@ export function AppearanceSection({
           }
         />
       </SettingsRow>
+
+      <SettingsRow label="终端字号" hint="默认字号会在新开终端时生效。">
+        <FieldInput
+          type="number"
+          min={10}
+          max={22}
+          value={settings.terminal.fontSize}
+          onChange={(event) =>
+            onSettingsChange({
+              terminal: {
+                ...settings.terminal,
+                fontSize: parseNumericInput(
+                  event.target.value,
+                  settings.terminal.fontSize,
+                ),
+              },
+            })
+          }
+        />
+      </SettingsRow>
+
+      <SettingsRow label="终端字体" hint="优先使用等宽字体。">
+        <FieldInput
+          value={settings.terminal.fontFamily}
+          onChange={(event) =>
+            onSettingsChange({
+              terminal: {
+                ...settings.terminal,
+                fontFamily: event.target.value,
+              },
+            })
+          }
+        />
+      </SettingsRow>
     </SettingsCard>
   );
 }
