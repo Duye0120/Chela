@@ -56,14 +56,10 @@ const MAX_DIFF_PANEL_SIZE = 44;
 const ROOT_UI_THEME_DATASET = "theme";
 const SETTINGS_ROUTE_PREFIX = "/settings";
 const SETTINGS_SECTION_IDS: SettingsSection[] = [
-  "general",
-  "keys",
-  "appearance",
-  "terminal",
-  "logs",
+  "ai_model",
   "workspace",
-  "archived",
-  "about",
+  "interface",
+  "system",
 ];
 
 function resolveSettingsSectionFromPath(pathname: string): SettingsSection | null {
@@ -76,12 +72,12 @@ function resolveSettingsSectionFromPath(pathname: string): SettingsSection | nul
     .replace(/^\/+/, "");
 
   if (!section) {
-    return "general";
+    return "ai_model";
   }
 
   return SETTINGS_SECTION_IDS.includes(section as SettingsSection)
     ? (section as SettingsSection)
-    : "general";
+    : "ai_model";
 }
 
 function clampSidebarSize(size: number) {
@@ -253,7 +249,7 @@ export default function App() {
   const [sidebarAnimating, setSidebarAnimating] = useState(false);
 
   const settingsSection = useMemo(
-    () => resolveSettingsSectionFromPath(location.pathname) ?? "general",
+    () => resolveSettingsSectionFromPath(location.pathname) ?? "ai_model",
     [location.pathname],
   );
   const mainView: "thread" | "settings" =
@@ -1214,7 +1210,7 @@ export default function App() {
     });
   }, [desktopApi]);
 
-  const openSettingsView = useCallback((section: SettingsSection = "general") => {
+  const openSettingsView = useCallback((section: SettingsSection = "ai_model") => {
     navigate(`${SETTINGS_ROUTE_PREFIX}/${section}`);
   }, [navigate]);
 
@@ -1332,7 +1328,7 @@ export default function App() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => openSettingsView("archived")}
+                  onClick={() => openSettingsView("system")}
                   className="rounded-[var(--radius-shell)]"
                 >
                   查看已归档
@@ -1585,7 +1581,7 @@ export default function App() {
                 runningSessionIds={runningSessionIds}
                 onSelectSession={selectSession}
                 onNewSession={createNewSession}
-                onOpenSettings={() => openSettingsView("general")}
+                onOpenSettings={() => openSettingsView("ai_model")}
                 onArchiveSession={archiveSession}
                 onUnarchiveSession={unarchiveSession}
                 onDeleteSession={deleteSessionPermanently}

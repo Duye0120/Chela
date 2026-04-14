@@ -74,6 +74,18 @@ export class HarnessRuntime {
     return [...this.interruptedApprovals];
   }
 
+  getPendingApprovals(sessionId?: string): HarnessRunSnapshot[] {
+    const pendingRuns = [...this.activeRunsById.values()]
+      .filter((run) => run.pendingApproval)
+      .map((run) => this.toSnapshot(run));
+
+    if (sessionId) {
+      return pendingRuns.filter((run) => run.sessionId === sessionId);
+    }
+
+    return pendingRuns;
+  }
+
   /** 确认已知晓某条中断记录（从列表中移除）。 */
   dismissInterruptedApproval(runId: string): boolean {
     const idx = this.interruptedApprovals.findIndex((r) => r.runId === runId);
@@ -110,6 +122,13 @@ export class HarnessRuntime {
         resumedFromStartedAt: interruptedApproval.startedAt ?? null,
         resumedFromCurrentStepId: interruptedApproval.currentStepId ?? null,
         resumedFromApprovalRequestId: interruptedApproval.approval.requestId,
+        resumedFromApprovalKind: interruptedApproval.approval.kind,
+        resumedFromApprovalPayloadHash: interruptedApproval.approval.payloadHash,
+        resumedFromApprovalTitle: interruptedApproval.approval.title,
+        resumedFromApprovalDescription: interruptedApproval.approval.description,
+        resumedFromApprovalReason: interruptedApproval.approval.reason,
+        resumedFromApprovalDetail: interruptedApproval.approval.detail ?? null,
+        resumedFromApprovalCreatedAt: interruptedApproval.approval.createdAt,
         resumedFromInterruptedAt: interruptedApproval.interruptedAt,
         resumedFromRecoveryStatus:
           interruptedApproval.recoveryStatus ?? "interrupted",

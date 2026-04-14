@@ -1,10 +1,73 @@
 import type { ConfirmationResponse } from "../../shared/agent-events.js";
 import type {
+  PendingApprovalGroup,
+  PendingApprovalNotice,
   InterruptedApprovalGroup,
   InterruptedApprovalNotice,
 } from "../../shared/contracts.js";
 import { buildInterruptedApprovalRecoveryPrompt } from "../../shared/interrupted-approval-recovery.js";
 import { harnessRuntime } from "./singleton.js";
+
+export function listPendingApprovalGroups(
+  sessionId?: string,
+): PendingApprovalGroup[] {
+  const pendingApprovals = harnessRuntime
+    .getPendingApprovals(sessionId)
+    .flatMap((run) => {
+      if (!run.pendingApproval) {
+        return [];
+      }
+
+      return [
+        {
+          sessionId: run.sessionId,
+          runId: run.runId,
+          ownerId: run.ownerId,
+          modelEntryId: run.modelEntryId ?? null,
+          runKind: run.runKind ?? null,
+          runSource: run.runSource ?? null,
+          lane: run.lane ?? null,
+          state: run.state ?? null,
+          startedAt: run.startedAt ?? null,
+          currentStepId: run.currentStepId ?? null,
+          approval: run.pendingApproval,
+        } satisfies PendingApprovalNotice,
+      ];
+    })
+    .sort((left, right) => right.approval.createdAt - left.approval.createdAt);
+
+  const grouped = new Map<string, PendingApprovalGroup>();
+
+  for (const approval of pendingApprovals) {
+    const key = `${approval.sessionId}::${approval.ownerId}`;
+    const existing = grouped.get(key);
+
+    if (existing) {
+      existing.count += 1;
+      existing.latestCreatedAt = Math.max(
+        existing.latestCreatedAt,
+        approval.approval.createdAt,
+      );
+      existing.approvals.push(approval);
+      existing.approvals.sort(
+        (left, right) => right.approval.createdAt - left.approval.createdAt,
+      );
+      continue;
+    }
+
+    grouped.set(key, {
+      sessionId: approval.sessionId,
+      ownerId: approval.ownerId,
+      count: 1,
+      latestCreatedAt: approval.approval.createdAt,
+      approvals: [approval],
+    });
+  }
+
+  return [...grouped.values()].sort(
+    (left, right) => right.latestCreatedAt - left.latestCreatedAt,
+  );
+}
 
 export function listInterruptedApprovals(
   sessionId?: string,

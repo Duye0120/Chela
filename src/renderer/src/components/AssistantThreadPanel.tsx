@@ -20,6 +20,7 @@ import type {
   DesktopApi,
   GitBranchSummary,
   InterruptedApprovalGroup,
+  PendingApprovalGroup,
   ThinkingLevel,
 } from "@shared/contracts";
 import { deriveSessionTitle } from "@renderer/lib/session";
@@ -392,6 +393,9 @@ function SessionRuntime({
   const [runStage, setRunStage] = useState<ChatRunStage>("idle");
   const [isSlowConnection, setIsSlowConnection] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [pendingApprovalGroups, setPendingApprovalGroups] = useState<
+    PendingApprovalGroup[]
+  >([]);
   const initialMessagesRef = useRef<ThreadMessageLike[]>(
     session.messages.map(toThreadMessage),
   );
@@ -412,6 +416,29 @@ function SessionRuntime({
   useEffect(() => {
     latestRunStateChangeRef.current = onRunStateChange;
   }, [onRunStateChange]);
+
+  const refreshPendingApprovalGroups = useCallback(
+    async (sessionId: string) => {
+      if (!desktopApi.agent.listPendingApprovalGroups) {
+        setPendingApprovalGroups([]);
+        return [] as PendingApprovalGroup[];
+      }
+
+      try {
+        const groups = await desktopApi.agent.listPendingApprovalGroups(sessionId);
+        setPendingApprovalGroups(groups);
+        return groups;
+      } catch {
+        setPendingApprovalGroups([]);
+        return [] as PendingApprovalGroup[];
+      }
+    },
+    [desktopApi],
+  );
+
+  useEffect(() => {
+    void refreshPendingApprovalGroups(session.id);
+  }, [refreshPendingApprovalGroups, session.id]);
 
   const clearConnectionTimers = useCallback(() => {
     if (stageTransitionTimerRef.current !== null) {
@@ -650,6 +677,16 @@ function SessionRuntime({
             publish();
             break;
 
+          case "confirmation_request":
+            void refreshPendingApprovalGroups(currentSession.id);
+            break;
+
+          case "run_state_changed":
+            if (event.state !== "awaiting_confirmation") {
+              void refreshPendingApprovalGroups(currentSession.id);
+            }
+            break;
+
           case "thinking_delta": {
             advanceRunFeedback(runToken, "thinking");
 
@@ -740,11 +777,13 @@ function SessionRuntime({
               ? `\n\n**错误：** ${event.message}`
               : `**错误：** ${event.message}`;
             finalize("error");
+            void refreshPendingApprovalGroups(currentSession.id);
             void latestReloadSessionRef.current(currentSession.id);
             break;
 
           case "agent_end":
             finalize("completed");
+            void refreshPendingApprovalGroups(currentSession.id);
             void latestReloadSessionRef.current(currentSession.id);
             break;
         }
@@ -817,6 +856,14 @@ function SessionRuntime({
         interruptedApprovalGroups={interruptedApprovalGroups}
         onDismissInterruptedApproval={onDismissInterruptedApproval}
         onResumeInterruptedApproval={handleResumeInterruptedApproval}
+        pendingApprovalGroups={pendingApprovalGroups}
+        onResolvePendingApproval={async (requestId, allowed) => {
+          await desktopApi.agent.confirmResponse({
+            requestId,
+            allowed,
+          });
+          await refreshPendingApprovalGroups(session.id);
+        }}
         onCompactContext={async () => {
           try {
             await desktopApi.context.compact(session.id);

@@ -192,17 +192,13 @@ async function executeWithHarness(
       emitRunStateChanged(pendingRun.state, evaluation.decision.reason);
     }
 
-    void adapter
-      .presentConfirmationRequest({
+    if (adapter.prefersInlineConfirmation()) {
+      void adapter.presentConfirmationRequest({
         requestId: pendingApproval.requestId,
         title: confirmCopy.title,
         description: confirmCopy.description,
         detail: confirmCopy.detail,
-      })
-      .then((response) => {
-        context.runtime.resolvePendingApproval(response, "dialog");
-      })
-      .catch(() => {
+      }).catch(() => {
         context.runtime.resolvePendingApproval(
           {
             requestId: pendingApproval.requestId,
@@ -211,6 +207,31 @@ async function executeWithHarness(
           "system",
         );
       });
+    } else {
+      void adapter
+        .presentConfirmationRequest({
+          requestId: pendingApproval.requestId,
+          title: confirmCopy.title,
+          description: confirmCopy.description,
+          detail: confirmCopy.detail,
+        })
+        .then((response) => {
+          if (!response) {
+            return;
+          }
+
+          context.runtime.resolvePendingApproval(response, "dialog");
+        })
+        .catch(() => {
+          context.runtime.resolvePendingApproval(
+            {
+              requestId: pendingApproval.requestId,
+              allowed: false,
+            },
+            "system",
+          );
+        });
+    }
 
     const approvalResolution = await pendingResponse;
     adapter.recordConfirmationResolution(approvalResolution);

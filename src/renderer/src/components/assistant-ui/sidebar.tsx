@@ -12,6 +12,7 @@ import {
   FolderPlusIcon,
   InformationCircleIcon,
   KeyIcon,
+  SparklesIcon,
   MapPinIcon,
   SwatchIcon,
   TrashIcon,
@@ -71,7 +72,7 @@ function SidebarImpl({
   onDeleteGroup,
   onSetSessionGroup,
   viewMode = "threads",
-  activeSettingsSection = "general",
+  activeSettingsSection = "ai_model",
   onSelectSettingsSection,
   onExitSettings,
 }: SidebarProps) {
@@ -109,14 +110,10 @@ function SidebarImpl({
     label: string;
     icon: typeof Cog6ToothIcon;
   }[] = [
-    { id: "general", label: "常规", icon: Cog6ToothIcon },
-    { id: "keys", label: "提供商与模型", icon: KeyIcon },
-    { id: "appearance", label: "外观", icon: SwatchIcon },
-    { id: "terminal", label: "终端", icon: CommandLineIcon },
-    { id: "logs", label: "日志", icon: DocumentTextIcon },
+    { id: "ai_model", label: "AI & 模型", icon: SparklesIcon },
     { id: "workspace", label: "工作区", icon: FolderIcon },
-    { id: "archived", label: "已归档", icon: ArchiveBoxIcon },
-    { id: "about", label: "关于", icon: InformationCircleIcon },
+    { id: "interface", label: "界面与终端", icon: SwatchIcon },
+    { id: "system", label: "数据与系统", icon: Cog6ToothIcon },
   ];
 
   const SidebarFooterAction = ({

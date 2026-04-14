@@ -5,14 +5,10 @@ import type {
 } from "@shared/contracts";
 
 export type SettingsSection =
-  | "general"
-  | "keys"
-  | "appearance"
-  | "terminal"
-  | "logs"
+  | "ai_model"
   | "workspace"
-  | "archived"
-  | "about";
+  | "interface"
+  | "system";
 
 export type SettingsViewProps = {
   activeSection: SettingsSection;

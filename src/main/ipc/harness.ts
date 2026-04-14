@@ -1,6 +1,7 @@
 import { IPC_CHANNELS } from "../../shared/ipc.js";
 import {
   dismissInterruptedApproval,
+  listPendingApprovalGroups,
   listInterruptedApprovalGroups,
   listInterruptedApprovals,
   resumeInterruptedApproval,
@@ -12,6 +13,10 @@ export function registerHarnessIpc(): void {
   handleIpc(
     IPC_CHANNELS.agentConfirmResponse,
     async (_event, response) => resolveApprovalResponse(response),
+  );
+  handleIpc(
+    IPC_CHANNELS.agentListPendingApprovalGroups,
+    async (_event, sessionId?: string) => listPendingApprovalGroups(sessionId),
   );
   handleIpc(
     IPC_CHANNELS.agentListInterruptedApprovals,

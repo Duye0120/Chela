@@ -35,7 +35,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   };
 
   return (
-    <div className="aui-code-header-root mt-2.5 flex items-center justify-between rounded-t-lg bg-muted/50 px-3 py-1.5 text-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+    <div className="aui-code-header-root mt-4 flex items-center justify-between rounded-t-lg bg-muted/50 px-3 py-1.5 text-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <span className="aui-code-header-language font-medium text-muted-foreground lowercase">
         {language}
       </span>
@@ -124,7 +124,7 @@ const defaultComponents = memoizeMarkdownComponents({
   p: ({ className, ...props }) => (
     <p
       className={cn(
-        "aui-md-p my-2.5 leading-normal first:mt-0 last:mb-0",
+        "aui-md-p my-3.5 first:mt-0 last:mb-0",
         className,
       )}
       {...props}
@@ -151,7 +151,7 @@ const defaultComponents = memoizeMarkdownComponents({
   ul: ({ className, ...props }) => (
     <ul
       className={cn(
-        "aui-md-ul my-2 ml-4 list-disc marker:text-muted-foreground [&>li]:mt-1",
+        "aui-md-ul my-3 ml-4 list-disc marker:text-muted-foreground [&>li]:mt-1.5",
         className,
       )}
       {...props}
@@ -160,7 +160,7 @@ const defaultComponents = memoizeMarkdownComponents({
   ol: ({ className, ...props }) => (
     <ol
       className={cn(
-        "aui-md-ol my-2 ml-4 list-decimal marker:text-muted-foreground [&>li]:mt-1",
+        "aui-md-ol my-3 ml-4 list-decimal marker:text-muted-foreground [&>li]:mt-1.5",
         className,
       )}
       {...props}
@@ -209,7 +209,7 @@ const defaultComponents = memoizeMarkdownComponents({
     />
   ),
   li: ({ className, ...props }) => (
-    <li className={cn("aui-md-li leading-normal", className)} {...props} />
+    <li className={cn("aui-md-li", className)} {...props} />
   ),
   sup: ({ className, ...props }) => (
     <sup
@@ -220,7 +220,7 @@ const defaultComponents = memoizeMarkdownComponents({
   pre: ({ className, ...props }) => (
     <pre
       className={cn(
-        "aui-md-pre overflow-x-auto rounded-t-none rounded-b-lg bg-muted/30 p-3 text-xs leading-relaxed shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
+        "aui-md-pre overflow-x-auto rounded-t-none rounded-b-lg bg-muted/30 p-4 text-[13px] leading-relaxed shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
         className,
       )}
       {...props}

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebglAddon } from "@xterm/addon-webgl";
 import type { Settings } from "@shared/contracts";
 import "@xterm/xterm/css/xterm.css";
 
@@ -44,6 +45,24 @@ function getTerminalTheme() {
   };
 }
 
+function parseFontFamily(fontFamily: string | undefined): string {
+  if (!fontFamily) return "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace";
+  
+  const fonts = fontFamily.split(',').map((f) => {
+    const trimmed = f.trim();
+    if (trimmed.includes(' ') && !trimmed.startsWith("'") && !trimmed.startsWith('"')) {
+      return `"${trimmed}"`;
+    }
+    return trimmed;
+  });
+  
+  if (!fonts.some(f => f.toLowerCase() === 'monospace')) {
+    fonts.push('monospace');
+  }
+  
+  return fonts.join(', ');
+}
+
 export function TerminalTab({ terminalId, visible, settings }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -56,14 +75,13 @@ export function TerminalTab({ terminalId, visible, settings }: Props) {
 
     const term = new Terminal({
       fontSize: settings?.terminal.fontSize ?? 13,
-      fontFamily:
-        settings?.terminal.fontFamily ??
-        "'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace",
+      fontFamily: parseFontFamily(settings?.terminal.fontFamily),
       cursorBlink: true,
       cursorStyle: "bar",
       theme: getTerminalTheme(),
       scrollback: settings?.terminal.scrollback ?? 5000,
       allowProposedApi: true,
+      customGlyphs: true,
     });
 
     const fitAddon = new FitAddon();
@@ -71,6 +89,14 @@ export function TerminalTab({ terminalId, visible, settings }: Props) {
     term.loadAddon(fitAddon);
     term.loadAddon(webLinksAddon);
     term.open(container);
+
+    try {
+      const webglAddon = new WebglAddon();
+      term.loadAddon(webglAddon);
+    } catch (e) {
+      console.warn("Failed to load WebGL addon", e);
+    }
+
     fitAddon.fit();
 
     termRef.current = term;
@@ -135,8 +161,7 @@ export function TerminalTab({ terminalId, visible, settings }: Props) {
       return;
     }
 
-    terminal.options.fontFamily =
-      settings?.terminal.fontFamily ?? terminal.options.fontFamily;
+    terminal.options.fontFamily = parseFontFamily(settings?.terminal.fontFamily);
     terminal.options.fontSize =
       settings?.terminal.fontSize ?? terminal.options.fontSize;
     terminal.options.theme = getTerminalTheme();

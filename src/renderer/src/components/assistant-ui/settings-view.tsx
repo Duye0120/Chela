@@ -11,13 +11,9 @@ import {
   normalizeThinkingLevel,
 } from "@renderer/lib/thinking-levels";
 import { SECTION_META } from "./settings/constants";
-import { AboutSection } from "./settings/about-section";
-import { AppearanceSection } from "./settings/appearance-section";
-import { ArchivedSection } from "./settings/archived-section";
-import { GeneralSection } from "./settings/general-section";
-import { KeysSection } from "./settings/keys-section";
-import { LogsSection } from "./settings/logs-section";
-import { TerminalSection } from "./settings/terminal-section";
+import { AiModelSection } from "./settings/ai-model-section";
+import { InterfaceSection } from "./settings/interface-section";
+import { SystemSection } from "./settings/system-section";
 import type { SettingsViewProps } from "./settings/types";
 import { WorkspaceSection } from "./settings/workspace-section";
 
@@ -58,7 +54,7 @@ function SettingsViewImpl({
   }, [desktopApi]);
 
   useEffect(() => {
-    if (activeSection === "general" || activeSection === "keys") {
+    if (activeSection === "ai_model") {
       void loadDirectory();
     }
     if (activeSection === "workspace" && settings?.workspace) {
@@ -133,8 +129,8 @@ function SettingsViewImpl({
           </header>
 
           <div className="space-y-4 pb-8">
-            {activeSection === "general" ? (
-              <GeneralSection
+            {activeSection === "ai_model" ? (
+              <AiModelSection
                 settings={settings}
                 currentModelId={currentModelId}
                 thinkingLevel={effectiveThinkingLevel}
@@ -145,34 +141,18 @@ function SettingsViewImpl({
                 onModelChange={onModelChange}
                 onThinkingLevelChange={onThinkingLevelChange}
                 onSettingsChange={onSettingsChange}
-              />
-            ) : null}
-
-            {activeSection === "keys" ? (
-              <KeysSection
-                currentModelId={currentModelId}
-                initialSources={sources}
-                initialEntries={entries}
+                sources={sources}
+                entries={entries}
                 onDirectoryChanged={loadDirectory}
-                onModelChange={onModelChange}
               />
             ) : null}
 
-            {activeSection === "appearance" ? (
-              <AppearanceSection
+            {activeSection === "interface" ? (
+              <InterfaceSection
                 settings={settings}
                 onSettingsChange={onSettingsChange}
               />
             ) : null}
-
-            {activeSection === "terminal" ? (
-              <TerminalSection
-                settings={settings}
-                onSettingsChange={onSettingsChange}
-              />
-            ) : null}
-
-            {activeSection === "logs" ? <LogsSection /> : null}
 
             {activeSection === "workspace" ? (
               <WorkspaceSection
@@ -182,16 +162,14 @@ function SettingsViewImpl({
               />
             ) : null}
 
-            {activeSection === "archived" ? (
-              <ArchivedSection
-                archivedSummaries={archivedSummaries}
-                onOpenArchivedSession={onOpenArchivedSession}
-                onUnarchiveSession={onUnarchiveSession}
-                onDeleteSession={onDeleteSession}
+            {activeSection === "system" ? (
+              <SystemSection
+                archivedSummaries={archivedSummaries || []}
+                onOpenArchivedSession={onOpenArchivedSession!}
+                onUnarchiveSession={onUnarchiveSession!}
+                onDeleteSession={onDeleteSession!}
               />
             ) : null}
-
-            {activeSection === "about" ? <AboutSection /> : null}
           </div>
         </div>
       </div>

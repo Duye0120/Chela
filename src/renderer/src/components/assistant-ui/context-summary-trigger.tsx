@@ -85,7 +85,7 @@ function getContinuityHeadline(summary: ContextUsageSummary) {
     return summary.snapshotSummary.split(/\r?\n/)[0] ?? summary.snapshotSummary;
   }
 
-  return "还没有可续接的 snapshot。";
+  return "暂无历史 Snapshot";
 }
 
 function getContinuityRows(summary: ContextUsageSummary) {
@@ -168,17 +168,17 @@ function ContextStat({
 
 function ContextHoverSummary({ summary }: ContextSummaryTriggerProps) {
   return (
-    <div className="flex min-w-[208px] flex-col items-start text-left">
+    <div className="flex w-[240px] flex-col items-start text-left">
       <p className="text-[11px] font-medium tracking-[0.12em] text-[color:var(--color-text-muted)]">
         Context 视窗
       </p>
-      <p className="mt-2 text-[16px] font-semibold leading-none tracking-[-0.02em] text-foreground [font-variant-numeric:tabular-nums]">
+      <p className="mt-2 text-[16px] font-semibold leading-snug tracking-[-0.02em] text-foreground [font-variant-numeric:tabular-nums]">
         {getContextStatusCopy(summary)}
       </p>
       <p className="mt-2 text-[13px] font-medium leading-5 text-[color:var(--color-text-secondary)] [font-variant-numeric:tabular-nums]">
         {getUsageLine(summary)}
       </p>
-      <p className="mt-2 line-clamp-3 text-[12px] leading-5 text-[color:var(--color-text-secondary)]">
+      <p className="mt-2 line-clamp-3 text-[12px] leading-5 text-[color:var(--color-text-secondary)] break-words">
         {getContinuityHeadline(summary)}
       </p>
       {summary.autoCompactBlocked ? (
@@ -207,7 +207,7 @@ function ContextExpandedSummary({
             <p className="text-[11px] font-medium tracking-[0.12em] text-[color:var(--color-text-muted)]">
           Context 视窗
             </p>
-            <p className="mt-1.5 text-[18px] font-semibold leading-[1.3] text-foreground [font-variant-numeric:tabular-nums]">
+            <p className="mt-1.5 text-[18px] font-semibold leading-[1.3] text-foreground [font-variant-numeric:tabular-nums] break-words">
               {getContextStatusCopy(summary)}
             </p>
             <p className="mt-1.5 text-[13px] leading-5 text-[color:var(--color-text-secondary)] [font-variant-numeric:tabular-nums]">
@@ -247,7 +247,7 @@ function ContextExpandedSummary({
       </ContextSection>
 
       <ContextSection label="续接线索">
-        <p className="mt-2 text-[13px] leading-5 text-foreground">
+        <p className="mt-2 text-[13px] leading-5 text-foreground break-words">
           {getContinuityHeadline(summary)}
         </p>
         {summary.snapshotSummary &&
@@ -500,7 +500,7 @@ export function ContextSummaryTrigger({
               },
             }}
             className={cn(
-              "absolute bottom-full left-1/2 z-50 mb-3 -translate-x-1/2 origin-bottom overflow-hidden will-change-transform",
+              "absolute bottom-full right-0 z-50 mb-3 origin-bottom-right overflow-hidden will-change-transform",
               expanded
                 ? "rounded-[var(--radius-shell)] bg-[color:var(--color-shell-overlay)] shadow-[var(--shadow-flyout)]"
                 : "rounded-[var(--radius-shell)] bg-[color:var(--color-shell-overlay)] shadow-[var(--shadow-flyout)]",
