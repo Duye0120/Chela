@@ -1018,7 +1018,7 @@ const AssistantMessage: FC = () => {
       className="fade-in slide-in-from-bottom-1 relative mx-auto w-full max-w-(--thread-max-width) animate-in py-5 duration-150"
       data-role="assistant"
     >
-      <div className="wrap-break-word px-1 py-1 text-[15px] leading-7 text-foreground">
+      <div className="wrap-break-word px-2 py-2 text-[15px] leading-7 text-foreground">
         <AssistantMessageStatus />
         <MessagePrimitive.Parts
           components={{
@@ -1098,7 +1098,7 @@ const EditComposer: FC = () => {
 
   return (
     <ComposerPrimitive.Root className="relative col-start-2 min-w-0">
-      <div className="wrap-break-word peer grid rounded-[var(--radius-shell)] bg-slate-100/80 px-4 py-3.5 text-[15px] leading-7 text-slate-900 shadow-sm dark:bg-slate-800/80 dark:text-slate-100">
+      <div className="wrap-break-word peer grid rounded-[var(--radius-shell)] bg-slate-100/80 px-4 py-2 text-[15px] leading-7 text-slate-900 shadow-sm dark:bg-slate-800/80 dark:text-slate-100">
         <div className="pointer-events-none col-start-1 row-start-1 invisible break-words whitespace-pre-wrap">
           {text + "\u200b"}
         </div>
@@ -1115,7 +1115,7 @@ const EditComposer: FC = () => {
 const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
-      className="fade-in slide-in-from-bottom-1 mx-auto grid w-full max-w-(--thread-max-width) animate-in auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 py-5 duration-150 [&:where(>*)]:col-start-2"
+      className="fade-in slide-in-from-bottom-1 mx-auto grid w-full max-w-(--thread-max-width) animate-in auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 py-5 duration-150 [&:where(>*)]:col-start-2"
       data-role="user"
     >
       <UserMessageAttachments />
@@ -1125,7 +1125,7 @@ const UserMessage: FC = () => {
 
       <ComposerPrimitive.If editing={false}>
         <div className="relative col-start-2 min-w-0">
-          <div className="wrap-break-word peer rounded-[var(--radius-shell)] bg-slate-100/80 dark:bg-slate-800/80 px-4 py-3.5 text-[15px] leading-7 text-slate-900 dark:text-slate-100 shadow-sm empty:hidden">
+          <div className="wrap-break-word peer rounded-[var(--radius-shell)] bg-slate-100/80 dark:bg-slate-800/80 px-4 py-2 text-[15px] leading-7 text-slate-900 dark:text-slate-100 shadow-sm empty:hidden">
             <MessagePrimitive.Parts />
           </div>
           <div className="mt-1 flex min-h-6 justify-end">
