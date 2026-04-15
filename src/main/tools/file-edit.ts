@@ -1,7 +1,7 @@
 import fs from "node:fs";
-import { createTwoFilesPatch, parsePatch } from "diff";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
+import { createTwoFilesPatch, parsePatch } from "../diff-shim.js";
 import { isPathAllowed, isWritePathForbidden } from "../security.js";
 import {
   readTextFileSafe,

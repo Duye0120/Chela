@@ -28,6 +28,7 @@ function SettingsViewImpl({
   currentModelId,
   thinkingLevel,
   onModelChange,
+  onRoleModelChange,
   onThinkingLevelChange,
   onSettingsChange,
   archivedSummaries,
@@ -132,6 +133,7 @@ function SettingsViewImpl({
                 thinkingOptions={thinkingOptions}
                 modelOptions={modelOptions}
                 onModelChange={onModelChange}
+                onRoleModelChange={onRoleModelChange}
                 onThinkingLevelChange={onThinkingLevelChange}
                 onSettingsChange={onSettingsChange}
               />

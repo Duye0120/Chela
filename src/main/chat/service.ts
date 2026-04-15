@@ -14,7 +14,7 @@ export async function sendChatMessage(input: SendMessageInput): Promise<void> {
   try {
     await prepareChatRun(context);
     await executeChatRun(context);
-    finalizeCompletedChatRun(context);
+    await finalizeCompletedChatRun(context);
   } catch (err) {
     await finalizeFailedChatRun(context, err);
   } finally {

@@ -22,7 +22,7 @@ export function createChatRunContext(input: SendMessageInput): ChatRunContext {
     throw new Error("会话不存在，无法继续发送。");
   }
 
-  const resolvedModel = resolveRuntimeModel(settings.defaultModelId);
+  const resolvedModel = resolveRuntimeModel(settings.modelRouting.chat.modelId);
   const runScope = {
     sessionId: input.sessionId,
     runId: input.runId,

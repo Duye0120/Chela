@@ -139,6 +139,10 @@ const desktopApi: DesktopApi = {
     push: () => ipcRenderer.invoke(IPC_CHANNELS.gitPush),
     pull: () => ipcRenderer.invoke(IPC_CHANNELS.gitPull),
   },
+  worker: {
+    generateCommitMessage: (request) =>
+      ipcRenderer.invoke(IPC_CHANNELS.workerGenerateCommitMessage, request),
+  },
 
   ui: {
     getState: () => ipcRenderer.invoke(IPC_CHANNELS.uiGetState),

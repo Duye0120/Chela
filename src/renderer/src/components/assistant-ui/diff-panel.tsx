@@ -350,21 +350,17 @@ function hydrateExpandedState(current: ExpandedDiffState, overview: GitDiffOverv
 // ─── Mock commit message generator ────────────────────────────────────────
 
 async function generateCommitMessage(
-  _selectedFiles: GitDiffFile[],
-  _diffs: string,
+  selectedFiles: GitDiffFile[],
+  diffs: string,
 ): Promise<{ title: string; description: string }> {
-  // TODO: Replace with actual AI-powered commit message generation.
-  // For now, return a mock result with a nice mocked markdown template.
-
+  const raw = await window.desktopApi.worker.generateCommitMessage({
+    selectedFiles,
+    diffContent: diffs,
+  });
+  const [title = "", ...bodyLines] = raw.trim().split(/\r?\n/);
   return {
-    title: "feat: update files based on recent changes",
-    description: `## Summary of changes
-
-- Updated configuration to support new layout parsing.
-- Refactored commit message formatting.
-- Resolved styling issues in the diff view panel.
-
-> Note: This is an automatically generated mock description for testing WYSIWYG markdown.`,
+    title: title.trim(),
+    description: bodyLines.join("\n").trim(),
   };
 }
 

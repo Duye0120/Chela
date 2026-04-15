@@ -24,6 +24,7 @@ type AiModelSectionProps = {
 };
 
 export function AiModelSection({
+  settings,
   currentModelId,
   onModelChange,
   sources,
@@ -33,6 +34,7 @@ export function AiModelSection({
   return (
     <div className="space-y-4 flex flex-col min-h-[500px]">
       <KeysSection
+        settings={settings}
         currentModelId={currentModelId}
         initialSources={sources}
         initialEntries={entries}

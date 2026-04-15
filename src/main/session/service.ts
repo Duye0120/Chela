@@ -485,9 +485,14 @@ export function unarchivePersistedSession(sessionId: string): void {
   });
 }
 
-export function renamePersistedSession(sessionId: string, title: string): void {
+export function renamePersistedSession(
+  sessionId: string,
+  title: string,
+  options?: { manual?: boolean },
+): void {
   updateSessionMeta(sessionId, (meta) => {
     meta.title = title;
+    meta.titleManuallySet = options?.manual !== false;
   });
 }
 
