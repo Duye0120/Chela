@@ -2,7 +2,7 @@
 
 > 状态：`in-review`
 > 依赖：01-overview
-> 更新时间：2026-04-13 15:29:14
+> 更新时间：2026-04-15 16:40:00
 
 ## 3.0 当前基线
 
@@ -379,8 +379,8 @@ context 过长
 ## 3.9 当前缺口
 
 - 中断审批当前能恢复成 read model 和 recoveryPrompt，真正恢复执行仍未完成
-- 背景任务和轻量杂活任务还没有独立 workload profile
-- 多模型路由还没有正式进入底层主链
+- 背景任务和轻量杂活任务已经接入角色路由层，当前正式接通 `chat / utility`，`subagent / compact` 保留配置位与 fallback
+- `subagent` 真实执行链和独立 orchestration 还没正式落地，当前只有 `runKind`、background lifecycle 和模型路由入口
 
 ## 3.10 错误处理
 

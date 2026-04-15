@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import { createTwoFilesPatch, parsePatch } from "diff";
+import { createTwoFilesPatch, parsePatch } from "./diff-shim.js";
 import type {
   GitBranchEntry,
   GitBranchSummary,

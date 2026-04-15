@@ -6,11 +6,66 @@ import { appLogger } from "../logger.js";
 import {
   appendAssistantMessageEvent,
   appendRunFinishedEvent,
+  getSessionMeta,
+  loadTranscriptEvents,
+  renamePersistedSession,
 } from "../session/service.js";
 import { bus } from "../event-bus.js";
+import { WorkerService } from "../worker-service.js";
 import type { ChatRunContext } from "./types.js";
 
-export function finalizeCompletedChatRun(context: ChatRunContext): void {
+async function maybeAutoRenameSessionTitle(
+  sessionId: string,
+  assistantText: string,
+): Promise<void> {
+  const meta = getSessionMeta(sessionId);
+  if (!meta || meta.titleManuallySet) {
+    return;
+  }
+
+  const events = loadTranscriptEvents(sessionId);
+  const assistantMessages = events.filter(
+    (event) => event.type === "assistant_message",
+  );
+  if (assistantMessages.length !== 1) {
+    return;
+  }
+
+  const firstUserMessage = events.find((event) => event.type === "user_message");
+  const userText =
+    firstUserMessage?.type === "user_message"
+      ? firstUserMessage.message.content.trim()
+      : "";
+  const normalizedAssistantText = assistantText.trim();
+  if (!userText || !normalizedAssistantText) {
+    return;
+  }
+
+  try {
+    const title = await WorkerService.generateSessionTitle({
+      userText,
+      assistantText: normalizedAssistantText,
+    });
+    if (!title || title === meta.title) {
+      return;
+    }
+
+    renamePersistedSession(sessionId, title, { manual: false });
+  } catch (error) {
+    appLogger.warn({
+      scope: "chat.send",
+      message: "自动标题生成失败",
+      data: {
+        sessionId,
+      },
+      error,
+    });
+  }
+}
+
+export async function finalizeCompletedChatRun(
+  context: ChatRunContext,
+): Promise<void> {
   const assistantMessage = context.adapter.buildAssistantMessage("completed");
   if (assistantMessage) {
     appendAssistantMessageEvent({
@@ -30,6 +85,12 @@ export function finalizeCompletedChatRun(context: ChatRunContext): void {
     finalState: "completed",
   });
   harnessRuntime.finishRun(context.runScope, "completed");
+  if (assistantMessage?.content) {
+    await maybeAutoRenameSessionTitle(
+      context.input.sessionId,
+      assistantMessage.content,
+    );
+  }
   appLogger.info({
     scope: "chat.send",
     message: "消息发送完成",

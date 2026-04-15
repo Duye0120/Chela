@@ -9,6 +9,7 @@ import type {
   ModelEntryDraft,
   ModelLimits,
   ModelLimitsOverride,
+  ModelRoutingRole,
   ModelUsageConflict,
   ProviderSource,
   ProviderSourceDraft,
@@ -355,19 +356,102 @@ function requireEntry(state: ProviderState, entryId: string): ModelEntry {
   return entry;
 }
 
-function getModelUsage(entryId: string): ModelUsageConflict[] {
-  const settings = getSettings();
-  if (settings.defaultModelId === entryId) {
-    return [
-      {
-        scope: "settings",
-        referenceType: "default-model",
-        referenceId: entryId,
-        message: "该模型条目正在被默认模型引用。",
-      },
-    ];
+function getRoleDisplayLabel(role: ModelRoutingRole): string {
+  switch (role) {
+    case "chat":
+      return "聊天模型";
+    case "utility":
+      return "工具模型";
+    case "subagent":
+      return "Sub-agent 模型";
+    case "compact":
+      return "Compact 模型";
+    default:
+      return "模型";
   }
-  return [];
+}
+
+function getReferenceType(role: ModelRoutingRole): ModelUsageConflict["referenceType"] {
+  switch (role) {
+    case "chat":
+      return "chat-model";
+    case "utility":
+      return "utility-model";
+    case "subagent":
+      return "subagent-model";
+    case "compact":
+      return "compact-model";
+    default:
+      return "chat-model";
+  }
+}
+
+function getExplicitRoleModelIds(
+  settings = getSettings(),
+): Array<{ role: ModelRoutingRole; modelId: string }> {
+  return [
+    { role: "chat", modelId: settings.modelRouting.chat.modelId },
+    { role: "utility", modelId: settings.modelRouting.utility.modelId ?? "" },
+    { role: "subagent", modelId: settings.modelRouting.subagent.modelId ?? "" },
+    { role: "compact", modelId: settings.modelRouting.compact.modelId ?? "" },
+  ].filter((item): item is { role: ModelRoutingRole; modelId: string } =>
+    item.modelId.trim().length > 0,
+  );
+}
+
+function updateModelRoutingFallback(
+  entryIdsToRemove: Set<string>,
+  fallbackEntryId: string | null,
+): void {
+  const settings = getSettings();
+  const currentRouting = settings.modelRouting;
+  const nextRouting = {
+    chat: {
+      modelId: entryIdsToRemove.has(currentRouting.chat.modelId)
+        ? fallbackEntryId ?? currentRouting.chat.modelId
+        : currentRouting.chat.modelId,
+    },
+    utility: {
+      modelId:
+        currentRouting.utility.modelId &&
+        entryIdsToRemove.has(currentRouting.utility.modelId)
+          ? fallbackEntryId
+          : currentRouting.utility.modelId,
+    },
+    subagent: {
+      modelId:
+        currentRouting.subagent.modelId &&
+        entryIdsToRemove.has(currentRouting.subagent.modelId)
+          ? fallbackEntryId
+          : currentRouting.subagent.modelId,
+    },
+    compact: {
+      modelId:
+        currentRouting.compact.modelId &&
+        entryIdsToRemove.has(currentRouting.compact.modelId)
+          ? fallbackEntryId
+          : currentRouting.compact.modelId,
+    },
+  };
+
+  updateSettings({
+    modelRouting: nextRouting,
+  });
+}
+
+function getModelUsage(entryId: string): ModelUsageConflict[] {
+  return getExplicitRoleModelIds().flatMap(({ role, modelId }) =>
+    modelId === entryId
+      ? [
+          {
+            scope: "settings",
+            referenceType: getReferenceType(role),
+            referenceId: entryId,
+            message: `该模型条目正在被${getRoleDisplayLabel(role)}引用。`,
+          } satisfies ModelUsageConflict,
+        ]
+      : [],
+  );
 }
 
 function ensureEntryNotInUse(entryId: string): void {
@@ -653,11 +737,14 @@ export function saveSource(draft: ProviderSourceDraft): ProviderSource {
   const normalized = validateSourceDraft(draft, existing);
 
   if (!normalized.enabled) {
-    const activeDefaultEntry = state.entries.find(
-      (entry) => entry.id === getSettings().defaultModelId,
-    );
-    if (activeDefaultEntry?.sourceId === normalized.id) {
-      throw new Error("当前默认模型正在使用这个 source，无法直接禁用。");
+    const referencedRoleEntry = getExplicitRoleModelIds().find(({ modelId }) => {
+      const entry = state.entries.find((candidate) => candidate.id === modelId);
+      return entry?.sourceId === normalized.id;
+    });
+    if (referencedRoleEntry) {
+      throw new Error(
+        `当前${getRoleDisplayLabel(referencedRoleEntry.role)}正在使用这个 source，无法直接禁用。`,
+      );
     }
   }
 
@@ -686,23 +773,24 @@ export function deleteSource(sourceId: string): void {
   const entriesToDelete = state.entries.filter((entry) => entry.sourceId === sourceId);
   const nextSources = state.sources.filter((item) => item.id !== sourceId);
   const nextEntries = state.entries.filter((entry) => entry.sourceId !== sourceId);
-
-  if (entriesToDelete.some((entry) => entry.id === getSettings().defaultModelId)) {
-    const fallbackEntry = sortEntries(nextEntries, nextSources).find((entry) => {
-      if (!entry.enabled) {
-        return false;
-      }
-
-      return nextSources.some(
-        (candidate) => candidate.id === entry.sourceId && candidate.enabled,
-      );
-    });
-
-    if (!fallbackEntry) {
-      throw new Error("当前默认模型也在这个提供商里，且没有其它可用模型可切换，无法删除。");
+  const entryIdsToDelete = new Set(entriesToDelete.map((entry) => entry.id));
+  const needsChatFallback = entryIdsToDelete.has(getSettings().modelRouting.chat.modelId);
+  const fallbackEntry = sortEntries(nextEntries, nextSources).find((entry) => {
+    if (!entry.enabled) {
+      return false;
     }
 
-    updateSettings({ defaultModelId: fallbackEntry.id });
+    return nextSources.some(
+      (candidate) => candidate.id === entry.sourceId && candidate.enabled,
+    );
+  });
+
+  if (needsChatFallback && !fallbackEntry) {
+    throw new Error("当前聊天模型也在这个提供商里，且没有其它可用模型可切换，无法删除。");
+  }
+
+  if (entryIdsToDelete.size > 0) {
+    updateModelRoutingFallback(entryIdsToDelete, fallbackEntry?.id ?? null);
   }
 
   const nextCredentials = { ...state.credentials };
@@ -847,8 +935,11 @@ export function saveEntry(draft: ModelEntryDraft): ModelEntry {
     : undefined;
   const normalized = validateEntryDraft(state, draft, existing);
 
-  if (!normalized.enabled && getSettings().defaultModelId === normalized.id) {
-    throw new Error("该模型条目正在被默认模型引用，无法禁用。");
+  if (!normalized.enabled) {
+    const conflict = getModelUsage(normalized.id)[0];
+    if (conflict) {
+      throw new Error(conflict.message);
+    }
   }
 
   const nextEntries = existing

@@ -1,5 +1,6 @@
 import type {
   ChatSessionSummary,
+  ModelRoutingRole,
   Settings,
   ThinkingLevel,
 } from "@shared/contracts";
@@ -17,6 +18,10 @@ export type SettingsViewProps = {
   currentModelId: string;
   thinkingLevel: ThinkingLevel;
   onModelChange: (modelEntryId: string) => void;
+  onRoleModelChange: (
+    role: Exclude<ModelRoutingRole, "chat">,
+    modelId: string | null,
+  ) => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
   onSettingsChange: (partial: Partial<Settings>) => void;
   archivedSummaries: ChatSessionSummary[];

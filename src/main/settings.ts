@@ -1,7 +1,11 @@
 import { app } from "electron";
 import fs from "node:fs";
 import path from "node:path";
-import type { Settings, ThinkingLevel } from "../shared/contracts.js";
+import type {
+  ModelRoutingSettings,
+  Settings,
+  ThinkingLevel,
+} from "../shared/contracts.js";
 import { DEFAULT_MODEL_ENTRY_ID } from "../shared/provider-directory.js";
 import { normalizeTimeZoneSetting, SYSTEM_TIME_ZONE } from "../shared/timezone.js";
 
@@ -29,7 +33,25 @@ function getDefaultWorkspacePath(): string {
   return process.cwd();
 }
 
+function createDefaultModelRouting(): ModelRoutingSettings {
+  return {
+    chat: {
+      modelId: DEFAULT_MODEL_ENTRY_ID,
+    },
+    utility: {
+      modelId: null,
+    },
+    subagent: {
+      modelId: null,
+    },
+    compact: {
+      modelId: null,
+    },
+  };
+}
+
 const DEFAULT_SETTINGS: Settings = {
+  modelRouting: createDefaultModelRouting(),
   defaultModelId: DEFAULT_MODEL_ENTRY_ID,
   workerModelId: null,
   thinkingLevel: "off",
@@ -92,14 +114,85 @@ function resolveLegacyDefaultModelId(
   return undefined;
 }
 
+function normalizeOptionalModelId(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeChatModelId(value: unknown): string {
+  return normalizeOptionalModelId(value) ?? DEFAULT_MODEL_ENTRY_ID;
+}
+
+function normalizeModelRouting(
+  source: Partial<ModelRoutingSettings> | null | undefined,
+  legacyDefaultModelId: string,
+  legacyWorkerModelId: string | null,
+): ModelRoutingSettings {
+  return {
+    chat: {
+      modelId: normalizeChatModelId(
+        source?.chat?.modelId ?? legacyDefaultModelId,
+      ),
+    },
+    utility: {
+      modelId: normalizeOptionalModelId(
+        source?.utility?.modelId ?? legacyWorkerModelId,
+      ),
+    },
+    subagent: {
+      modelId: normalizeOptionalModelId(source?.subagent?.modelId),
+    },
+    compact: {
+      modelId: normalizeOptionalModelId(source?.compact?.modelId),
+    },
+  };
+}
+
+function mergeModelRouting(
+  current: ModelRoutingSettings,
+  partial?: Partial<ModelRoutingSettings>,
+): ModelRoutingSettings {
+  if (!partial) {
+    return current;
+  }
+
+  return {
+    chat: {
+      ...current.chat,
+      ...partial.chat,
+    },
+    utility: {
+      ...current.utility,
+      ...partial.utility,
+    },
+    subagent: {
+      ...current.subagent,
+      ...partial.subagent,
+    },
+    compact: {
+      ...current.compact,
+      ...partial.compact,
+    },
+  };
+}
+
 function mergeSettings(source?: Partial<Settings> | null): Settings {
   const sourceWithLegacy = (source ?? {}) as Partial<Settings> & {
     defaultModel?: unknown;
+    defaultModelId?: unknown;
+    workerModelId?: unknown;
   };
-  const defaultModelId =
-    sourceWithLegacy.defaultModelId ??
+  const legacyDefaultModelId =
+    normalizeOptionalModelId(sourceWithLegacy.defaultModelId) ??
     resolveLegacyDefaultModelId(sourceWithLegacy.defaultModel) ??
-    DEFAULT_SETTINGS.defaultModelId;
+    DEFAULT_MODEL_ENTRY_ID;
+  const legacyWorkerModelId = normalizeOptionalModelId(
+    sourceWithLegacy.workerModelId,
+  );
+  const modelRouting = normalizeModelRouting(
+    sourceWithLegacy.modelRouting,
+    legacyDefaultModelId,
+    legacyWorkerModelId,
+  );
 
   return {
     ...DEFAULT_SETTINGS,
@@ -108,11 +201,9 @@ function mergeSettings(source?: Partial<Settings> | null): Settings {
       typeof source?.workspace === "string" && source.workspace.trim()
         ? source.workspace
         : getDefaultWorkspacePath(),
-    defaultModelId,
-    workerModelId:
-      typeof source?.workerModelId === "string" && source.workerModelId.trim()
-        ? source.workerModelId.trim()
-        : null,
+    modelRouting,
+    defaultModelId: modelRouting.chat.modelId,
+    workerModelId: modelRouting.utility.modelId,
     thinkingLevel: normalizeThinkingLevel(sourceWithLegacy.thinkingLevel),
     timeZone: normalizeTimeZoneSetting(sourceWithLegacy.timeZone),
     terminal: {
@@ -156,6 +247,7 @@ export function updateSettings(partial: Partial<Settings>): void {
   cachedSettings = mergeSettings({
     ...current,
     ...partial,
+    modelRouting: mergeModelRouting(current.modelRouting, partial.modelRouting),
     terminal: {
       ...current.terminal,
       ...partial.terminal,
@@ -165,8 +257,13 @@ export function updateSettings(partial: Partial<Settings>): void {
       ...partial.ui,
     },
   });
+  const serialized = {
+    ...cachedSettings,
+    defaultModelId: cachedSettings.modelRouting.chat.modelId,
+    workerModelId: cachedSettings.modelRouting.utility.modelId,
+  };
   const filePath = getSettingsPath();
   const tmpPath = filePath + ".tmp";
-  fs.writeFileSync(tmpPath, JSON.stringify(cachedSettings, null, 2), "utf-8");
+  fs.writeFileSync(tmpPath, JSON.stringify(serialized, null, 2), "utf-8");
   fs.renameSync(tmpPath, filePath);
 }

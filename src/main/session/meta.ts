@@ -29,6 +29,7 @@ export type SessionTodoItem = {
 export type PersistedSessionMeta = {
   id: string;
   title: string;
+  titleManuallySet?: boolean;
   createdAt: string;
   updatedAt: string;
   archived?: boolean;
@@ -50,6 +51,7 @@ export function createMetaFromSession(session: ChatSession): PersistedSessionMet
   return {
     id: session.id,
     title: session.title,
+    titleManuallySet: false,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     archived: session.archived,
@@ -71,6 +73,7 @@ export function normalizePersistedSessionMeta(
 ): PersistedSessionMeta {
   return {
     ...meta,
+    titleManuallySet: meta.titleManuallySet === true,
     transcriptSeq: Number.isFinite(meta.transcriptSeq)
       ? Math.max(0, meta.transcriptSeq)
       : 0,

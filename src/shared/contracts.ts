@@ -118,9 +118,30 @@ export type ModelEntryDraft = {
   providerOptions?: Record<string, unknown> | null;
 };
 
+export type ModelRoutingRole = "chat" | "utility" | "subagent" | "compact";
+
+export type ModelRoutingSettings = {
+  chat: {
+    modelId: string;
+  };
+  utility: {
+    modelId: string | null;
+  };
+  subagent: {
+    modelId: string | null;
+  };
+  compact: {
+    modelId: string | null;
+  };
+};
+
 export type ModelUsageConflict = {
   scope: "settings" | "unknown";
-  referenceType: "default-model";
+  referenceType:
+  | "chat-model"
+  | "utility-model"
+  | "subagent-model"
+  | "compact-model";
   referenceId: string;
   message: string;
 };
@@ -140,8 +161,9 @@ export type SourceTestResult = {
 export type ThinkingLevel = "off" | "low" | "medium" | "high" | "xhigh";
 
 export type Settings = {
-  defaultModelId: string;
-  workerModelId: string | null;
+  modelRouting: ModelRoutingSettings;
+  defaultModelId?: string;
+  workerModelId?: string | null;
   thinkingLevel: ThinkingLevel;
   timeZone: string;
   theme: "light" | "dark" | "custom";
@@ -677,6 +699,11 @@ export type DesktopApi = {
     commit: (message: string) => Promise<void>;
     push: () => Promise<void>;
     pull: () => Promise<void>;
+  };
+  worker: {
+    generateCommitMessage: (
+      request: GenerateCommitMessageRequest,
+    ) => Promise<string>;
   };
   ui: {
     getState: () => Promise<WindowUiState>;

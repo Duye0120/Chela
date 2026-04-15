@@ -14,6 +14,7 @@ import type {
   ProviderSource,
   ProviderSourceDraft,
   ProviderType,
+  Settings,
   SourceCredentials,
   SourceTestResult,
 } from "@shared/contracts";
@@ -384,12 +385,14 @@ function formatAutoLimit(value: number | null): string {
 }
 
 export function KeysSection({
+  settings,
   currentModelId,
   initialSources,
   initialEntries,
   onDirectoryChanged,
   onModelChange,
 }: {
+  settings: Settings;
   currentModelId: string;
   initialSources: ProviderSource[];
   initialEntries: ModelEntry[];
@@ -502,6 +505,21 @@ export function KeysSection({
   useEffect(() => {
     setDeleteSourceConfirmOpen(false);
   }, [selectedSourceId]);
+
+  const referencedModelLabels = useMemo(() => {
+    const result = new Map<string, string>();
+    result.set(settings.modelRouting.chat.modelId, "聊天模型");
+    if (settings.modelRouting.utility.modelId) {
+      result.set(settings.modelRouting.utility.modelId, "工具模型");
+    }
+    if (settings.modelRouting.subagent.modelId) {
+      result.set(settings.modelRouting.subagent.modelId, "Sub-agent 模型");
+    }
+    if (settings.modelRouting.compact.modelId) {
+      result.set(settings.modelRouting.compact.modelId, "Compact 模型");
+    }
+    return result;
+  }, [settings.modelRouting]);
 
   const sourceList = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -623,8 +641,8 @@ export function KeysSection({
       setDeleteSourceConfirmOpen(false);
       await reload();
       const nextSettings = await desktopApi.settings.get();
-      if (nextSettings.defaultModelId !== currentModelId) {
-        onModelChange(nextSettings.defaultModelId);
+      if (nextSettings.modelRouting.chat.modelId !== currentModelId) {
+        onModelChange(nextSettings.modelRouting.chat.modelId);
       }
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "删除失败");
@@ -1138,9 +1156,10 @@ export function KeysSection({
                               tooltip="删除模型"
                               aria-label="删除模型"
                               onClick={() => {
-                                if (entry.id === currentModelId) {
+                                const referencedLabel = referencedModelLabels.get(entry.id);
+                                if (referencedLabel) {
                                   setError(
-                                    "默认模型正在使用该条目，无法删除。",
+                                    `${referencedLabel}正在使用该条目，无法删除。`,
                                   );
                                   return;
                                 }
@@ -1172,11 +1191,9 @@ export function KeysSection({
                             checked={entry.enabled}
                             disabled={!currentWorkspace.sourceDraft.enabled}
                             onCheckedChange={(checked) => {
-                              if (
-                                checked !== true &&
-                                entry.id === currentModelId
-                              ) {
-                                setError("默认模型正在使用该条目，无法禁用。");
+                              const referencedLabel = referencedModelLabels.get(entry.id);
+                              if (checked !== true && referencedLabel) {
+                                setError(`${referencedLabel}正在使用该条目，无法禁用。`);
                                 return;
                               }
 

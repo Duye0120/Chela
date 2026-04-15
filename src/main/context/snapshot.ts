@@ -10,7 +10,7 @@ import { executeBackgroundRun } from "../background-run.js";
 import { getGitDiffSnapshot } from "../git.js";
 import { harnessRuntime } from "../harness/singleton.js";
 import { getEntry } from "../providers.js";
-import { resolveRuntimeModel } from "../model-resolution.js";
+import { resolveModelForRole, resolveRuntimeModel } from "../model-resolution.js";
 import {
   appendCompactAppliedEvent,
   getPersistedSnapshot,
@@ -595,7 +595,8 @@ async function buildSnapshotDraftWithModel(input: {
   currentTask: string | null;
 }): Promise<SnapshotDraft | null> {
   const meta = getSessionMeta(input.sessionId);
-  const preferredModelId = meta?.lastModelEntryId ?? getSettings().defaultModelId;
+  const preferredModelId =
+    meta?.lastModelEntryId ?? getSettings().modelRouting.chat.modelId;
 
   try {
     const resolved = resolveRuntimeModel(preferredModelId);
@@ -705,7 +706,7 @@ function getCompactedMessageCount(
 
 function resolveContextWindow(sessionId: string): number | null {
   const meta = getSessionMeta(sessionId);
-  const preferredModelEntryId = getSettings().defaultModelId;
+  const preferredModelEntryId = getSettings().modelRouting.chat.modelId;
   const entry =
     getEntry(preferredModelEntryId) ??
     (meta?.lastModelEntryId ? getEntry(meta.lastModelEntryId) : null);
@@ -947,7 +948,10 @@ async function applySnapshot(
   const thinkingLevel =
     getLatestRunStarted(loadTranscriptEvents(sessionId))?.thinkingLevel ??
     getSettings().thinkingLevel;
-  const resolvedModel = resolveRuntimeModel(meta?.lastModelEntryId ?? getSettings().defaultModelId);
+  const resolvedModel = resolveModelForRole(
+    "compact",
+    meta?.lastModelEntryId ?? getSettings().modelRouting.chat.modelId,
+  );
   const modelEntryId = resolvedModel.entry.id;
 
   await executeBackgroundRun({

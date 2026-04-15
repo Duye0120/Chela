@@ -10,6 +10,7 @@ import type {
   GitBranchSummary,
   GitDiffOverview,
   InterruptedApprovalGroup,
+  ModelRoutingRole,
   SelectedFile,
   Settings,
   SessionGroup,
@@ -169,6 +170,44 @@ function applyCustomThemeVariables(
   });
 
   return appliedKeys;
+}
+
+function mergeSettingsState(
+  current: Settings,
+  partial: Partial<Settings>,
+): Settings {
+  return {
+    ...current,
+    ...partial,
+    modelRouting: {
+      ...current.modelRouting,
+      ...partial.modelRouting,
+      chat: {
+        ...current.modelRouting.chat,
+        ...partial.modelRouting?.chat,
+      },
+      utility: {
+        ...current.modelRouting.utility,
+        ...partial.modelRouting?.utility,
+      },
+      subagent: {
+        ...current.modelRouting.subagent,
+        ...partial.modelRouting?.subagent,
+      },
+      compact: {
+        ...current.modelRouting.compact,
+        ...partial.modelRouting?.compact,
+      },
+    },
+    terminal: {
+      ...current.terminal,
+      ...partial.terminal,
+    },
+    ui: {
+      ...current.ui,
+      ...partial.ui,
+    },
+  };
 }
 
 export default function App() {
@@ -615,7 +654,7 @@ export default function App() {
       setGroups(groupList);
       if (settings) {
         setSettings(settings);
-        setCurrentModelId(settings.defaultModelId);
+        setCurrentModelId(settings.modelRouting.chat.modelId);
         setThinkingLevel(settings.thinkingLevel);
       }
 
@@ -1200,7 +1239,9 @@ export default function App() {
 
   const handleSettingsChange = useCallback(
     (partial: Partial<Settings>) => {
-      setSettings((current) => (current ? { ...current, ...partial } : current));
+      setSettings((current) =>
+        current ? mergeSettingsState(current, partial) : current,
+      );
       void desktopApi?.settings.update(partial);
     },
     [desktopApi],
@@ -1210,9 +1251,41 @@ export default function App() {
     (modelEntryId: string) => {
       setCurrentModelId(modelEntryId);
       setSettings((current) =>
-        current ? { ...current, defaultModelId: modelEntryId } : current,
+        current
+          ? mergeSettingsState(current, {
+              modelRouting: {
+                chat: {
+                  modelId: modelEntryId,
+                },
+              },
+            })
+          : current,
       );
-      void desktopApi?.settings.update({ defaultModelId: modelEntryId });
+      void desktopApi?.settings.update({
+        modelRouting: {
+          chat: {
+            modelId: modelEntryId,
+          },
+        },
+      });
+    },
+    [desktopApi],
+  );
+
+  const handleRoleModelChange = useCallback(
+    (role: Exclude<ModelRoutingRole, "chat">, modelEntryId: string | null) => {
+      const partial = {
+        modelRouting: {
+          [role]: {
+            modelId: modelEntryId,
+          },
+        } as Partial<Settings["modelRouting"]>,
+      };
+
+      setSettings((current) =>
+        current ? mergeSettingsState(current, partial) : current,
+      );
+      void desktopApi?.settings.update(partial);
     },
     [desktopApi],
   );
@@ -1395,6 +1468,7 @@ export default function App() {
         currentModelId={currentModelId}
         thinkingLevel={thinkingLevel}
         onModelChange={handleModelChange}
+        onRoleModelChange={handleRoleModelChange}
         onThinkingLevelChange={handleThinkingLevelChange}
         onSettingsChange={handleSettingsChange}
         archivedSummaries={archivedSummaries}
@@ -1412,6 +1486,7 @@ export default function App() {
       currentModelId,
       deleteSessionPermanently,
       handleModelChange,
+      handleRoleModelChange,
       handleSettingsChange,
       handleThinkingLevelChange,
       openArchivedSessionFromSettings,
