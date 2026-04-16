@@ -230,3 +230,51 @@
 
 - diff-panel 现在只会在每次打开时自动刷新一次。
 - 后续刷新入口只保留用户主动点击刷新，或显式的 Git 状态变更回调。
+
+## Electron 控制台告警收口
+
+**时间**: 20:46
+
+### 改了什么
+
+1. 把 `webContents.on("console-message")` 改成 Electron 41 的事件对象签名。
+2. 日志级别映射改成字符串级别，继续保留 `warning` 和 `error` 两档。
+3. 给 PostCSS 链路补了 `from` 兜底插件，缺省场景下会回填当前 CSS 输入路径。
+
+### 为什么改
+
+- Electron 41 已经把旧的 `console-message` 多参数签名标记为废弃。
+- Tailwind v4 的 PostCSS 插件在缺少 `from` 时会触发开发期 warning，终端噪音很重。
+
+### 涉及文件
+
+- `src/main/logger.ts`
+- `postcss.config.cjs`
+
+### 结果
+
+- Electron 控制台废弃提示会消失。
+- PostCSS 的 `from` warning 会被收口，终端输出更干净。
+
+## Diff Panel 文件列表折叠展示
+
+**时间**: 21:04
+
+### 改了什么
+
+1. 提交计划卡片里的文件标签改成默认展示前 4 个。
+2. 文件数量超过 4 个时，底部增加“展开其余 N 个文件 / 收起文件列表”的轻量开关。
+
+### 为什么改
+
+- 现在每天的改动会合并进单日 `changes.md`，同一组提交里出现很多文件是常态。
+- 文件标签全部铺开会把卡片高度拉得很长，浏览和编辑标题都很吃力。
+
+### 涉及文件
+
+- `src/renderer/src/components/assistant-ui/diff-panel.tsx`
+
+### 结果
+
+- 提交计划列表的默认高度更稳定。
+- 文件多的时候依然可以展开查看完整列表。
