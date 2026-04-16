@@ -22,6 +22,7 @@ let providerDirectoryCache:
 let providerDirectoryPromise:
   | Promise<{ sources: ProviderSource[]; entries: ModelEntry[] }>
   | null = null;
+const PROVIDER_DIRECTORY_UPDATED_EVENT = "chela:provider-directory-updated";
 
 function deriveLegacyModelEntryName(modelId: string): string {
   return modelId
@@ -95,6 +96,35 @@ export async function loadProviderDirectory(
   });
 
   return providerDirectoryPromise;
+}
+
+export function invalidateProviderDirectoryCache(): void {
+  providerDirectoryCache = null;
+  providerDirectoryPromise = null;
+}
+
+export function notifyProviderDirectoryChanged(): void {
+  invalidateProviderDirectoryCache();
+
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(new Event(PROVIDER_DIRECTORY_UPDATED_EVENT));
+}
+
+export function subscribeProviderDirectoryChanged(
+  listener: () => void,
+): () => void {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+
+  const handler = () => listener();
+  window.addEventListener(PROVIDER_DIRECTORY_UPDATED_EVENT, handler);
+  return () => {
+    window.removeEventListener(PROVIDER_DIRECTORY_UPDATED_EVENT, handler);
+  };
 }
 
 export function buildSelectableModelOptions(

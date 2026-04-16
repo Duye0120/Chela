@@ -62,6 +62,16 @@ type GitStatusSnapshot = {
   entries: GitStatusEntry[];
 };
 
+function normalizeGitPaths(paths: string[]): string[] {
+  return Array.from(
+    new Set(
+      paths
+        .map((filePath) => filePath.trim())
+        .filter((filePath) => filePath.length > 0),
+    ),
+  );
+}
+
 async function runGit(args: string[], cwd: string): Promise<GitCommandResult> {
   const result = await execFileAsync("git", args, {
     cwd,
@@ -605,19 +615,127 @@ export async function createAndSwitchGitBranch(
 }
 
 export async function stageGitFiles(workspacePath: string, paths: string[]): Promise<void> {
-  if (paths.length === 0) return;
-  await runGit(["add", ...paths], workspacePath);
+  const normalizedPaths = normalizeGitPaths(paths);
+  if (normalizedPaths.length === 0) return;
+
+  try {
+    await runGit(["add", "--", ...normalizedPaths], workspacePath);
+  } catch (error) {
+    throw new Error(getGitErrorMessage(error, "暂存文件失败。"));
+  }
 }
 
 export async function unstageGitFiles(workspacePath: string, paths: string[]): Promise<void> {
-  if (paths.length === 0) return;
-  await runGit(["reset", "HEAD", ...paths], workspacePath);
+  const normalizedPaths = normalizeGitPaths(paths);
+  if (normalizedPaths.length === 0) return;
+
+  try {
+    await runGit(["reset", "HEAD", "--", ...normalizedPaths], workspacePath);
+  } catch (error) {
+    throw new Error(getGitErrorMessage(error, "取消暂存失败。"));
+  }
 }
 
-export async function commitGitChanges(workspacePath: string, message: string): Promise<void> {
-  await runGit(["commit", "-m", message], workspacePath);
+export async function commitGitChanges(
+  workspacePath: string,
+  message: string,
+  paths: string[],
+): Promise<void> {
+  await ensureGitRepository(workspacePath);
+
+  const normalizedMessage = message.trim();
+  if (!normalizedMessage) {
+    throw new Error("提交信息不能为空。");
+  }
+
+  const normalizedPaths = normalizeGitPaths(paths);
+
+  try {
+    if (normalizedPaths.length > 0) {
+      await runGit(["add", "--", ...normalizedPaths], workspacePath);
+    }
+
+    const commitArgs = ["commit", "-m", normalizedMessage];
+    if (normalizedPaths.length > 0) {
+      commitArgs.push("--", ...normalizedPaths);
+    }
+
+    await runGit(commitArgs, workspacePath);
+  } catch (error) {
+    throw new Error(
+      getGitErrorMessage(
+        error,
+        normalizedPaths.length > 0 ? "提交选中文件失败。" : "提交改动失败。",
+      ),
+    );
+  }
 }
 
 export async function pushGitChanges(workspacePath: string): Promise<void> {
   await runGit(["push"], workspacePath);
+}
+
+export async function getLatestCommitSubject(
+  workspacePath: string,
+): Promise<string | null> {
+  const repository = await isGitRepository(workspacePath);
+
+  if (!repository) {
+    return null;
+  }
+
+  try {
+    const result = await runGit(["log", "-1", "--pretty=%s"], workspacePath);
+    const subject = result.stdout.trim();
+    return subject || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getDiffForFiles(
+  workspacePath: string,
+  filePaths: string[],
+): Promise<string> {
+  if (filePaths.length === 0) return "";
+
+  const baseRef = await resolveDiffBase(workspacePath);
+  const parts: string[] = [];
+
+  for (const filePath of filePaths) {
+    // Try unstaged diff first, then staged, then combined
+    let patch = "";
+    try {
+      const result = await runGit(
+        ["diff", "--no-ext-diff", "--unified=3", "--relative", "--", filePath],
+        workspacePath,
+      );
+      patch = result.stdout;
+    } catch {
+      // no unstaged diff
+    }
+
+    if (!patch) {
+      try {
+        const result = await runGit(
+          ["diff", "--cached", "--no-ext-diff", "--unified=3", "--relative", "--", filePath],
+          workspacePath,
+        );
+        patch = result.stdout;
+      } catch {
+        // no staged diff either
+      }
+    }
+
+    if (!patch) {
+      // Might be untracked
+      patch = createUntrackedPatch(workspacePath, filePath);
+    }
+
+    if (patch) {
+      parts.push(patch);
+    }
+  }
+
+  return parts.join("\n");
 }

@@ -90,6 +90,7 @@ import {
   buildSelectableModelOptions,
   findEntryLabel,
   loadProviderDirectory,
+  subscribeProviderDirectoryChanged,
 } from "@renderer/lib/provider-directory";
 import {
   canConfigureThinking,
@@ -334,17 +335,26 @@ export const Thread: FC<ThreadProps> = ({
       };
     }
 
-    void (async () => {
+    const syncProviderDirectory = async (force = false) => {
       if (!window.desktopApi) return;
-      const nextDirectory = await loadProviderDirectory(window.desktopApi);
+      const nextDirectory = await loadProviderDirectory(window.desktopApi, { force });
       if (!cancelled) {
         setSources(nextDirectory.sources);
         setEntries(nextDirectory.entries);
       }
+    };
+
+    void (async () => {
+      await syncProviderDirectory();
     })();
+
+    const unsubscribe = subscribeProviderDirectoryChanged(() => {
+      void syncProviderDirectory(true);
+    });
 
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [visible]);
 

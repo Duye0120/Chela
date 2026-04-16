@@ -539,6 +539,10 @@ function validateEntryDraft(
     throw new Error("模型 ID 不能为空。");
   }
 
+  if (modelId === "new-model-id") {
+    throw new Error("请先填写真实的模型 ID，再保存模型条目。");
+  }
+
   if (existing?.builtin) {
     return {
       ...existing,
