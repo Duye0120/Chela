@@ -403,7 +403,7 @@ export default function App() {
     }
 
     panel.expand();
-    panel.resize(clampSidebarSize(lastExpandedSidebarSizeRef.current));
+    panel.resize(toSidebarPercentageSize(lastExpandedSidebarSizeRef.current));
   }, [sidebarCollapsed]);
 
   useEffect(() => {
