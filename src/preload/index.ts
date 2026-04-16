@@ -147,9 +147,12 @@ const desktopApi: DesktopApi = {
   ui: {
     getState: () => ipcRenderer.invoke(IPC_CHANNELS.uiGetState),
     setDiffPanelOpen: (open: boolean) => ipcRenderer.invoke(IPC_CHANNELS.uiSetDiffPanelOpen, open),
+    setRightPanelState: (partial) => ipcRenderer.invoke(IPC_CHANNELS.uiSetRightPanelState, partial),
   },
   window: {
     getState: () => ipcRenderer.invoke(IPC_CHANNELS.windowGetState),
+    getBounds: () => ipcRenderer.invoke(IPC_CHANNELS.windowGetBounds),
+    setBounds: (bounds) => ipcRenderer.invoke(IPC_CHANNELS.windowSetBounds, bounds),
     minimize: () => ipcRenderer.send(IPC_CHANNELS.windowMinimize),
     toggleMaximize: () => ipcRenderer.invoke(IPC_CHANNELS.windowToggleMaximize),
     close: () => ipcRenderer.send(IPC_CHANNELS.windowClose),

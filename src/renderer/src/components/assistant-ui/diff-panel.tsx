@@ -72,12 +72,13 @@ const DIFF_SOURCE_META: Record<GitDiffSource, { label: string; description: stri
 
 type ExpandedDiffState = Partial<Record<GitDiffSource, string[]>>;
 
-type DiffPanelProps = {
-  open: boolean;
+type DiffWorkbenchContentProps = {
   onClose: () => void;
   overview: GitDiffOverview | null;
   isLoading: boolean;
   onRefresh: () => void | Promise<void>;
+  className?: string;
+  panelWidth?: number;
 };
 
 function EmptyPanelState({
@@ -371,27 +372,20 @@ async function generateCommitMessage(
   };
 }
 
-function DiffPanelInner({
-  open,
+export function DiffWorkbenchContent({
   onClose,
   overview,
   isLoading,
   onRefresh,
-}: DiffPanelProps) {
+  className,
+  panelWidth,
+}: DiffWorkbenchContentProps) {
   // ── State: layout & sizing ──────────────────────────────────────────
-  const { size: panelWidth, handleMouseDown: handlePanelResize } = useResizable({
-    axis: "horizontal",
-    initial: typeof window !== "undefined" ? window.innerWidth * 0.5 : 900,
-    min: 400,
-    max: typeof window !== "undefined" ? window.innerWidth - 100 : 900,
-    invert: true,
-  });
-
   const { size: treeWidth, handleMouseDown: handleTreeResize } = useResizable({
     axis: "horizontal",
     initial: 350,
     min: 200,
-    max: Math.max(200, panelWidth - 200),
+    max: Math.max(200, (panelWidth ?? (typeof window !== "undefined" ? window.innerWidth : 900)) - 200),
   });
 
   const { size: commitPanelHeight, handleMouseDown: handleCommitResize } = useResizable({
@@ -603,12 +597,6 @@ function DiffPanelInner({
   }, [selectedDiffSource]);
 
   // ── Derived values ──────────────────────────────────────────────────
-  const drawerBase =
-    "fixed right-0 top-0 bottom-0 z-50 flex h-full min-h-0 flex-col bg-background px-4 py-4 rounded-[8px] transform transition-transform duration-300 ease-in-out";
-  const drawerClosed = `${drawerBase} translate-x-full`;
-  const drawerOpen = `${drawerBase} translate-x-0`;
-  const drawerClass = open ? drawerOpen : drawerClosed;
-
   const currentSourceSnapshot = overview?.sources[selectedDiffSource] ?? EMPTY_SOURCE_SNAPSHOT;
   const currentExpandedPaths = expandedDiffPaths[selectedDiffSource] ?? [];
   const expandedPathSet = new Set(currentExpandedPaths);
@@ -632,19 +620,7 @@ function DiffPanelInner({
   // Sparkles highlight: selectedPaths changed + commitMessage non-empty
   const showSparklesHint = selectedPathsChanged && commitMessage.trim().length > 0;
 
-  // ── Render: empty states ────────────────────────────────────────────
-  function ResizeHandle() {
-    return (
-      <div
-        className="absolute left-[-2px] w-[5px] top-0 bottom-0 cursor-col-resize z-50 group flex justify-center"
-        onMouseDown={handlePanelResize}
-      >
-        <div className="w-[2px] h-full bg-primary/60 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity duration-200" />
-      </div>
-    );
-  }
-
-  function DrawerHeader({ children }: { children: React.ReactNode }) {
+  function PanelHeader({ children }: { children: React.ReactNode }) {
     return (
       <div className="mb-1 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">{children}</div>
@@ -664,28 +640,26 @@ function DiffPanelInner({
 
   if (!overview) {
     return (
-      <aside className={drawerClass} style={{ width: open ? panelWidth : 900 }}>
-        {open && <ResizeHandle />}
-        <DrawerHeader>
+      <section className={cn("flex h-full min-h-0 flex-col bg-background px-4 py-4", className)}>
+        <PanelHeader>
           <p className="text-[11px] uppercase tracking-[0.22em] text-[color:var(--color-text-secondary)]">Diff</p>
-        </DrawerHeader>
+        </PanelHeader>
         <div className="mt-4">
           <EmptyPanelState
             title={isLoading ? "正在读取变更" : "准备读取变更"}
             description="稍等一下，正在从当前 workspace 拉取 Git diff 快照。"
           />
         </div>
-      </aside>
+      </section>
     );
   }
 
   if (!overview.isGitRepo) {
     return (
-      <aside className={drawerClass} style={{ width: open ? panelWidth : 900 }}>
-        {open && <ResizeHandle />}
-        <DrawerHeader>
+      <section className={cn("flex h-full min-h-0 flex-col bg-background px-4 py-4", className)}>
+        <PanelHeader>
           <p className="text-[11px] uppercase tracking-[0.22em] text-[color:var(--color-text-secondary)]">Diff</p>
-        </DrawerHeader>
+        </PanelHeader>
         <div className="mt-2">
           <h3 className="text-lg font-semibold text-foreground">工作区 Diff</h3>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -698,21 +672,20 @@ function DiffPanelInner({
             description="当前 workspace 没有可读取的 Git 仓库，所以这里暂时无法展示 diff。"
           />
         </div>
-      </aside>
+      </section>
     );
   }
 
   // ── Render: main content ────────────────────────────────────────────
   return (
-    <aside className={drawerClass} style={{ width: open ? panelWidth : 900 }}>
-      {open && <ResizeHandle />}
-      <DrawerHeader>
+    <section className={cn("flex h-full min-h-0 flex-col bg-background px-4 py-4", className)}>
+      <PanelHeader>
         <div>
           <p className="text-[11px] uppercase tracking-[0.22em] text-[color:var(--color-text-secondary)]">Diff</p>
           <h3 className="text-lg font-semibold text-foreground">工作区 Diff</h3>
           <p className="mt-1 text-xs text-muted-foreground">{meta.description}</p>
         </div>
-      </DrawerHeader>
+      </PanelHeader>
 
       {/* Toolbar */}
       <div className="flex items-center gap-2 mb-4">
@@ -1105,11 +1078,28 @@ function DiffPanelInner({
           )}
         </SectionSurface>
       </div>
-    </aside>
+    </section>
   );
 }
 
+type DiffPanelProps = Omit<DiffWorkbenchContentProps, "className"> & {
+  open: boolean;
+};
+
 export function DiffPanel(props: DiffPanelProps) {
+  const { size: panelWidth, handleMouseDown: handlePanelResize } = useResizable({
+    axis: "horizontal",
+    initial: typeof window !== "undefined" ? window.innerWidth * 0.5 : 900,
+    min: 400,
+    max: typeof window !== "undefined" ? window.innerWidth - 100 : 900,
+    invert: true,
+  });
+  const drawerBase =
+    "fixed right-0 top-0 bottom-0 z-50 flex h-full min-h-0 flex-col bg-background transform transition-transform duration-300 ease-in-out";
+  const drawerClosed = `${drawerBase} translate-x-full`;
+  const drawerOpen = `${drawerBase} translate-x-0`;
+  const drawerClass = props.open ? drawerOpen : drawerClosed;
+
   return (
     <>
       <div
@@ -1120,7 +1110,17 @@ export function DiffPanel(props: DiffPanelProps) {
         onClick={props.onClose}
         aria-hidden="true"
       />
-      <DiffPanelInner {...props} />
+      <aside className={drawerClass} style={{ width: props.open ? panelWidth : 900 }}>
+        {props.open ? (
+          <div
+            className="absolute left-[-2px] top-0 bottom-0 z-50 flex w-[5px] cursor-col-resize justify-center group"
+            onMouseDown={handlePanelResize}
+          >
+            <div className="h-full w-[2px] bg-primary/60 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-active:opacity-100" />
+          </div>
+        ) : null}
+        <DiffWorkbenchContent {...props} panelWidth={panelWidth} />
+      </aside>
     </>
   );
 }

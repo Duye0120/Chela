@@ -1,7 +1,7 @@
 import { cpSync, existsSync, readdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, screen } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc.js";
 import { appLogger, attachWindowLogging } from "./logger.js";
 
@@ -77,6 +77,42 @@ export function computeWindowFrameState() {
   return {
     isMaximized: window.isMaximized(),
   };
+}
+
+export function computeWindowBounds() {
+  const window = requireMainWindow();
+  const bounds = window.getBounds();
+  return {
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+  };
+}
+
+export function setMainWindowBounds(bounds: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}) {
+  const window = requireMainWindow();
+  const display = screen.getDisplayMatching(window.getBounds());
+  const workArea = display.workArea;
+  const [minWidth, minHeight] = window.getMinimumSize();
+  const nextX = bounds.x;
+  const nextY = bounds.y;
+  const maxWidth = Math.max(minWidth, workArea.x + workArea.width - nextX);
+  const maxHeight = Math.max(minHeight, workArea.y + workArea.height - nextY);
+
+  window.setBounds({
+    x: nextX,
+    y: nextY,
+    width: Math.min(maxWidth, Math.max(minWidth, Math.round(bounds.width))),
+    height: Math.min(maxHeight, Math.max(minHeight, Math.round(bounds.height))),
+  });
+
+  return computeWindowBounds();
 }
 
 function notifyWindowState() {

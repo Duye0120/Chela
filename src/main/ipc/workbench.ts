@@ -1,5 +1,5 @@
 import { IPC_CHANNELS } from "../../shared/ipc.js";
-import type { GitCommitInput } from "../../shared/contracts.js";
+import type { GitCommitInput, RightPanelState } from "../../shared/contracts.js";
 import {
   createAndSwitchGitBranch,
   getGitBranchSummary,
@@ -18,7 +18,7 @@ import {
   resizeTerminal,
   writeTerminal,
 } from "../terminal.js";
-import { getUiState, setDiffPanelOpen } from "../ui-state.js";
+import { getUiState, setDiffPanelOpen, setRightPanelState } from "../ui-state.js";
 import { handleIpc } from "./handle.js";
 
 export function registerWorkbenchIpc(): void {
@@ -80,5 +80,9 @@ export function registerWorkbenchIpc(): void {
   handleIpc(
     IPC_CHANNELS.uiSetDiffPanelOpen,
     async (_event, open: boolean) => setDiffPanelOpen(open),
+  );
+  handleIpc(
+    IPC_CHANNELS.uiSetRightPanelState,
+    async (_event, partial: Partial<RightPanelState>) => setRightPanelState(partial),
   );
 }

@@ -99,9 +99,12 @@ export const IPC_CHANNELS = {
   // UI
   uiGetState: "ui:get-state",
   uiSetDiffPanelOpen: "ui:set-diff-panel-open",
+  uiSetRightPanelState: "ui:set-right-panel-state",
 
   // Window
   windowGetState: "window:get-state",
+  windowGetBounds: "window:get-bounds",
+  windowSetBounds: "window:set-bounds",
   windowMinimize: "window:minimize",
   windowToggleMaximize: "window:toggle-maximize",
   windowClose: "window:close",

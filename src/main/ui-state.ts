@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { app } from "electron";
-import type { SessionGroup, WindowUiState } from "../shared/contracts.js";
+import type {
+  RightPanelState,
+  SessionGroup,
+  WindowUiState,
+} from "../shared/contracts.js";
 import {
   listPersistedArchivedSessions,
   listPersistedSessions,
@@ -50,31 +54,85 @@ function readJsonFile<T>(filePath: string, fallback: T): T {
   }
 }
 
+function normalizeRightPanelState(
+  parsed: Partial<WindowUiState> & {
+    rightPanelOpen?: boolean;
+    rightPanelWidth?: number | null;
+    rightPanelActiveView?: string | null;
+  },
+): RightPanelState {
+  const parsedRightPanel = parsed.rightPanel;
+  const open =
+    typeof parsedRightPanel?.open === "boolean"
+      ? parsedRightPanel.open
+      : typeof parsed.diffPanelOpen === "boolean"
+        ? parsed.diffPanelOpen
+        : typeof parsed.rightPanelOpen === "boolean"
+          ? parsed.rightPanelOpen
+          : false;
+  const activeView = parsedRightPanel?.activeView === "diff" ? "diff" : "diff";
+  const widthCandidate =
+    typeof parsedRightPanel?.width === "number" && Number.isFinite(parsedRightPanel.width)
+      ? parsedRightPanel.width
+      : typeof parsed.rightPanelWidth === "number" && Number.isFinite(parsed.rightPanelWidth)
+        ? parsed.rightPanelWidth
+        : null;
+
+  return {
+    open,
+    activeView,
+    width: widthCandidate,
+  };
+}
+
+function normalizeUiState(
+  parsed: Partial<WindowUiState> & {
+    rightPanelOpen?: boolean;
+    rightPanelWidth?: number | null;
+    rightPanelActiveView?: string | null;
+  },
+): WindowUiState {
+  const rightPanel = normalizeRightPanelState(parsed);
+
+  return {
+    diffPanelOpen: rightPanel.open && rightPanel.activeView === "diff",
+    rightPanel,
+  };
+}
+
 export function getUiState(): WindowUiState {
   const filePath = getUiStatePath();
   const parsed = readJsonFile<
     Partial<WindowUiState> & {
       rightPanelOpen?: boolean;
+      rightPanelWidth?: number | null;
+      rightPanelActiveView?: string | null;
     }
   >(filePath, {});
 
-  return {
-    diffPanelOpen:
-      typeof parsed.diffPanelOpen === "boolean"
-        ? parsed.diffPanelOpen
-        : typeof parsed.rightPanelOpen === "boolean"
-          ? parsed.rightPanelOpen
-          : false,
-  };
+  return normalizeUiState(parsed);
 }
 
 function writeUiState(ui: WindowUiState): void {
-  atomicWrite(getUiStatePath(), JSON.stringify(ui, null, 2));
+  atomicWrite(getUiStatePath(), JSON.stringify(normalizeUiState(ui), null, 2));
 }
 
 export function setDiffPanelOpen(open: boolean): void {
   const ui = getUiState();
+  ui.rightPanel.open = open;
+  ui.rightPanel.activeView = "diff";
   ui.diffPanelOpen = open;
+  writeUiState(ui);
+}
+
+export function setRightPanelState(partial: Partial<RightPanelState>): void {
+  const ui = getUiState();
+  ui.rightPanel = {
+    ...ui.rightPanel,
+    ...partial,
+    activeView: "diff",
+  };
+  ui.diffPanelOpen = ui.rightPanel.open && ui.rightPanel.activeView === "diff";
   writeUiState(ui);
 }
 

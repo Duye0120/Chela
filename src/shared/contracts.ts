@@ -509,8 +509,17 @@ export type TrimSessionMessagesInput = {
   messageId: string;
 };
 
+export type RightPanelView = "diff";
+
+export type RightPanelState = {
+  open: boolean;
+  activeView: RightPanelView;
+  width: number | null;
+};
+
 export type WindowUiState = {
   diffPanelOpen: boolean;
+  rightPanel: RightPanelState;
 };
 
 export type ContextSummary = {
@@ -607,6 +616,13 @@ export type GenerateCommitMessageResult = {
 
 export type WindowFrameState = {
   isMaximized: boolean;
+};
+
+export type WindowBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 export type PersistedAppState = {
@@ -723,9 +739,12 @@ export type DesktopApi = {
   ui: {
     getState: () => Promise<WindowUiState>;
     setDiffPanelOpen: (open: boolean) => Promise<void>;
+    setRightPanelState: (partial: Partial<RightPanelState>) => Promise<void>;
   };
   window: {
     getState: () => Promise<WindowFrameState>;
+    getBounds: () => Promise<WindowBounds>;
+    setBounds: (bounds: WindowBounds) => Promise<WindowBounds>;
     minimize: () => void;
     toggleMaximize: () => Promise<WindowFrameState>;
     close: () => void;
