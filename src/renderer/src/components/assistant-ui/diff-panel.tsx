@@ -15,10 +15,10 @@ import {
   FolderTreeIcon,
   ListTreeIcon,
   TrashIcon,
+  CheckCheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
 } from "lucide-react";
-import { useState } from "react";
 import type {
   CommitPlanGroup,
   GitDiffFile,
@@ -607,10 +607,12 @@ export function DiffWorkbenchContent({
   // ── State: commit plan ──────────────────────────────────────────────
   const [commitPlanGroups, setCommitPlanGroups] = useState(diffWorkbenchDraft.commitPlanGroups);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [isCommittingAll, setIsCommittingAll] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [isStaging, setIsStaging] = useState(false);
   const [commitPlanError, setCommitPlanError] = useState<string | null>(null);
+  const [commitAllProgress, setCommitAllProgress] = useState({ current: 0, total: 0 });
 
   // ── Effects ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -818,7 +820,7 @@ export function DiffWorkbenchContent({
 
   const handleCommitPlanGroup = useCallback(async (groupId: string) => {
     const group = commitPlanGroups.find((item) => item.id === groupId);
-    if (!group || !group.title.trim() || group.filePaths.length === 0) return;
+    if (!group || !group.title.trim() || group.filePaths.length === 0) return false;
 
     setCommitPlanError(null);
     patchCommitPlanGroup(groupId, (current) => ({
@@ -835,6 +837,7 @@ export function DiffWorkbenchContent({
       setCommitPlanGroups((current) => current.filter((item) => item.id !== groupId));
       setSelectedPathsChanged(false);
       await onRefresh();
+      return true;
     } catch (err) {
       const message = getErrorMessage(err, "提交失败");
       patchCommitPlanGroup(groupId, (current) => ({
@@ -843,8 +846,31 @@ export function DiffWorkbenchContent({
         error: message,
       }));
       setCommitPlanError(message);
+      return false;
     }
   }, [commitPlanGroups, onRefresh, patchCommitPlanGroup]);
+
+  const handleCommitAllPlanGroups = useCallback(async () => {
+    if (commitPlanGroups.length < 2) return;
+
+    const groupIds = commitPlanGroups.map((group) => group.id);
+    setCommitPlanError(null);
+    setIsCommittingAll(true);
+    setCommitAllProgress({ current: 0, total: groupIds.length });
+
+    try {
+      for (let index = 0; index < groupIds.length; index += 1) {
+        setCommitAllProgress({ current: index + 1, total: groupIds.length });
+        const success = await handleCommitPlanGroup(groupIds[index]);
+        if (!success) {
+          break;
+        }
+      }
+    } finally {
+      setIsCommittingAll(false);
+      setCommitAllProgress({ current: 0, total: 0 });
+    }
+  }, [commitPlanGroups, handleCommitPlanGroup]);
 
   const handleClearPlan = useCallback(() => {
     setCommitPlanError(null);
@@ -866,13 +892,22 @@ export function DiffWorkbenchContent({
   const hasBusyPlanGroup = commitPlanGroups.some(
     (group) => group.status === "staging" || group.status === "committing",
   );
-  const isPlanBusy = isGeneratingPlan || hasBusyPlanGroup;
+  const isPlanBusy = isGeneratingPlan || hasBusyPlanGroup || isCommittingAll;
   const canGeneratePlan = selectedFiles.length > 0 && !isPlanBusy;
+  const canCommitAll =
+    commitPlanGroups.length > 1 &&
+    commitPlanGroups.every(
+      (group) => group.title.trim().length > 0 && group.filePaths.length > 0,
+    ) &&
+    !isPlanBusy;
   const generateTooltip = isGeneratingPlan
     ? "正在生成提交计划…"
     : selectedFiles.length === 0
       ? "请先勾选需要分析的文件"
       : `按已勾选 ${selectedFiles.length} 个文件生成`;
+  const commitAllTooltip = isCommittingAll
+    ? `依次提交全部（${commitAllProgress.current}/${commitAllProgress.total}）`
+    : "依次提交全部";
   const showSparklesHint = selectedPathsChanged && commitPlanGroups.length > 0;
 
   function PanelHeader({ children }: { children: React.ReactNode }) {
@@ -1056,15 +1091,19 @@ export function DiffWorkbenchContent({
         <SectionSurface className="flex h-full min-h-0 flex-col">
           {/* Empty state variants */}
           {!hasAnyChanges ? (
-            <EmptyPanelState
-              title="暂无改动"
-              description="当前 workspace 没有未提交改动；一旦出现修改、删除或新增文件，这里会自动刷新。"
-            />
+            <div className="flex min-h-0 flex-1 items-center justify-center py-6">
+              <EmptyPanelState
+                title="暂无改动"
+                description="当前 workspace 没有未提交改动；一旦出现修改、删除或新增文件，这里会自动刷新。"
+              />
+            </div>
           ) : currentSourceSnapshot.files.length === 0 ? (
-            <EmptyPanelState
-              title={`${meta.label}为空`}
-              description="这个来源当前没有可展示的改动，可以切换到其他来源继续查看。"
-            />
+            <div className="flex min-h-0 flex-1 items-center justify-center py-6">
+              <EmptyPanelState
+                title={`${meta.label}为空`}
+                description="这个来源当前没有可展示的改动，可以切换到其他来源继续查看。"
+              />
+            </div>
           ) : (
             <div className="relative flex min-h-0 flex-1 overflow-hidden">
               {/* ── Left sidebar: tree + commit panel (siblings) ─────── */}
@@ -1172,6 +1211,28 @@ export function DiffWorkbenchContent({
                       </div>
 
                       <div className="flex items-center gap-1">
+                        {commitPlanGroups.length > 1 ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 rounded-[var(--radius-shell)] shrink-0 text-muted-foreground hover:text-foreground"
+                                onClick={handleCommitAllPlanGroups}
+                                disabled={!canCommitAll}
+                                aria-label="依次提交全部"
+                              >
+                                {isCommittingAll ? (
+                                  <RefreshCwIcon className="size-3.5 animate-spin" />
+                                ) : (
+                                  <CheckCheckIcon className="size-3.5" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>{commitAllTooltip}</TooltipContent>
+                          </Tooltip>
+                        ) : null}
+
                         {commitPlanGroups.length > 0 ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
