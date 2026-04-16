@@ -120,6 +120,14 @@ function formatSignedCount(value: number, sign: "+" | "-") {
   return `${sign}${new Intl.NumberFormat("zh-CN").format(value)}`;
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  return fallback;
+}
+
 function formatBranchLabel(overview: GitDiffOverview) {
   if (!overview.isGitRepo) {
     return "非 Git 仓库";
@@ -347,20 +355,19 @@ function hydrateExpandedState(current: ExpandedDiffState, overview: GitDiffOverv
   return changed ? next : current;
 }
 
-// ─── Mock commit message generator ────────────────────────────────────────
+// ─── Commit message generator (calls Worker IPC) ──────────────────────────
 
 async function generateCommitMessage(
   selectedFiles: GitDiffFile[],
-  diffs: string,
 ): Promise<{ title: string; description: string }> {
-  const raw = await window.desktopApi.worker.generateCommitMessage({
+  const result = await window.desktopApi.worker.generateCommitMessage({
     selectedFiles,
-    diffContent: diffs,
+    // diffContent is optional — main process will fetch actual diffs from git
+    // if not provided here.
   });
-  const [title = "", ...bodyLines] = raw.trim().split(/\r?\n/);
   return {
-    title: title.trim(),
-    description: bodyLines.join("\n").trim(),
+    title: result.title,
+    description: result.description,
   };
 }
 
@@ -415,11 +422,15 @@ function DiffPanelInner({
   const [isPulling, setIsPulling] = useState(false);
   const [isStaging, setIsStaging] = useState(false);
   const [isGeneratingMessage, setIsGeneratingMessage] = useState(false);
+  const [generateMessageError, setGenerateMessageError] = useState<string | null>(null);
+  const [commitError, setCommitError] = useState<string | null>(null);
+  const commitTitleRef = useRef<HTMLTextAreaElement | null>(null);
 
   // ── Effects ─────────────────────────────────────────────────────────
   useEffect(() => {
     setSelectedPaths(new Set());
     setSelectedPathsChanged(false);
+    setCommitError(null);
   }, [selectedDiffSource, overview]);
 
   useEffect(() => {
@@ -437,8 +448,16 @@ function DiffPanelInner({
     });
   }, [overview]);
 
+  useEffect(() => {
+    const el = commitTitleRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [commitMessage]);
+
   // ── Handlers: selection ─────────────────────────────────────────────
   const handleToggleSelection = useCallback((paths: string[], isSelected: boolean) => {
+    setCommitError(null);
     setSelectedPaths((current) => {
       const next = new Set(current);
       for (const p of paths) {
@@ -452,6 +471,7 @@ function DiffPanelInner({
 
   const handleSelectAll = useCallback(() => {
     if (!overview) return;
+    setCommitError(null);
     const files = overview.sources[selectedDiffSource].files;
     if (selectedPaths.size === files.length) {
       setSelectedPaths(new Set());
@@ -486,17 +506,28 @@ function DiffPanelInner({
 
   // ── Handlers: commit ────────────────────────────────────────────────
   const handleCommit = useCallback(async () => {
-    if (!commitMessage.trim()) return;
+    const paths = Array.from(selectedPaths);
+    if (!commitMessage.trim() || paths.length === 0) return;
+
+    setCommitError(null);
     setIsCommitting(true);
     try {
-      await window.desktopApi.git.commit(commitMessage);
+      await window.desktopApi.git.commit({
+        message: commitMessage,
+        paths,
+      });
       setCommitMessage("");
       setSelectedPathsChanged(false);
       await onRefresh();
+    } catch (err) {
+      const message = getErrorMessage(err, "提交失败");
+      setCommitError(message);
+      // eslint-disable-next-line no-console
+      console.error("[DiffPanel] commit failed:", message);
     } finally {
       setIsCommitting(false);
     }
-  }, [commitMessage, onRefresh]);
+  }, [commitMessage, onRefresh, selectedPaths]);
 
   const handlePush = useCallback(async () => {
     setIsPushing(true);
@@ -521,16 +552,26 @@ function DiffPanelInner({
   // ── Handler: generate commit message ────────────────────────────────
   const handleGenerateMessage = useCallback(async () => {
     if (!overview) return;
+    setGenerateMessageError(null);
+    setCommitError(null);
     const files = overview.sources[selectedDiffSource].files.filter((f) =>
       selectedPaths.size === 0 ? true : selectedPaths.has(f.path),
     );
-    const diffs = files.map((f) => f.patch).join("\n");
+    if (files.length === 0) return;
 
     setIsGeneratingMessage(true);
     try {
-      const result = await generateCommitMessage(files, diffs);
-      setCommitMessage(result.title + "\n" + result.description);
+      const result = await generateCommitMessage(files);
+      const message = result.description
+        ? result.title + "\n" + result.description
+        : result.title;
+      setCommitMessage(message);
       setSelectedPathsChanged(false);
+    } catch (err) {
+      const message = getErrorMessage(err, "生成提交信息失败");
+      setGenerateMessageError(message);
+      // eslint-disable-next-line no-console
+      console.error("[DiffPanel] generateCommitMessage failed:", message);
     } finally {
       setIsGeneratingMessage(false);
     }
@@ -575,6 +616,18 @@ function DiffPanelInner({
     (source) => (overview?.sources[source]?.totalFiles ?? 0) > 0,
   );
   const meta = DIFF_SOURCE_META[selectedDiffSource];
+  const generateTargetCount =
+    selectedPaths.size === 0
+      ? currentSourceSnapshot.files.length
+      : currentSourceSnapshot.files.filter((file) => selectedPaths.has(file.path)).length;
+  const canGenerateMessage = generateTargetCount > 0 && !isGeneratingMessage;
+  const generateTooltip = isGeneratingMessage
+    ? "正在生成…"
+    : generateTargetCount === 0
+      ? "当前来源没有可生成的文件"
+      : selectedPaths.size === 0
+        ? `按当前来源 ${generateTargetCount} 个文件生成`
+        : `按已勾选 ${generateTargetCount} 个文件生成`;
 
   // Sparkles highlight: selectedPaths changed + commitMessage non-empty
   const showSparklesHint = selectedPathsChanged && commitMessage.trim().length > 0;
@@ -884,14 +937,21 @@ function DiffPanelInner({
                       <div className="flex items-center justify-center size-[18px] bg-secondary rounded-full mr-1 shrink-0 overflow-hidden text-muted-foreground/80">
                         <UserIcon className="size-3" />
                       </div>
-                      <input
+                      <textarea
+                        ref={commitTitleRef}
                         placeholder="Update files..."
-                        className="flex-1 bg-transparent text-[12px] font-medium placeholder:text-muted-foreground focus:outline-none min-w-0"
+                        className="flex-1 bg-transparent text-[12px] font-medium placeholder:text-muted-foreground focus:outline-none min-w-0 resize-none overflow-hidden leading-[1.4] break-words"
+                        rows={1}
                         value={commitMessage.split("\n")[0] || ""}
                         onChange={(e) => {
                           const lines = commitMessage.split("\n");
-                          lines[0] = e.target.value;
+                          lines[0] = e.target.value.replace(/\n/g, " ");
                           setCommitMessage(lines.join("\n"));
+                        }}
+                        onInput={(e) => {
+                          const el = e.currentTarget;
+                          el.style.height = "auto";
+                          el.style.height = el.scrollHeight + "px";
                         }}
                       />
                     </div>
@@ -913,64 +973,94 @@ function DiffPanelInner({
                   </div>
 
                   {/* Commit & Push actions */}
-                  <div className="flex items-center justify-between mt-2 shrink-0">
-                    <div className="flex items-center gap-2">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            className="h-7 px-2 text-[12px] rounded-[6px] font-medium tracking-wide flex items-center justify-center gap-1.5"
-                            onClick={handleCommit}
-                            disabled={selectedPaths.size === 0 || !commitMessage.trim() || isCommitting}
-                          >
-                            <CheckIcon className="size-3.5" />
-                            {isCommitting ? "提交中…" : `Commit (${selectedPaths.size})`}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {selectedPaths.size === 0 ? "请先勾选需要提交的文件" : (isCommitting ? "正在提交…" : "提交更改")}
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
+                  <div className="mt-2 flex flex-col gap-2 shrink-0">
+                    {isGeneratingMessage ? (
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        className="rounded-[6px] bg-secondary/30 px-3 py-2 text-[12px] leading-5 text-muted-foreground"
+                      >
+                        正在按 commit skill 生成提交信息…
+                      </div>
+                    ) : null}
 
-                    <div className="flex items-center gap-1">
-                      {commitMessage.trim() && (
+                    {generateMessageError ? (
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        className="rounded-[6px] bg-rose-500/8 px-3 py-2 text-[12px] leading-5 text-rose-700"
+                      >
+                        {generateMessageError}
+                      </div>
+                    ) : null}
+
+                    {commitError ? (
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        className="rounded-[6px] bg-rose-500/8 px-3 py-2 text-[12px] leading-5 text-rose-700"
+                      >
+                        {commitError}
+                      </div>
+                    ) : null}
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              className="h-7 px-2 text-[12px] rounded-[6px] font-medium tracking-wide flex items-center justify-center gap-1.5"
+                              onClick={handleCommit}
+                              disabled={selectedPaths.size === 0 || !commitMessage.trim() || isCommitting}
+                            >
+                              <CheckIcon className="size-3.5" />
+                              {isCommitting ? "提交中…" : `Commit (${selectedPaths.size})`}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {selectedPaths.size === 0 ? "请先勾选需要提交的文件" : (isCommitting ? "正在提交…" : "提交更改")}
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        {commitMessage.trim() && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 rounded-[6px] shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => setCommitMessage("")}
+                              >
+                                <TrashIcon className="size-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>清空内容</TooltipContent>
+                          </Tooltip>
+                        )}
+
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="size-7 rounded-[6px] shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                              onClick={() => setCommitMessage("")}
+                              className={cn(
+                                "size-7 rounded-[6px] shrink-0 text-muted-foreground hover:text-foreground relative",
+                                isGeneratingMessage && "animate-pulse"
+                              )}
+                              onClick={handleGenerateMessage}
+                              disabled={!canGenerateMessage}
                             >
-                              <TrashIcon className="size-3.5" />
+                              <SparklesIcon className="size-3.5" />
+                              {showSparklesHint && (
+                                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-accent/80" />
+                              )}
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>清空内容</TooltipContent>
+                          <TooltipContent>{generateTooltip}</TooltipContent>
                         </Tooltip>
-                      )}
-
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className={cn(
-                              "size-7 rounded-[6px] shrink-0 text-muted-foreground hover:text-foreground relative",
-                              isGeneratingMessage && "animate-pulse"
-                            )}
-                            onClick={handleGenerateMessage}
-                            disabled={selectedPaths.size === 0 || isGeneratingMessage}
-                          >
-                            <SparklesIcon className="size-3.5" />
-                            {showSparklesHint && (
-                              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-accent/80" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {selectedPaths.size === 0 ? "需勾选文件后生成" : (isGeneratingMessage ? "正在生成…" : "生成提交信息")}
-                        </TooltipContent>
-                      </Tooltip>
+                      </div>
                     </div>
                   </div>
                 </div>

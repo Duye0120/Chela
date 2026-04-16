@@ -585,9 +585,24 @@ export type GitDiffOverview = {
 
 export type GitDiffSnapshot = GitDiffOverview;
 
+export type GitCommitInput = {
+  message: string;
+  paths: string[];
+};
+
 export type GenerateCommitMessageRequest = {
   selectedFiles: GitDiffFile[];
-  diffContent: string;
+  diffContent?: string;
+  branchName?: string | null;
+  latestCommitSubject?: string | null;
+};
+
+export type GenerateCommitMessageResult = {
+  title: string;
+  description: string;
+  usedModelRole: "utility" | "chat";
+  fallbackUsed: boolean;
+  skillName: "commit";
 };
 
 export type WindowFrameState = {
@@ -696,14 +711,14 @@ export type DesktopApi = {
     createAndSwitchBranch: (branchName: string) => Promise<void>;
     stageFiles: (paths: string[]) => Promise<void>;
     unstageFiles: (paths: string[]) => Promise<void>;
-    commit: (message: string) => Promise<void>;
+    commit: (input: GitCommitInput) => Promise<void>;
     push: () => Promise<void>;
     pull: () => Promise<void>;
   };
   worker: {
     generateCommitMessage: (
       request: GenerateCommitMessageRequest,
-    ) => Promise<string>;
+    ) => Promise<GenerateCommitMessageResult>;
   };
   ui: {
     getState: () => Promise<WindowUiState>;

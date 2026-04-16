@@ -2,7 +2,12 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { BotIcon } from "lucide-react";
 import type { ModelEntry, ProviderSource, SoulFilesStatus } from "@shared/contracts";
 import { resolveConfiguredTimeZone } from "@shared/timezone";
-import { buildSelectableModelOptions, findEntryLabel, loadProviderDirectory } from "@renderer/lib/provider-directory";
+import {
+  buildSelectableModelOptions,
+  findEntryLabel,
+  loadProviderDirectory,
+  subscribeProviderDirectoryChanged,
+} from "@renderer/lib/provider-directory";
 import type { ModelOption } from "@renderer/components/assistant-ui/model-selector";
 import {
   canConfigureThinking,
@@ -56,6 +61,10 @@ function SettingsViewImpl({
     setSoulStatus(status);
   }, [desktopApi]);
 
+  const handleDirectoryChanged = useCallback(() => {
+    void loadDirectory(true);
+  }, [loadDirectory]);
+
   useEffect(() => {
     if (activeSection === "ai_model" || activeSection === "general") {
       void loadDirectory();
@@ -64,6 +73,10 @@ function SettingsViewImpl({
       void loadSoulStatus();
     }
   }, [activeSection, loadDirectory, loadSoulStatus, settings?.workspace]);
+
+  useEffect(() => subscribeProviderDirectoryChanged(handleDirectoryChanged), [
+    handleDirectoryChanged,
+  ]);
 
   const modelOptions = useMemo(() => {
     const nextOptions: ModelOption[] = buildSelectableModelOptions(
@@ -153,7 +166,7 @@ function SettingsViewImpl({
                 onSettingsChange={onSettingsChange}
                 sources={sources}
                 entries={entries}
-                onDirectoryChanged={loadDirectory}
+                onDirectoryChanged={handleDirectoryChanged}
               />
             ) : null}
 

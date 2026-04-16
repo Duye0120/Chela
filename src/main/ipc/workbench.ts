@@ -1,4 +1,5 @@
 import { IPC_CHANNELS } from "../../shared/ipc.js";
+import type { GitCommitInput } from "../../shared/contracts.js";
 import {
   createAndSwitchGitBranch,
   getGitBranchSummary,
@@ -68,8 +69,8 @@ export function registerWorkbenchIpc(): void {
   );
   handleIpc(
     IPC_CHANNELS.gitCommit,
-    async (_event, message: string) =>
-      commitGitChanges(getSettings().workspace, message),
+    async (_event, input: GitCommitInput) =>
+      commitGitChanges(getSettings().workspace, input.message, input.paths),
   );
   handleIpc(
     IPC_CHANNELS.gitPush,
