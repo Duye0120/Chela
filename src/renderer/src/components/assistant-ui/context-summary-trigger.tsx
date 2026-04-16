@@ -45,15 +45,15 @@ function getUsageLine(summary: ContextUsageSummary) {
     typeof summary.estimatedUsedTokens === "number" &&
     typeof summary.contextWindow === "number"
   ) {
-    return `本轮约用 ${formatCompactTokenCount(summary.estimatedUsedTokens)} / ${formatCompactTokenCount(summary.contextWindow)} 词元`;
+    return `本轮约用 ${formatCompactTokenCount(summary.estimatedUsedTokens)} / ${formatCompactTokenCount(summary.contextWindow)} token`;
   }
 
   if (typeof summary.contextWindow === "number") {
-    return `窗口上限 ${formatCompactTokenCount(summary.contextWindow)} 词元`;
+    return `窗口上限 ${formatCompactTokenCount(summary.contextWindow)} token`;
   }
 
   if (typeof summary.estimatedUsedTokens === "number") {
-    return `本轮约用 ${formatCompactTokenCount(summary.estimatedUsedTokens)} 词元`;
+    return `本轮约用 ${formatCompactTokenCount(summary.estimatedUsedTokens)} token`;
   }
 
   return "等待用量数据";

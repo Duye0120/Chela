@@ -65,10 +65,10 @@ const ApprovalDetailCard: FC<{
       <summary className="cursor-pointer select-none text-[12px] leading-5 text-[color:var(--color-text-secondary)]/85 outline-none transition-colors hover:text-[color:var(--color-text-primary)]">
         查看审批上下文
       </summary>
-      <div className="mt-2 space-y-2 rounded-[8px] bg-[color:var(--color-control-bg)] px-2.5 py-2">
+      <div className="mt-2 space-y-2 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2.5 py-2">
         <p className="text-[12px] leading-5">触发原因：{reason}</p>
         {detail ? (
-          <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded-[6px] bg-[color:var(--color-control-panel-bg)] px-2 py-1.5 text-[11px] leading-4 text-[color:var(--color-text-secondary)]">
+          <pre className="max-h-24 overflow-auto whitespace-pre-wrap rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-2 py-1.5 text-[11px] leading-4 text-[color:var(--color-text-secondary)]">
             {detail}
           </pre>
         ) : null}
@@ -102,7 +102,7 @@ export const PendingApprovalNoticeBar: FC<PendingApprovalNoticeBarProps> = ({
         return (
           <div
             key={`${group.sessionId}:${group.ownerId}:${requestId}`}
-            className="flex items-center gap-1 rounded-[6px] bg-[color:var(--color-control-bg)] px-1.5 py-1"
+            className="flex items-center gap-1 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-1.5 py-1"
           >
             <Button
               type="button"
@@ -171,7 +171,7 @@ export const InterruptedApprovalNoticeBar: FC<InterruptedApprovalNoticeBarProps>
         return (
           <div
             key={`${group.sessionId}:${group.ownerId}:${latestApproval.runId}`}
-            className="flex items-start justify-between gap-3 rounded-[10px] bg-[color:var(--color-control-panel-bg)] px-3 py-2.5 text-[13px] text-[color:var(--color-text-secondary)] shadow-[var(--color-control-shadow)]"
+            className="flex items-start justify-between gap-3 rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-3 py-2.5 text-[13px] text-[color:var(--color-text-secondary)] shadow-[var(--color-control-shadow)]"
           >
             <div className="min-w-0 space-y-2">
               <div className="space-y-1">

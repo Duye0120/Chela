@@ -579,7 +579,7 @@ const Composer: FC<ThreadResolvedProps> = ({
         attachments={attachments}
         onRemoveAttachment={onRemoveAttachment}
       />
-      <div className="flex w-full flex-col gap-2 rounded-[12px] bg-[color:var(--color-composer-surface)] p-(--composer-padding) shadow-[0_12px_32px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.05)] transition-shadow focus-within:ring-2 focus-within:ring-ring/12">
+      <div className="flex w-full flex-col gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-composer-surface)] p-(--composer-padding) shadow-[0_12px_32px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.05)] transition-shadow focus-within:ring-2 focus-within:ring-ring/12">
         <ComposerAttachments />
 
         <ComposerPrimitive.Input
@@ -767,7 +767,7 @@ const ComposerAction: FC<
             <div
               title={thinkingTitle}
               aria-label={thinkingTitle}
-              className="flex h-8 items-center justify-center rounded-md px-2 text-[color:var(--color-text-secondary)]"
+              className="flex h-8 items-center justify-center rounded-[var(--radius-shell)] px-2 text-[color:var(--color-text-secondary)]"
             >
               <BrainCircuitIcon className="size-4 shrink-0 opacity-55" />
             </div>
@@ -1015,7 +1015,7 @@ const AssistantMessageStatus: FC = () => {
 const MessageError: FC = () => {
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="mt-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive dark:bg-destructive/5 dark:text-red-200">
+      <ErrorPrimitive.Root className="mt-2 rounded-[var(--radius-shell)] bg-destructive/10 p-3 text-sm text-destructive dark:bg-destructive/5 dark:text-red-200">
         <ErrorPrimitive.Message className="line-clamp-2" />
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
