@@ -174,7 +174,7 @@ export function TerminalDrawer({ open, onToggle, settings }: Props) {
             <button
               type="button"
               onClick={() => void createTab()}
-              className="rounded-md p-1 transition hover:bg-shell-hover hover:text-foreground"
+              className="rounded-[var(--radius-shell)] p-1 transition hover:bg-shell-hover hover:text-foreground"
               aria-label="新终端"
             >
               <PlusIcon className="h-3.5 w-3.5" />
@@ -185,7 +185,7 @@ export function TerminalDrawer({ open, onToggle, settings }: Props) {
                 if (activeTabId) void closeTab(activeTabId);
                 if (tabs.length <= 1 && open) onToggle();
               }}
-              className="rounded-md p-1 transition hover:bg-shell-hover hover:text-foreground"
+              className="rounded-[var(--radius-shell)] p-1 transition hover:bg-shell-hover hover:text-foreground"
               aria-label="关闭当前终端"
             >
               <XMarkIcon className="h-3.5 w-3.5" />

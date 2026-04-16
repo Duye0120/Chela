@@ -360,7 +360,7 @@ const ActivityRowItem: FC<ActivityRowProps> = ({
         <CollapsibleTrigger
           disabled={!canExpand}
           className={cn(
-            "group flex w-full items-start gap-3 rounded-[16px] bg-white/78 px-3 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] transition hover:bg-white/90 dark:bg-white/6 dark:hover:bg-white/10",
+            "group flex w-full items-start gap-3 rounded-[var(--radius-shell)] bg-white/78 px-3 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] transition hover:bg-white/90 dark:bg-white/6 dark:hover:bg-white/10",
             row.isRunning && "bg-[var(--color-accent-subtle)]/55 dark:bg-[var(--color-accent-subtle)]/20",
             !canExpand && "cursor-default",
           )}
@@ -414,9 +414,9 @@ const ActivityRowItem: FC<ActivityRowProps> = ({
 
         {canExpand ? (
           <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
-            <div className="mt-2 ml-2 space-y-2 rounded-[16px] bg-white/58 px-4 py-3 dark:bg-white/5">
+            <div className="mt-2 ml-2 space-y-2 rounded-[var(--radius-shell)] bg-white/58 px-4 py-3 dark:bg-white/5">
               {row.detailText ? (
-                <div className="rounded-[12px] bg-white/72 px-3 py-2.5 text-[12px] leading-6 whitespace-pre-wrap text-[color:var(--color-text-secondary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] dark:bg-black/16">
+                <div className="rounded-[var(--radius-shell)] bg-white/72 px-3 py-2.5 text-[12px] leading-6 whitespace-pre-wrap text-[color:var(--color-text-secondary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] dark:bg-black/16">
                   <span className={cn(row.isRunning && "streaming-cursor")}>
                     {row.detailText}
                   </span>
@@ -424,7 +424,7 @@ const ActivityRowItem: FC<ActivityRowProps> = ({
               ) : null}
 
               {row.argsText ? (
-                <div className="rounded-[12px] bg-white/72 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] dark:bg-black/16">
+                <div className="rounded-[var(--radius-shell)] bg-white/72 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] dark:bg-black/16">
                   <p className="mb-1.5 text-[10px] font-medium tracking-[0.08em] text-[color:var(--color-text-muted)] uppercase">
                     Args
                   </p>
@@ -435,7 +435,7 @@ const ActivityRowItem: FC<ActivityRowProps> = ({
               ) : null}
 
               {row.errorText ? (
-                <div className="rounded-[12px] bg-rose-500/10 px-3 py-2.5 text-[11px] leading-5 text-rose-700 dark:text-rose-300">
+                <div className="rounded-[var(--radius-shell)] bg-rose-500/10 px-3 py-2.5 text-[11px] leading-5 text-rose-700 dark:text-rose-300">
                   <p className="mb-1 font-medium uppercase tracking-[0.08em] text-[10px] text-rose-600/80 dark:text-rose-300/80">
                     Error
                   </p>
@@ -444,7 +444,7 @@ const ActivityRowItem: FC<ActivityRowProps> = ({
               ) : null}
 
               {row.resultText && !row.errorText ? (
-                <div className="rounded-[12px] bg-white/72 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] dark:bg-black/16">
+                <div className="rounded-[var(--radius-shell)] bg-white/72 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] dark:bg-black/16">
                   <p className="mb-1.5 text-[10px] font-medium tracking-[0.08em] text-[color:var(--color-text-muted)] uppercase">
                     Output
                   </p>
@@ -538,7 +538,7 @@ const AgentActivityBarImpl: FC<AgentActivityBarProps> = ({
   return (
     <div
       className={cn(
-        "mb-4 w-full max-w-[760px] overflow-hidden rounded-[24px]",
+        "mb-4 w-full max-w-[760px] overflow-hidden rounded-[var(--radius-shell)]",
         "border border-[color:var(--color-control-border)] bg-[color:var(--color-control-panel-bg)] shadow-[var(--color-control-panel-shadow)]",
         className,
       )}

@@ -558,7 +558,7 @@ function SidebarImpl({
                         setGroupMenuOpenFor(null);
                         setMovingSessionId(null);
                       }}
-                      className="cursor-pointer rounded-md p-1 text-[color:var(--chela-text-tertiary)] transition hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
+                      className="cursor-pointer rounded-[var(--radius-shell)] p-1 text-[color:var(--chela-text-tertiary)] transition hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
                       aria-label="新建分组"
                     >
                       <FolderPlusIcon className="h-3.5 w-3.5" />
@@ -600,7 +600,7 @@ function SidebarImpl({
                         <button
                           type="button"
                           onClick={() => onUnarchiveSession(summary.id)}
-                          className="cursor-pointer rounded-md p-1 text-[color:var(--chela-text-tertiary)] hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
+                          className="cursor-pointer rounded-[var(--radius-shell)] p-1 text-[color:var(--chela-text-tertiary)] hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
                           title="恢复"
                         >
                           <ArrowUturnLeftIcon className="h-3 w-3" />
@@ -608,7 +608,7 @@ function SidebarImpl({
                         <button
                           type="button"
                           onClick={() => onDeleteSession(summary.id)}
-                          className="cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          className="cursor-pointer rounded-[var(--radius-shell)] p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                           title="永久删除"
                         >
                           <TrashIcon className="h-3 w-3" />
@@ -620,7 +620,7 @@ function SidebarImpl({
               </div>
             ) : (
               <div
-                className={`px-3 transition-colors ${dragOverUngrouped ? "rounded-2xl bg-[color:var(--color-control-selected-bg)]" : ""}`}
+                className={`px-3 transition-colors ${dragOverUngrouped ? "rounded-[var(--radius-shell)] bg-[color:var(--color-control-selected-bg)]" : ""}`}
                 onDragOver={(e) => {
                   if (dragSessionIdRef.current) {
                     const sid = dragSessionIdRef.current;
@@ -756,7 +756,7 @@ function SidebarImpl({
                                   );
                                   setMovingSessionId(null);
                                 }}
-                                className="cursor-pointer rounded-md p-1 text-[color:var(--chela-text-tertiary)] transition hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
+                                className="cursor-pointer rounded-[var(--radius-shell)] p-1 text-[color:var(--chela-text-tertiary)] transition hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
                                 aria-label="分组操作"
                               >
                                 <EllipsisHorizontalIcon className="h-3.5 w-3.5" />
@@ -772,7 +772,7 @@ function SidebarImpl({
                                   e.stopPropagation();
                                   onCreateSessionInGroup(group.id);
                                 }}
-                                className="cursor-pointer rounded-md p-1 text-[color:var(--chela-text-tertiary)] transition hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
+                                className="cursor-pointer rounded-[var(--radius-shell)] p-1 text-[color:var(--chela-text-tertiary)] transition hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
                                 aria-label={`在 ${group.name} 中开始新线程`}
                               >
                                 <SquarePen className="h-3.5 w-3.5" strokeWidth={1.8} />

@@ -215,12 +215,12 @@ const AttachmentThumb: FC = () => {
   );
 
   return (
-    <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-xl bg-slate-100/80">
+    <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[var(--radius-shell)] bg-slate-100/80">
       {isImage && src ? (
         <img
           src={src}
           alt="Attachment preview"
-          className="h-full w-full rounded-xl object-cover"
+          className="h-full w-full rounded-[var(--radius-shell)] object-cover"
         />
       ) : (
         <FileText className="size-8 text-muted-foreground" />
@@ -255,11 +255,11 @@ const AttachmentTile: FC = () => {
         <AttachmentPreviewDialog>
           <TooltipTrigger asChild>
             <div
-              className="flex h-[72px] w-[220px] cursor-pointer items-center gap-3 rounded-2xl bg-slate-50/90 px-3 py-3 transition-colors hover:bg-slate-100/90"
+              className="flex h-[72px] w-[220px] cursor-pointer items-center gap-3 rounded-[var(--radius-shell)] bg-slate-50/90 px-3 py-3 transition-colors hover:bg-slate-100/90"
               role="button"
               aria-label={`${typeLabel} attachment`}
             >
-              <div className="size-12 shrink-0 overflow-hidden rounded-xl bg-slate-100">
+              <div className="size-12 shrink-0 overflow-hidden rounded-[var(--radius-shell)] bg-slate-100">
                 <AttachmentThumb />
               </div>
               <div className="min-w-0 flex-1">
