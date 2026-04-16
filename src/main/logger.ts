@@ -321,18 +321,18 @@ export function registerProcessLogging(): void {
 export function attachWindowLogging(window: BrowserWindow): void {
   window.webContents.on(
     "console-message",
-    (_event, level, message, line, sourceId) => {
-      if (level < 2) {
+    ({ level, message, lineNumber, sourceId }) => {
+      if (level === "info" || level === "debug") {
         return;
       }
 
-      const log = level >= 3 ? appLogger.error : appLogger.warn;
+      const log = level === "error" ? appLogger.error : appLogger.warn;
       log({
         scope: "renderer.console",
         message,
         data: {
           level,
-          line,
+          line: lineNumber,
           sourceId,
         },
       });
