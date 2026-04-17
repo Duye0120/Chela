@@ -46,6 +46,11 @@ export const IPC_CHANNELS = {
   settingsUpdate: "settings:update",
   settingsGetLogSnapshot: "settings:get-log-snapshot",
   settingsOpenLogFolder: "settings:open-log-folder",
+  skillsListInstalled: "skills:list-installed",
+  skillsSearchCatalog: "skills:search-catalog",
+  skillsInstall: "skills:install",
+  skillsOpenDirectory: "skills:open-directory",
+  skillsOpenSkillFile: "skills:open-skill-file",
 
   // Providers
   providersListSources: "providers:list-sources",
