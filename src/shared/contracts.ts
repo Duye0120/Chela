@@ -38,6 +38,7 @@ export type AgentResponse = {
   status: AgentResponseStatus;
   steps: AgentStep[];
   finalText: string;
+  skillUsages?: RuntimeSkillUsage[];
   startedAt: number;
   endedAt?: number;
   usage?: MessageUsage;
@@ -238,9 +239,89 @@ export type DiagnosticLogBundle = {
   files: DiagnosticLogSnapshot[];
 };
 
+export type SkillUsageSurface = "right-panel" | "chat";
+
+export type SkillUsageTrigger = "manual" | "automatic";
+
+export type SkillUsageTarget = {
+  entryPointId: string;
+  label: string;
+  surface: SkillUsageSurface;
+  trigger: SkillUsageTrigger;
+};
+
+export type RuntimeSkillUsage = SkillUsageTarget & {
+  skillId: string;
+  skillLabel: string;
+};
+
+export type InstalledSkillSource = "project" | "user";
+
+export type InstalledSkillInstance = {
+  source: InstalledSkillSource;
+  rootPath: string;
+  skillPath: string;
+  skillFilePath: string | null;
+  readmePath: string | null;
+  installedAt: string | null;
+  updatedAt: string | null;
+  missingSkillFile: boolean;
+};
+
+export type InstalledSkillSummary = {
+  id: string;
+  displayName: string;
+  description: string;
+  usageTargets: SkillUsageTarget[];
+  sources: InstalledSkillSource[];
+  primarySource: InstalledSkillSource;
+  instances: InstalledSkillInstance[];
+  installable: boolean;
+  installedAt: string | null;
+  updatedAt: string | null;
+};
+
+export type InstalledSkillDetail = InstalledSkillSummary & {
+  contentPreview: string | null;
+};
+
+export type SkillCatalogEntry = {
+  id: string;
+  packageName: string;
+  displayName: string;
+  description: string;
+  installCommand: string;
+  sourceLabel: string | null;
+  learnMoreUrl: string | null;
+};
+
+export type SkillDiscoveryResult = {
+  query: string;
+  entries: SkillCatalogEntry[];
+  error: string | null;
+  rawOutput: string;
+};
+
+export type SkillInstallRequest = {
+  packageName: string;
+  target?: Extract<InstalledSkillSource, "user">;
+};
+
+export type SkillInstallResult = {
+  ok: boolean;
+  message: string;
+  installedSkillId: string | null;
+  installedSkill: InstalledSkillSummary | null;
+  skills: InstalledSkillSummary[];
+};
+
 export type RunSource = "user" | "renderer" | "system" | "subagent";
 
 export type RunKind = "chat" | "compact" | "memory_refresh" | "system" | "subagent";
+
+export type ChatMessageMeta = Record<string, unknown> & {
+  skillUsages?: RuntimeSkillUsage[];
+};
 
 export type ChatMessage = {
   id: string;
@@ -249,7 +330,7 @@ export type ChatMessage = {
   timestamp: string;
   status: ChatMessageStatus;
   usage?: MessageUsage;
-  meta?: Record<string, unknown>;
+  meta?: ChatMessageMeta;
   steps?: AgentStep[];
 };
 
@@ -612,6 +693,7 @@ export type GenerateCommitMessageResult = {
   usedModelRole: "utility" | "chat";
   fallbackUsed: boolean;
   skillName: "commit";
+  skillUsage: RuntimeSkillUsage;
 };
 
 export type GenerateCommitPlanRequest = GenerateCommitMessageRequest;
@@ -629,6 +711,7 @@ export type GenerateCommitPlanResult = {
   usedModelRole: "utility" | "chat";
   fallbackUsed: boolean;
   skillName: "commit";
+  skillUsage: RuntimeSkillUsage;
 };
 
 export type WindowFrameState = {
@@ -705,6 +788,19 @@ export type DesktopApi = {
     update: (partial: Partial<Settings>) => Promise<void>;
     getLogSnapshot: () => Promise<DiagnosticLogBundle>;
     openLogFolder: (logId: DiagnosticLogId) => Promise<void>;
+  };
+  skills: {
+    listInstalled: () => Promise<InstalledSkillDetail[]>;
+    searchCatalog: (query: string) => Promise<SkillDiscoveryResult>;
+    install: (request: SkillInstallRequest) => Promise<SkillInstallResult>;
+    openDirectory: (
+      skillId: string,
+      source: InstalledSkillSource,
+    ) => Promise<void>;
+    openSkillFile: (
+      skillId: string,
+      source: InstalledSkillSource,
+    ) => Promise<void>;
   };
   providers: {
     listSources: () => Promise<ProviderSource[]>;
