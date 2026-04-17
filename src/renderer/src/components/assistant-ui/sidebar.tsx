@@ -13,6 +13,7 @@ import {
   FolderPlusIcon,
   InformationCircleIcon,
   KeyIcon,
+  PuzzlePieceIcon,
   SparklesIcon,
   MapPinIcon,
   SwatchIcon,
@@ -114,6 +115,7 @@ function SidebarImpl({
       { id: "general", label: "通用", icon: AdjustmentsHorizontalIcon },
       { id: "ai_model", label: "模型", icon: SparklesIcon },
       { id: "workspace", label: "工作区", icon: FolderIcon },
+      { id: "skills", label: "Skills", icon: PuzzlePieceIcon },
       { id: "interface", label: "界面与终端", icon: SwatchIcon },
       { id: "system", label: "数据与系统", icon: Cog6ToothIcon },
     ];

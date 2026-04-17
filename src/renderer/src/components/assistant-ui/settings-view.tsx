@@ -22,6 +22,7 @@ import { InterfaceSection } from "./settings/interface-section";
 import { SystemSection } from "./settings/system-section";
 import { GeneralSection } from "./settings/general-section";
 import type { SettingsViewProps } from "./settings/types";
+import { SkillsSection } from "./settings/skills-section";
 import { WorkspaceSection } from "./settings/workspace-section";
 
 export type { SettingsSection, SettingsViewProps } from "./settings/types";
@@ -184,6 +185,8 @@ function SettingsViewImpl({
                 onSettingsChange={onSettingsChange}
               />
             ) : null}
+
+            {activeSection === "skills" ? <SkillsSection /> : null}
 
             {activeSection === "system" ? (
               <SystemSection

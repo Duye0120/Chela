@@ -24,6 +24,11 @@ export const SETTINGS_SECTIONS: {
     description: "设置默认工作目录，顺手看规则文件状态。"
   },
   {
+    id: "skills",
+    label: "Skills",
+    description: "管理项目内与用户级 skills，顺手发现可安装的新能力。"
+  },
+  {
     id: "interface",
     label: "界面与终端",
     description: "应用视觉偏好、代码字号以及终端默认表现。"

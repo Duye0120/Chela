@@ -9,6 +9,7 @@ export type SettingsSection =
   | "general"
   | "ai_model"
   | "workspace"
+  | "skills"
   | "interface"
   | "system";
 

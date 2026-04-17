@@ -66,6 +66,7 @@ const SETTINGS_SECTION_IDS: SettingsSection[] = [
   "general",
   "ai_model",
   "workspace",
+  "skills",
   "interface",
   "system",
 ];
