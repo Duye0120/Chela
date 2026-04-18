@@ -50,6 +50,17 @@ function createDefaultModelRouting(): ModelRoutingSettings {
   };
 }
 
+function createDefaultNetworkSettings(): Settings["network"] {
+  return {
+    proxy: {
+      enabled: false,
+      url: "",
+      noProxy: "localhost,127.0.0.1",
+    },
+    timeoutMs: 30_000,
+  };
+}
+
 const DEFAULT_SETTINGS: Settings = {
   modelRouting: createDefaultModelRouting(),
   defaultModelId: DEFAULT_MODEL_ENTRY_ID,
@@ -71,6 +82,7 @@ const DEFAULT_SETTINGS: Settings = {
     codeFontSize: 13,
     codeFontFamily: "JetBrains Mono",
   },
+  network: createDefaultNetworkSettings(),
   workspace: getDefaultWorkspacePath(),
 };
 
@@ -175,6 +187,39 @@ function mergeModelRouting(
   };
 }
 
+function normalizeTimeoutMs(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_SETTINGS.network.timeoutMs;
+  }
+
+  return Math.min(120_000, Math.max(1_000, Math.round(value)));
+}
+
+function normalizeProxySettings(
+  source: Partial<Settings["network"]["proxy"]> | null | undefined,
+): Settings["network"]["proxy"] {
+  return {
+    enabled: source?.enabled === true,
+    url:
+      typeof source?.url === "string"
+        ? source.url.trim()
+        : DEFAULT_SETTINGS.network.proxy.url,
+    noProxy:
+      typeof source?.noProxy === "string"
+        ? source.noProxy.trim()
+        : DEFAULT_SETTINGS.network.proxy.noProxy,
+  };
+}
+
+function normalizeNetworkSettings(
+  source: Partial<Settings["network"]> | null | undefined,
+): Settings["network"] {
+  return {
+    proxy: normalizeProxySettings(source?.proxy),
+    timeoutMs: normalizeTimeoutMs(source?.timeoutMs),
+  };
+}
+
 function mergeSettings(source?: Partial<Settings> | null): Settings {
   const sourceWithLegacy = (source ?? {}) as Partial<Settings> & {
     defaultModel?: unknown;
@@ -214,6 +259,7 @@ function mergeSettings(source?: Partial<Settings> | null): Settings {
       ...DEFAULT_SETTINGS.ui,
       ...source?.ui,
     },
+    network: normalizeNetworkSettings(source?.network),
   };
 }
 
@@ -244,6 +290,7 @@ export function getSettings(): Settings {
 
 export function updateSettings(partial: Partial<Settings>): void {
   const current = getSettings();
+  const previousNetwork = current.network;
   cachedSettings = mergeSettings({
     ...current,
     ...partial,
@@ -256,6 +303,14 @@ export function updateSettings(partial: Partial<Settings>): void {
       ...current.ui,
       ...partial.ui,
     },
+    network: {
+      ...current.network,
+      ...partial.network,
+      proxy: {
+        ...current.network.proxy,
+        ...partial.network?.proxy,
+      },
+    },
   });
   const serialized = {
     ...cachedSettings,
@@ -266,4 +321,31 @@ export function updateSettings(partial: Partial<Settings>): void {
   const tmpPath = filePath + ".tmp";
   fs.writeFileSync(tmpPath, JSON.stringify(serialized, null, 2), "utf-8");
   fs.renameSync(tmpPath, filePath);
+
+  void import("./network/proxy.js")
+    .then(({ applyGlobalNetworkSettings }) => {
+      // 仅当网络相关字段实际变更时才重建全局 dispatcher，避免改字体之类的设置也重置连接池。
+      const nextNetwork = cachedSettings!.network;
+      const networkChanged =
+        previousNetwork.timeoutMs !== nextNetwork.timeoutMs ||
+        previousNetwork.proxy.enabled !== nextNetwork.proxy.enabled ||
+        previousNetwork.proxy.url !== nextNetwork.proxy.url ||
+        previousNetwork.proxy.noProxy !== nextNetwork.proxy.noProxy;
+      if (!networkChanged) {
+        return;
+      }
+      applyGlobalNetworkSettings(cachedSettings!);
+    })
+    .catch((error) => {
+      // 启动阶段尚未加载代理模块时的失败需要可观测，避免代理配置静默失效。
+      void import("./logger.js")
+        .then(({ appLogger }) => {
+          appLogger.warn({
+            scope: "settings.update",
+            message: "应用全局网络配置失败",
+            error,
+          });
+        })
+        .catch(() => undefined);
+    });
 }

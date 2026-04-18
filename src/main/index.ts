@@ -36,6 +36,7 @@ import {
   appLogger,
   registerProcessLogging,
 } from "./logger.js";
+import { applyGlobalNetworkSettings } from "./network/proxy.js";
 
 configureAppIdentity();
 
@@ -68,6 +69,7 @@ registerProcessLogging();
 app.whenReady()
   .then(() => {
     migrateLegacyUserData();
+    applyGlobalNetworkSettings();
     appLogger.info({
       scope: "app.lifecycle",
       message: "应用启动完成",
