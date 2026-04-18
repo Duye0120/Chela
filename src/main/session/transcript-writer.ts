@@ -106,6 +106,7 @@ export function appendRunStartedEvent(input: {
   runKind: RunKind;
   modelEntryId: string;
   thinkingLevel: string;
+  metadata?: Record<string, unknown>;
 }): SessionTranscriptEvent {
   const event = appendTranscriptEvent(input.sessionId, (nextSeq) => ({
     seq: nextSeq,
@@ -117,6 +118,7 @@ export function appendRunStartedEvent(input: {
     runKind: input.runKind,
     modelEntryId: input.modelEntryId,
     thinkingLevel: input.thinkingLevel,
+    metadata: input.metadata,
   }));
 
   updateMeta(input.sessionId, (meta) => {
@@ -275,6 +277,7 @@ export function appendRunFinishedEvent(input: {
   ownerId?: string;
   finalState: "completed" | "aborted" | "failed";
   reason?: string;
+  metadata?: Record<string, unknown>;
 }): SessionTranscriptEvent {
   const event = appendTranscriptEvent(input.sessionId, (nextSeq) => ({
     seq: nextSeq,
@@ -285,6 +288,7 @@ export function appendRunFinishedEvent(input: {
     type: "run_finished",
     finalState: input.finalState,
     reason: input.reason,
+    metadata: input.metadata,
   }));
 
   updateMeta(input.sessionId, (meta) => {
