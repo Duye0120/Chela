@@ -950,36 +950,39 @@ function tryParseCommitPlanJson(
       return null;
     }
 
-    const groups = rawGroups
-      .map((item) => {
-        if (!item || typeof item !== "object" || Array.isArray(item)) {
-          return null;
-        }
+    const groups: CommitPlanGroup[] = [];
+    for (const item of rawGroups) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        continue;
+      }
 
-        const record = item as Record<string, unknown>;
-        const title = cleanTitleCandidate(
-          pickFirstString([record.title, record.subject, record["标题"], record["提交标题"]]),
-        );
+      const record = item as Record<string, unknown>;
+      const title = cleanTitleCandidate(
+        pickFirstString([record.title, record.subject, record["标题"], record["提交标题"]]),
+      );
 
-        if (!title) {
-          return null;
-        }
+      if (!title) {
+        continue;
+      }
 
-        return {
-          id: buildPlanGroupId(),
-          title,
-          description: pickFirstString([
-            record.description,
-            record.body,
-            record["描述"],
-            record["正文"],
-            record["提交描述"],
-          ]),
-          filePaths: pickFirstStringArray([record.filePaths, record.paths, record.files]),
-          reason: pickFirstString([record.reason, record.summary, record["原因"]]) || undefined,
-        } satisfies CommitPlanGroup;
-      })
-      .filter((group): group is CommitPlanGroup => !!group);
+      const reason = pickFirstString([record.reason, record.summary, record["原因"]]);
+      const group: CommitPlanGroup = {
+        id: buildPlanGroupId(),
+        title,
+        description: pickFirstString([
+          record.description,
+          record.body,
+          record["描述"],
+          record["正文"],
+          record["提交描述"],
+        ]),
+        filePaths: pickFirstStringArray([record.filePaths, record.paths, record.files]),
+      };
+      if (reason) {
+        group.reason = reason;
+      }
+      groups.push(group);
+    }
 
     if (groups.length === 0) {
       return null;
