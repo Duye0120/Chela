@@ -64,6 +64,7 @@ const ROOT_UI_THEME_DATASET = "theme";
 const SETTINGS_ROUTE_PREFIX = "/settings";
 const SETTINGS_SECTION_IDS: SettingsSection[] = [
   "general",
+  "network",
   "ai_model",
   "workspace",
   "skills",
@@ -166,6 +167,28 @@ function clearStoredStrings(keys: string[]) {
   }
 }
 
+type DeepPartialSettings = {
+  modelRouting?: {
+    chat?: Partial<Settings["modelRouting"]["chat"]>;
+    utility?: Partial<Settings["modelRouting"]["utility"]>;
+    subagent?: Partial<Settings["modelRouting"]["subagent"]>;
+    compact?: Partial<Settings["modelRouting"]["compact"]>;
+  };
+  defaultModelId?: Settings["defaultModelId"];
+  workerModelId?: Settings["workerModelId"];
+  thinkingLevel?: Settings["thinkingLevel"];
+  timeZone?: Settings["timeZone"];
+  theme?: Settings["theme"];
+  customTheme?: Settings["customTheme"];
+  terminal?: Partial<Settings["terminal"]>;
+  ui?: Partial<Settings["ui"]>;
+  network?: {
+    proxy?: Partial<Settings["network"]["proxy"]>;
+    timeoutMs?: Settings["network"]["timeoutMs"];
+  };
+  workspace?: Settings["workspace"];
+};
+
 function applyCustomThemeVariables(
   root: HTMLElement,
   previousKeys: string[],
@@ -189,7 +212,7 @@ function applyCustomThemeVariables(
 
 function mergeSettingsState(
   current: Settings,
-  partial: Partial<Settings>,
+  partial: DeepPartialSettings,
 ): Settings {
   return {
     ...current,
@@ -221,6 +244,14 @@ function mergeSettingsState(
     ui: {
       ...current.ui,
       ...partial.ui,
+    },
+    network: {
+      ...current.network,
+      ...partial.network,
+      proxy: {
+        ...current.network.proxy,
+        ...partial.network?.proxy,
+      },
     },
   };
 }
@@ -1300,14 +1331,14 @@ export default function App() {
       const containerWidth = Math.round(
         threadWorkspaceRef.current?.getBoundingClientRect().width ?? threadWorkspaceWidth
       );
-      
+
       const nextPanelWidth = containerWidth > 0
         ? clampRightPanelWidth(
-            typeof rightPanelStateRef.current.width === "number"
-              ? rightPanelStateRef.current.width
-              : getDefaultRightPanelWidth(containerWidth),
-            containerWidth
-          )
+          typeof rightPanelStateRef.current.width === "number"
+            ? rightPanelStateRef.current.width
+            : getDefaultRightPanelWidth(containerWidth),
+          containerWidth
+        )
         : resolvedRightPanelWidth;
 
       armRightPanelAnimation();
@@ -1476,12 +1507,12 @@ export default function App() {
       setSettings((current) =>
         current
           ? mergeSettingsState(current, {
-              modelRouting: {
-                chat: {
-                  modelId: modelEntryId,
-                },
+            modelRouting: {
+              chat: {
+                modelId: modelEntryId,
               },
-            })
+            },
+          })
           : current,
       );
       void desktopApi?.settings.update({
@@ -1490,25 +1521,25 @@ export default function App() {
             modelId: modelEntryId,
           },
         },
-      });
+      } as Partial<Settings>);
     },
     [desktopApi],
   );
 
   const handleRoleModelChange = useCallback(
     (role: Exclude<ModelRoutingRole, "chat">, modelEntryId: string | null) => {
-      const partial = {
+      const partial: DeepPartialSettings = {
         modelRouting: {
           [role]: {
             modelId: modelEntryId,
           },
-        } as Partial<Settings["modelRouting"]>,
+        },
       };
 
       setSettings((current) =>
         current ? mergeSettingsState(current, partial) : current,
       );
-      void desktopApi?.settings.update(partial);
+      void desktopApi?.settings.update(partial as Partial<Settings>);
     },
     [desktopApi],
   );

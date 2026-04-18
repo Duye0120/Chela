@@ -586,6 +586,23 @@ function SessionRuntime({
     cancelRunRef.current?.();
   }, []);
 
+  const handleQueueRedirect = useCallback(
+    async (text: string) => {
+      await desktopApi.chat.queueRedirect({
+        sessionId: latestSessionRef.current.id,
+        runId: activeRunScopeRef.current?.runId ?? null,
+        text,
+      });
+      await latestReloadSessionRef.current(latestSessionRef.current.id);
+    },
+    [desktopApi],
+  );
+
+  const handleClearRedirectDraft = useCallback(async () => {
+    await desktopApi.chat.clearRedirectDraft(latestSessionRef.current.id);
+    await latestReloadSessionRef.current(latestSessionRef.current.id);
+  }, [desktopApi]);
+
   const handleResumeInterruptedApproval = useCallback(
     async (interruptedRunId: string) => {
       const nextRunId = await onResumeInterruptedApproval(interruptedRunId);
@@ -890,6 +907,7 @@ function SessionRuntime({
         onModelChange={onModelChange}
         onThinkingLevelChange={onThinkingLevelChange}
         onCancelRun={handleCancelRun}
+        pendingRedirectDraft={session.pendingRedirectDraft ?? ""}
         runStage={runStage}
         runStatusLabel={runStatusLabel}
         isCancelling={isCancelling}
@@ -915,6 +933,8 @@ function SessionRuntime({
             // Compact 失败时保留当前线程 UI，不额外打断聊天流。
           }
         }}
+        onQueueRedirectDraft={handleQueueRedirect}
+        onClearRedirectDraft={handleClearRedirectDraft}
         onBranchChanged={onBranchChanged}
         disableGlobalSideEffects={disableGlobalSideEffects}
       />
