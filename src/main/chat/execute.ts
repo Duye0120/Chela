@@ -1,7 +1,14 @@
-import { promptAgent } from "../agent.js";
+import { bindHandleToRun, initAgent, promptAgent } from "../agent.js";
 import { harnessRuntime } from "../harness/singleton.js";
 import { appLogger } from "../logger.js";
 import { reactiveCompact } from "../context/service.js";
+import {
+  isProviderTransientError,
+  listFailoverCandidateEntryIds,
+  withRetry,
+} from "../failover.js";
+import { resolveModelEntry } from "../providers.js";
+import { loadSession } from "../session/facade.js";
 import type { ChatRunContext } from "./types.js";
 
 function isPromptTooLongError(err: unknown): boolean {
@@ -25,7 +32,9 @@ function isMaxTokensTruncation(stopReason: string | undefined): boolean {
   return normalized === "max_tokens" || normalized === "length";
 }
 
-export async function executeChatRun(context: ChatRunContext): Promise<void> {
+async function promptWithPromptTooLongRecovery(
+  context: ChatRunContext,
+): Promise<void> {
   if (!context.handle) {
     throw new Error("Agent handle 未就绪，无法执行聊天 run。");
   }
@@ -43,22 +52,135 @@ export async function executeChatRun(context: ChatRunContext): Promise<void> {
         data: {
           sessionId: context.input.sessionId,
           runId: context.input.runId,
+          modelEntryId: context.handle.modelEntryId,
         },
       });
       const compacted = await reactiveCompact(context.input.sessionId);
       if (compacted) {
-        await promptAgent(
-          context.handle,
-          context.input.text,
-          context.input.attachments,
-        );
-      } else {
-        throw promptErr;
+        await promptAgent(context.handle, context.input.text, context.input.attachments);
+        return;
       }
-    } else {
-      throw promptErr;
+    }
+
+    throw promptErr;
+  }
+}
+
+async function switchExecuteFailoverHandle(
+  context: ChatRunContext,
+  entryId: string,
+): Promise<void> {
+  const resolvedModel = resolveModelEntry(entryId);
+  const session = loadSession(context.input.sessionId);
+
+  if (!session) {
+    throw new Error("会话不存在，无法重建 failover handle。");
+  }
+
+  const nextHandle = await initAgent(
+    context.input.sessionId,
+    context.adapter,
+    resolvedModel,
+    context.handle?.ownerId,
+    session.messages,
+  );
+
+  context.handle = nextHandle;
+  bindHandleToRun(nextHandle, context.adapter, context.input.runId);
+  harnessRuntime.attachHandle(context.runScope, nextHandle);
+}
+
+async function executePromptWithFailover(
+  context: ChatRunContext,
+): Promise<void> {
+  if (!context.handle) {
+    throw new Error("Agent handle 未就绪，无法执行聊天 run。");
+  }
+
+  const prepareFailedEntries = new Set(context.failover.prepare.failedEntries);
+  const candidateEntryIds = [
+    context.handle.modelEntryId,
+    ...listFailoverCandidateEntryIds(context.requestedModelEntryId),
+  ].filter(
+    (entryId, index, all) =>
+      all.indexOf(entryId) === index && !prepareFailedEntries.has(entryId),
+  );
+
+  let lastTransientError: unknown = null;
+
+  for (const entryId of candidateEntryIds) {
+    if (!context.handle) {
+      throw new Error("Agent handle 丢失，无法继续 failover。");
+    }
+
+    if (!context.failover.execute.attemptedEntryIds.includes(entryId)) {
+      context.failover.execute.attemptedEntryIds.push(entryId);
+    }
+
+    if (context.handle.modelEntryId !== entryId) {
+      await switchExecuteFailoverHandle(context, entryId);
+      appLogger.warn({
+        scope: "chat.send",
+        message: "执行层 failover 已切到候选模型",
+        data: {
+          sessionId: context.input.sessionId,
+          runId: context.input.runId,
+          requestedModelEntryId: context.requestedModelEntryId,
+          nextModelEntryId: entryId,
+        },
+      });
+    }
+
+    try {
+      await withRetry(
+        () => promptWithPromptTooLongRecovery(context),
+        {
+          maxRetries: entryId === candidateEntryIds[0] ? 1 : 0,
+          retryDelayMs: 1_000,
+        },
+      );
+      return;
+    } catch (error) {
+      context.failover.execute.lastError =
+        error instanceof Error ? error.message : String(error);
+
+      if (
+        harnessRuntime.isCancelRequested(context.runScope) ||
+        !isProviderTransientError(error)
+      ) {
+        throw error;
+      }
+
+      lastTransientError = error;
+      appLogger.warn({
+        scope: "chat.send",
+        message: "执行层模型请求失败，准备尝试下一个候选模型",
+        data: {
+          sessionId: context.input.sessionId,
+          runId: context.input.runId,
+          attemptedModelEntryId: entryId,
+        },
+        error,
+      });
     }
   }
+
+  throw (
+    lastTransientError instanceof Error
+      ? new Error(
+        `所有候选模型执行失败：${lastTransientError.message}`,
+        { cause: lastTransientError },
+      )
+      : new Error("所有候选模型执行失败。")
+  );
+}
+
+export async function executeChatRun(context: ChatRunContext): Promise<void> {
+  if (!context.handle) {
+    throw new Error("Agent handle 未就绪，无法执行聊天 run。");
+  }
+
+  await executePromptWithFailover(context);
 
   const stopReason = context.adapter.getLastStopReason();
   if (
