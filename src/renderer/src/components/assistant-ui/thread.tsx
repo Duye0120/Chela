@@ -33,6 +33,7 @@ import {
   PencilIcon,
   RotateCcwIcon,
   SquareIcon,
+  XIcon,
 } from "lucide-react";
 import type {
   GitBranchSummary,
@@ -119,6 +120,7 @@ type ThreadProps = {
   onModelChange?: (modelEntryId: string) => void;
   onThinkingLevelChange?: (level: ThinkingLevel) => void;
   onCancelRun?: () => void;
+  pendingRedirectDraft?: string;
   runStage?: ChatRunStage;
   runStatusLabel?: string;
   isCancelling?: boolean;
@@ -133,6 +135,8 @@ type ThreadProps = {
     allowed: boolean,
   ) => Promise<void>;
   onCompactContext?: () => void | Promise<void>;
+  onQueueRedirectDraft?: (text: string) => Promise<void>;
+  onClearRedirectDraft?: () => Promise<void>;
   onBranchChanged?: () => void | Promise<void>;
   disableGlobalSideEffects?: boolean;
 };
@@ -151,6 +155,7 @@ type ThreadResolvedProps = {
   onModelChange: (modelEntryId: string) => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
   onCancelRun: () => void;
+  pendingRedirectDraft: string;
   runStage: ChatRunStage;
   runStatusLabel: string;
   isCancelling: boolean;
@@ -165,6 +170,8 @@ type ThreadResolvedProps = {
     allowed: boolean,
   ) => Promise<void>;
   onCompactContext: () => void | Promise<void>;
+  onQueueRedirectDraft: (text: string) => Promise<void>;
+  onClearRedirectDraft: () => Promise<void>;
   onBranchChanged: () => void | Promise<void>;
   disableGlobalSideEffects: boolean;
 };
@@ -260,6 +267,7 @@ export const Thread: FC<ThreadProps> = ({
   onModelChange = () => undefined,
   onThinkingLevelChange = () => undefined,
   onCancelRun = () => undefined,
+  pendingRedirectDraft = "",
   runStage = "idle",
   runStatusLabel = "",
   isCancelling = false,
@@ -273,6 +281,8 @@ export const Thread: FC<ThreadProps> = ({
   },
   onResolvePendingApproval = async () => undefined,
   onCompactContext = () => undefined,
+  onQueueRedirectDraft = async () => undefined,
+  onClearRedirectDraft = async () => undefined,
   onBranchChanged = () => undefined,
   disableGlobalSideEffects = false,
 }) => {
@@ -421,6 +431,7 @@ export const Thread: FC<ThreadProps> = ({
               onModelChange={onModelChange}
               onThinkingLevelChange={onThinkingLevelChange}
               onCancelRun={onCancelRun}
+              pendingRedirectDraft={pendingRedirectDraft}
               runStage={runStage}
               runStatusLabel={runStatusLabel}
               isCancelling={isCancelling}
@@ -433,6 +444,8 @@ export const Thread: FC<ThreadProps> = ({
               onResumeInterruptedApproval={onResumeInterruptedApproval}
               onResolvePendingApproval={onResolvePendingApproval}
               onCompactContext={onCompactContext}
+              onQueueRedirectDraft={onQueueRedirectDraft}
+              onClearRedirectDraft={onClearRedirectDraft}
               onBranchChanged={onBranchChanged}
               disableGlobalSideEffects={disableGlobalSideEffects}
             />
@@ -492,6 +505,7 @@ const Composer: FC<ThreadResolvedProps> = ({
   onModelChange,
   onThinkingLevelChange,
   onCancelRun,
+  pendingRedirectDraft,
   runStatusLabel,
   isCancelling,
   visible,
@@ -503,6 +517,8 @@ const Composer: FC<ThreadResolvedProps> = ({
   onResumeInterruptedApproval,
   onResolvePendingApproval,
   onCompactContext,
+  onQueueRedirectDraft,
+  onClearRedirectDraft,
   onBranchChanged,
   disableGlobalSideEffects,
 }) => {
@@ -520,6 +536,7 @@ const Composer: FC<ThreadResolvedProps> = ({
       attachment.mimeType?.startsWith("image/") === true,
   );
   const isVisionBlocked = hasImageAttachments && supportsVision === false;
+  const isThreadRunning = useAuiState((s) => s.thread.isRunning);
 
   const syncInputOverflow = useCallback(() => {
     const textarea = composerInputRef.current;
@@ -582,6 +599,16 @@ const Composer: FC<ThreadResolvedProps> = ({
         attachments={attachments}
         onRemoveAttachment={onRemoveAttachment}
       />
+      {pendingRedirectDraft ? (
+        <RedirectDraftCard
+          draft={pendingRedirectDraft}
+          disabled={isThreadRunning || isCancelling}
+          onTrigger={async () => {
+            await onQueueRedirectDraft(pendingRedirectDraft);
+          }}
+          onClear={onClearRedirectDraft}
+        />
+      ) : null}
       <div className="flex w-full flex-col gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-composer-surface)] p-(--composer-padding) shadow-[0_12px_32px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.05)] transition-shadow focus-within:ring-2 focus-within:ring-ring/12">
         <ComposerAttachments />
 
@@ -613,6 +640,7 @@ const Composer: FC<ThreadResolvedProps> = ({
           onModelChange={onModelChange}
           onThinkingLevelChange={onThinkingLevelChange}
           onCancelRun={onCancelRun}
+          onQueueRedirectDraft={onQueueRedirectDraft}
           runStatusLabel={runStatusLabel}
           isCancelling={isCancelling}
           isVisionBlocked={isVisionBlocked}
@@ -651,6 +679,53 @@ const Composer: FC<ThreadResolvedProps> = ({
   );
 };
 
+const RedirectDraftCard: FC<{
+  draft: string;
+  disabled: boolean;
+  onTrigger: () => Promise<void>;
+  onClear: () => Promise<void>;
+}> = ({ draft, disabled, onTrigger, onClear }) => {
+  return (
+    <div className="w-[min(760px,calc(100%-3.5rem))] rounded-[calc(var(--radius-shell)+2px)] bg-[color:var(--color-composer-surface)]/94 px-4 py-3 shadow-[0_16px_36px_rgba(15,23,42,0.08)] ring-1 ring-black/6 backdrop-blur-sm dark:ring-white/8">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-medium text-[color:var(--color-text-secondary)]">
+            当前回复结束后继续
+          </p>
+          <p className="mt-1 whitespace-pre-wrap text-[13px] leading-6 text-foreground">
+            {draft}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              void onClear();
+            }}
+            className="h-8 w-8 rounded-[var(--radius-shell)] text-[color:var(--color-text-secondary)] hover:bg-black/4 hover:text-foreground dark:hover:bg-white/8"
+            aria-label="删除引导草稿"
+          >
+            <XIcon className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            disabled={disabled}
+            onClick={() => {
+              void onTrigger();
+            }}
+            className="h-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] px-3 text-white shadow-none hover:bg-[color:var(--color-accent-hover)]"
+          >
+            引导
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ComposerAction: FC<
   Pick<
     ThreadResolvedProps,
@@ -664,6 +739,7 @@ const ComposerAction: FC<
     | "onModelChange"
     | "onThinkingLevelChange"
     | "onCancelRun"
+    | "onQueueRedirectDraft"
     | "runStatusLabel"
     | "isCancelling"
   > & {
@@ -680,11 +756,14 @@ const ComposerAction: FC<
   onModelChange,
   onThinkingLevelChange,
   onCancelRun,
+  onQueueRedirectDraft,
   runStatusLabel,
   isCancelling,
   isVisionBlocked,
 }) => {
+    const aui = useAui();
     const isThreadRunning = useAuiState((s) => s.thread.isRunning);
+    const composerText = useAuiState((s) => s.composer.text);
     const composerHasText = useAuiState(
       (s) => s.composer.text.trim().length > 0,
     );
@@ -777,27 +856,48 @@ const ComposerAction: FC<
           )}
         </div>
         {showStopAction ? (
-          <Button
-            type="button"
-            variant="default"
-            onClick={() => {
-              if (!isCancelling) {
-                onCancelRun();
-              }
-            }}
-            disabled={isCancelling}
-            className="flex h-8 items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] px-2.5 text-[color:var(--chela-text-primary)] shadow-none hover:bg-[color:var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-100"
-            aria-label={isCancelling ? runStatusLabel || "正在停止…" : "停止生成"}
-          >
-            {isCancelling ? (
-              <LoaderCircleIcon className="size-3.5 animate-spin" />
-            ) : (
-              <SquareIcon className="size-3 fill-current" />
-            )}
-            <span className="text-[12px] font-medium">
-              {isCancelling ? runStatusLabel || "正在停止…" : "停止"}
-            </span>
-          </Button>
+          <div className="flex items-center gap-2">
+            {composerHasText ? (
+              <Button
+                type="button"
+                variant="default"
+                onClick={() => {
+                  const nextDraft = composerText.trim();
+                  if (!nextDraft) {
+                    return;
+                  }
+
+                  void onQueueRedirectDraft(nextDraft).then(() => {
+                    aui.composer().setText("");
+                  });
+                }}
+                className="h-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] px-3 text-white shadow-none hover:bg-[color:var(--color-accent-hover)]"
+              >
+                引导
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="default"
+              onClick={() => {
+                if (!isCancelling) {
+                  onCancelRun();
+                }
+              }}
+              disabled={isCancelling}
+              className="flex h-8 items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)]/12 px-2.5 text-[color:var(--color-accent)] shadow-none hover:bg-[color:var(--color-accent)]/18 disabled:cursor-not-allowed disabled:opacity-100"
+              aria-label={isCancelling ? runStatusLabel || "正在停止…" : "停止生成"}
+            >
+              {isCancelling ? (
+                <LoaderCircleIcon className="size-3.5 animate-spin" />
+              ) : (
+                <SquareIcon className="size-3 fill-current" />
+              )}
+              <span className="text-[12px] font-medium">
+                {isCancelling ? runStatusLabel || "正在停止…" : "停止"}
+              </span>
+            </Button>
+          </div>
         ) : (
           <>
             {disableSend ? (
