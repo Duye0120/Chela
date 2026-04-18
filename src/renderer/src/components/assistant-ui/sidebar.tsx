@@ -3,6 +3,7 @@ import {
   AdjustmentsHorizontalIcon,
   ArchiveBoxIcon,
   ArrowUturnLeftIcon,
+  BoltIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CommandLineIcon,
@@ -113,6 +114,7 @@ function SidebarImpl({
     icon: typeof Cog6ToothIcon;
   }[] = [
       { id: "general", label: "通用", icon: AdjustmentsHorizontalIcon },
+      { id: "network", label: "网络", icon: BoltIcon },
       { id: "ai_model", label: "模型", icon: SparklesIcon },
       { id: "workspace", label: "工作区", icon: FolderIcon },
       { id: "skills", label: "Skills", icon: PuzzlePieceIcon },

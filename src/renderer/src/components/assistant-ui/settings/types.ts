@@ -7,6 +7,7 @@ import type {
 
 export type SettingsSection =
   | "general"
+  | "network"
   | "ai_model"
   | "workspace"
   | "skills"

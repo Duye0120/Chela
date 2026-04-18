@@ -206,12 +206,12 @@ export function GeneralSection({
             canConfigureThinking
               ? thinkingOptions
               : [
-                  {
-                    value: "__unsupported__",
-                    label: "当前模型不支持单独设置",
-                    disabled: true,
-                  },
-                ]
+                {
+                  value: "__unsupported__",
+                  label: "当前模型不支持单独设置",
+                  disabled: true,
+                },
+              ]
           }
         />
       </SettingsRow>
