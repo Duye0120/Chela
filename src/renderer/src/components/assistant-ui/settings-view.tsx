@@ -21,6 +21,7 @@ import { AiModelSection } from "./settings/ai-model-section";
 import { InterfaceSection } from "./settings/interface-section";
 import { SystemSection } from "./settings/system-section";
 import { GeneralSection } from "./settings/general-section";
+import { NetworkSection } from "./settings/network-section";
 import type { SettingsViewProps } from "./settings/types";
 import { SkillsSection } from "./settings/skills-section";
 import { WorkspaceSection } from "./settings/workspace-section";
@@ -168,6 +169,13 @@ function SettingsViewImpl({
                 sources={sources}
                 entries={entries}
                 onDirectoryChanged={handleDirectoryChanged}
+              />
+            ) : null}
+
+            {activeSection === "network" ? (
+              <NetworkSection
+                settings={settings}
+                onSettingsChange={onSettingsChange}
               />
             ) : null}
 

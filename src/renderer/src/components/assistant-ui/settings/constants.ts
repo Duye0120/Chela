@@ -11,7 +11,12 @@ export const SETTINGS_SECTIONS: {
   {
     id: "general",
     label: "通用",
-    description: "配置应用的默认行为、内置代理模型与通用设定。"
+    description: "配置应用的默认行为、聊天模型路由与时区。"
+  },
+  {
+    id: "network",
+    label: "网络",
+    description: "单独管理代理与运行时网络超时，不和通用行为混放。"
   },
   {
     id: "ai_model",
