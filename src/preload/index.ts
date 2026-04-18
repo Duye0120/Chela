@@ -6,6 +6,8 @@ import type {
   PendingApprovalGroup,
   InterruptedApprovalGroup,
   InterruptedApprovalNotice,
+  RedirectMessageInput,
+  SessionSearchResult,
   SessionGroup,
   WindowFrameState,
   SendMessageInput,
@@ -33,6 +35,10 @@ const desktopApi: DesktopApi = {
     setGroup: (sessionId: string, groupId: string | null) => ipcRenderer.invoke(IPC_CHANNELS.sessionsSetGroup, sessionId, groupId),
     rename: (sessionId: string, title: string) => ipcRenderer.invoke(IPC_CHANNELS.sessionsRename, sessionId, title),
     setPinned: (sessionId: string, pinned: boolean) => ipcRenderer.invoke(IPC_CHANNELS.sessionsSetPinned, sessionId, pinned),
+    search: (query: string, limit?: number): Promise<SessionSearchResult[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.sessionsSearch, query, limit),
+    reindexSearch: (): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.sessionsReindexSearch),
   },
   groups: {
     list: (): Promise<SessionGroup[]> => ipcRenderer.invoke(IPC_CHANNELS.groupsList),
@@ -44,6 +50,10 @@ const desktopApi: DesktopApi = {
     send: (input: SendMessageInput) => ipcRenderer.invoke(IPC_CHANNELS.chatSend, input),
     trimSessionMessages: (input: TrimSessionMessagesInput) =>
       ipcRenderer.invoke(IPC_CHANNELS.chatTrimSessionMessages, input),
+    queueRedirect: (input: RedirectMessageInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.chatQueueRedirect, input),
+    clearRedirectDraft: (sessionId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.chatClearRedirectDraft, sessionId),
   },
   context: {
     getSummary: (sessionId: string) =>
