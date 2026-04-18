@@ -10,6 +10,7 @@ import {
   loadTranscriptEvents,
   renamePersistedSession,
 } from "../session/service.js";
+import { indexSessionSearchDocument } from "../session/search.js";
 import { bus } from "../event-bus.js";
 import { WorkerService } from "../worker-service.js";
 import type { ChatRunContext } from "./types.js";
@@ -83,13 +84,21 @@ export async function finalizeCompletedChatRun(
     runId: context.input.runId,
     ownerId: PRIMARY_AGENT_OWNER,
     finalState: "completed",
+    metadata: {
+      requestedModelEntryId: context.requestedModelEntryId,
+      resolvedModelEntryId: context.handle?.modelEntryId ?? context.resolvedModel.entry.id,
+      prepareFailedEntries: context.failover.prepare.failedEntries,
+      executeAttemptedEntryIds: context.failover.execute.attemptedEntryIds,
+    },
   });
   harnessRuntime.finishRun(context.runScope, "completed");
+  indexSessionSearchDocument(context.input.sessionId);
   if (assistantMessage?.content) {
     await maybeAutoRenameSessionTitle(
       context.input.sessionId,
       assistantMessage.content,
     );
+    indexSessionSearchDocument(context.input.sessionId);
   }
   appLogger.info({
     scope: "chat.send",
@@ -125,6 +134,12 @@ export async function finalizeFailedChatRun(
         ownerId: PRIMARY_AGENT_OWNER,
         finalState: "aborted",
         reason: "用户取消了当前 run。",
+        metadata: {
+          requestedModelEntryId: context.requestedModelEntryId,
+          resolvedModelEntryId:
+            context.handle?.modelEntryId ?? context.resolvedModel.entry.id,
+          executeAttemptedEntryIds: context.failover.execute.attemptedEntryIds,
+        },
       });
     }
     if (context.createdHandle && context.handle) {
@@ -167,6 +182,14 @@ export async function finalizeFailedChatRun(
       ownerId: PRIMARY_AGENT_OWNER,
       finalState: "failed",
       reason: errorMessage,
+      metadata: {
+        requestedModelEntryId: context.requestedModelEntryId,
+        resolvedModelEntryId:
+          context.handle?.modelEntryId ?? context.resolvedModel.entry.id,
+        prepareFailedEntries: context.failover.prepare.failedEntries,
+        executeAttemptedEntryIds: context.failover.execute.attemptedEntryIds,
+        lastExecuteFailoverError: context.failover.execute.lastError,
+      },
     });
   }
   if (context.runCreated) {

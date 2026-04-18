@@ -3,7 +3,7 @@ import { ElectronAdapter } from "../adapter.js";
 import { PRIMARY_AGENT_OWNER } from "../agent-owners.js";
 import { harnessRuntime } from "../harness/singleton.js";
 import { appLogger } from "../logger.js";
-import { resolveRuntimeModel } from "../model-resolution.js";
+import { resolveWithFailover } from "../failover.js";
 import { getSettings } from "../settings.js";
 import {
   appendRunStartedEvent,
@@ -22,7 +22,8 @@ export function createChatRunContext(input: SendMessageInput): ChatRunContext {
     throw new Error("会话不存在，无法继续发送。");
   }
 
-  const resolvedModel = resolveRuntimeModel(settings.modelRouting.chat.modelId);
+  const requestedModelEntryId = settings.modelRouting.chat.modelId;
+  const failoverResult = resolveWithFailover(requestedModelEntryId);
   const runScope = {
     sessionId: input.sessionId,
     runId: input.runId,
@@ -37,7 +38,18 @@ export function createChatRunContext(input: SendMessageInput): ChatRunContext {
     runScope,
     settings,
     existingSession,
-    resolvedModel,
+    requestedModelEntryId,
+    resolvedModel: failoverResult.resolved,
+    failover: {
+      prepare: {
+        failedEntries: failoverResult.failedEntries,
+        isFailover: failoverResult.isFailover,
+      },
+      execute: {
+        attemptedEntryIds: [],
+        lastError: null,
+      },
+    },
     adapter,
     createdHandle: false,
     handle: null,
@@ -47,7 +59,7 @@ export function createChatRunContext(input: SendMessageInput): ChatRunContext {
 }
 
 export async function prepareChatRun(context: ChatRunContext): Promise<void> {
-  const { input, runScope, resolvedModel, settings } = context;
+  const { input, runScope, resolvedModel, settings, requestedModelEntryId } = context;
 
   appLogger.info({
     scope: "chat.send",
@@ -57,7 +69,9 @@ export async function prepareChatRun(context: ChatRunContext): Promise<void> {
       runId: input.runId,
       textLength: input.text.length,
       attachmentCount: input.attachments.length,
+      requestedModelEntryId,
       modelEntryId: resolvedModel.entry.id,
+      prepareFailover: context.failover.prepare,
     },
   });
 
@@ -89,6 +103,11 @@ export async function prepareChatRun(context: ChatRunContext): Promise<void> {
     runKind: "chat",
     modelEntryId: resolvedModel.entry.id,
     thinkingLevel: settings.thinkingLevel,
+    metadata: {
+      requestedModelEntryId,
+      prepareFailedEntries: context.failover.prepare.failedEntries,
+      prepareFailover: context.failover.prepare.isFailover,
+    },
   });
   context.transcriptStarted = true;
 

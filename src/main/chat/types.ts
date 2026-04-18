@@ -14,7 +14,18 @@ export type ChatRunContext = {
   runScope: HarnessRunScope;
   settings: ChatRuntimeSettings;
   existingSession: ExistingChatSession;
+  requestedModelEntryId: string;
   resolvedModel: ResolvedRuntimeModel;
+  failover: {
+    prepare: {
+      failedEntries: string[];
+      isFailover: boolean;
+    };
+    execute: {
+      attemptedEntryIds: string[];
+      lastError: string | null;
+    };
+  };
   adapter: ElectronAdapter;
   createdHandle: boolean;
   handle: AgentHandle | null;
