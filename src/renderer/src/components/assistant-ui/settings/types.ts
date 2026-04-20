@@ -10,8 +10,10 @@ export type SettingsSection =
   | "network"
   | "ai_model"
   | "workspace"
+  | "memory"
   | "skills"
   | "interface"
+  | "archived"
   | "system";
 
 export type SettingsViewProps = {

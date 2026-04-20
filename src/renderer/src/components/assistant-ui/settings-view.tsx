@@ -23,7 +23,9 @@ import { SystemSection } from "./settings/system-section";
 import { GeneralSection } from "./settings/general-section";
 import { NetworkSection } from "./settings/network-section";
 import type { SettingsViewProps } from "./settings/types";
+import { MemorySection } from "./settings/memory-section";
 import { SkillsSection } from "./settings/skills-section";
+import { ArchivedSection } from "./settings/archived-section";
 import { WorkspaceSection } from "./settings/workspace-section";
 
 export type { SettingsSection, SettingsViewProps } from "./settings/types";
@@ -194,16 +196,29 @@ function SettingsViewImpl({
               />
             ) : null}
 
+            {activeSection === "memory" ? (
+              <MemorySection
+                settings={settings}
+                timeZone={resolvedTimeZone}
+                modelOptions={modelOptions}
+                onSettingsChange={onSettingsChange}
+              />
+            ) : null}
+
             {activeSection === "skills" ? <SkillsSection /> : null}
 
-            {activeSection === "system" ? (
-              <SystemSection
-                timeZone={resolvedTimeZone}
+            {activeSection === "archived" ? (
+              <ArchivedSection
                 archivedSummaries={archivedSummaries || []}
-                onOpenArchivedSession={onOpenArchivedSession!}
-                onUnarchiveSession={onUnarchiveSession!}
-                onDeleteSession={onDeleteSession!}
+                timeZone={resolvedTimeZone}
+                onOpenArchivedSession={onOpenArchivedSession}
+                onUnarchiveSession={onUnarchiveSession}
+                onDeleteSession={onDeleteSession}
               />
+            ) : null}
+
+            {activeSection === "system" ? (
+              <SystemSection timeZone={resolvedTimeZone} />
             ) : null}
           </div>
         </div>

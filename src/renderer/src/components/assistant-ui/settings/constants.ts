@@ -29,6 +29,11 @@ export const SETTINGS_SECTIONS: {
     description: "设置默认工作目录，顺手看规则文件状态。"
   },
   {
+    id: "memory",
+    label: "记忆",
+    description: "管理本地记忆检索、索引模型和向量重建状态。"
+  },
+  {
     id: "skills",
     label: "Skills",
     description: "管理项目内与用户级 skills，顺手发现可安装的新能力。"
@@ -39,9 +44,14 @@ export const SETTINGS_SECTIONS: {
     description: "应用视觉偏好、代码字号以及终端默认表现。"
   },
   {
+    id: "archived",
+    label: "已归档会话",
+    description: "集中查看、恢复或删除已经归档的聊天记录。"
+  },
+  {
     id: "system",
     label: "数据与系统",
-    description: "归档对谈管理、应用日志追踪与程序信息。"
+    description: "查看日志、程序信息和本地系统状态。"
   }
 ] as const;
 
