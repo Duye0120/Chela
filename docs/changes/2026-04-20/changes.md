@@ -351,6 +351,33 @@
 - 中断后继续处理的入口更短、更接近业务动作。
 - 底部状态条更轻，聊天主区域的视觉负担更小。
 
+## 恢复工作区规则文件里的 CLAUDE.md
+
+**时间**: 15:41
+
+### 改了什么
+
+1. 调整 [`src/main/soul.ts`](D:/a_github/first_pi_agent/src/main/soul.ts)，把 `CLAUDE.md` 的扫描和 prompt 拼装补回去，同时兼容项目根目录和 `.pi` 目录两种读取位置。
+2. 调整 [`src/shared/contracts.ts`](D:/a_github/first_pi_agent/src/shared/contracts.ts)，给 `SoulFilesStatus` 重新补上 `claude` 字段。
+3. 调整 [`src/renderer/src/components/assistant-ui/settings/workspace-section.tsx`](D:/a_github/first_pi_agent/src/renderer/src/components/assistant-ui/settings/workspace-section.tsx)，把工作区规则文件卡片补回 `CLAUDE.md`，加载计数改回动态值，并把布局维持在垂直优先的 `1 列 / 大屏 2 列`。
+
+### 为什么改
+
+- 设置页工作区的规则文件列表当前只剩 `SOUL.md / USER.md / AGENTS.md`，之前确认过要纳入的 `CLAUDE.md` 被回退掉了。
+- 运行时 workspace policy 也应该继续把根目录或 `.pi` 目录下的 `CLAUDE.md` 一起纳入。
+
+### 涉及文件
+
+- `src/main/soul.ts`
+- `src/shared/contracts.ts`
+- `src/renderer/src/components/assistant-ui/settings/workspace-section.tsx`
+- `docs/changes/2026-04-20/changes.md`
+
+### 结果
+
+- 设置里的工作区规则文件会重新显示 `CLAUDE.md`。
+- 根目录和 `.pi` 目录里的规则文件都能被正确识别。
+
 ## 让项目说明文案占满详情整行
 
 **时间**: 10:48
@@ -1132,3 +1159,33 @@
 - 本轮 diff 摘要现在固定渲染在 assistant 消息内容底部。
 - 回复结束后无需刷新，消息会直接拿到这轮 diff 摘要。
 - 刷新后重载 transcript，diff 卡片内容会继续保留。
+
+## 设置页工作区补回多项目联动
+
+**时间**: 17:32
+
+### 改了什么
+
+1. 调整 [`src/renderer/src/components/assistant-ui/settings/types.ts`](D:/a_github/first_pi_agent/src/renderer/src/components/assistant-ui/settings/types.ts)、[`src/renderer/src/components/assistant-ui/settings-view.tsx`](D:/a_github/first_pi_agent/src/renderer/src/components/assistant-ui/settings-view.tsx)、[`src/renderer/src/App.tsx`](D:/a_github/first_pi_agent/src/renderer/src/App.tsx)，把 `groups`、活跃聊天摘要和 `添加项目` 动作重新接回 `设置 -> 工作区`。
+2. 重写 [`src/renderer/src/components/assistant-ui/settings/workspace-section.tsx`](D:/a_github/first_pi_agent/src/renderer/src/components/assistant-ui/settings/workspace-section.tsx)，把单工作区卡片升级成“工作区列表 + 当前工作区详情”的联动结构。
+3. 调整 [`src/renderer/src/components/assistant-ui/settings/constants.ts`](D:/a_github/first_pi_agent/src/renderer/src/components/assistant-ui/settings/constants.ts) 的工作区说明文案，让页面语义明确落在“多个工作区项目的管理”上。
+
+### 为什么改
+
+- 外部侧边栏已经有项目 / 工作区概念，设置页继续只展示单一路径，多个工作区的区分和管理都会断掉。
+- 后续同时维护多个项目时，设置页需要和外部项目列表共享同一套工作区切换结果。
+
+### 涉及文件
+
+- `src/renderer/src/components/assistant-ui/settings/types.ts`
+- `src/renderer/src/components/assistant-ui/settings-view.tsx`
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/components/assistant-ui/settings/workspace-section.tsx`
+- `src/renderer/src/components/assistant-ui/settings/constants.ts`
+- `docs/changes/2026-04-20/changes.md`
+
+### 结果
+
+- `设置 -> 工作区` 现在会展示全部已保存项目，同时保留当前默认目录。
+- 在设置页点某个项目后，当前 workspace 会同步切过去，规则文件状态也会跟着更新。
+- 每个工作区都会显示自己的路径、活跃聊天数和归档数，多项目管理路径更清楚。
