@@ -26,7 +26,7 @@ export const SETTINGS_SECTIONS: {
   {
     id: "workspace",
     label: "工作区",
-    description: "设置默认工作目录，顺手看规则文件状态。"
+    description: "集中管理多个工作区项目、默认目录和规则文件状态。"
   },
   {
     id: "memory",

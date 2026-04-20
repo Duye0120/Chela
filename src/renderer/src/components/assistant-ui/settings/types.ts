@@ -2,6 +2,7 @@ import type {
   ChatSessionSummary,
   ModelRoutingRole,
   Settings,
+  SessionGroup,
   ThinkingLevel,
 } from "@shared/contracts";
 
@@ -28,7 +29,10 @@ export type SettingsViewProps = {
   ) => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
   onSettingsChange: (partial: Partial<Settings>) => void;
+  groups: SessionGroup[];
+  liveSummaries: ChatSessionSummary[];
   archivedSummaries: ChatSessionSummary[];
+  onCreateProject: () => void;
   onOpenArchivedSession: (sessionId: string) => void;
   onUnarchiveSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;

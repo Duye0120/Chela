@@ -40,7 +40,10 @@ function SettingsViewImpl({
   onRoleModelChange,
   onThinkingLevelChange,
   onSettingsChange,
+  groups,
+  liveSummaries,
   archivedSummaries,
+  onCreateProject,
   onOpenArchivedSession,
   onUnarchiveSession,
   onDeleteSession,
@@ -191,8 +194,12 @@ function SettingsViewImpl({
             {activeSection === "workspace" ? (
               <WorkspaceSection
                 settings={settings}
+                groups={groups}
+                liveSummaries={liveSummaries}
+                archivedSummaries={archivedSummaries}
                 soulStatus={soulStatus}
                 onSettingsChange={onSettingsChange}
+                onCreateProject={onCreateProject}
               />
             ) : null}
 

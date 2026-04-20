@@ -1803,7 +1803,12 @@ export default function App() {
         onRoleModelChange={handleRoleModelChange}
         onThinkingLevelChange={handleThinkingLevelChange}
         onSettingsChange={handleSettingsChange}
+        groups={groups}
+        liveSummaries={summaries}
         archivedSummaries={archivedSummaries}
+        onCreateProject={() => {
+          void handleCreateProject();
+        }}
         onOpenArchivedSession={openArchivedSessionFromSettings}
         onUnarchiveSession={(sessionId) => {
           void unarchiveSession(sessionId);
@@ -1817,11 +1822,14 @@ export default function App() {
       archivedSummaries,
       currentModelId,
       deleteSessionPermanently,
+      groups,
       handleModelChange,
+      handleCreateProject,
       handleRoleModelChange,
       handleSettingsChange,
       handleThinkingLevelChange,
       openArchivedSessionFromSettings,
+      summaries,
       settings,
       settingsSection,
       thinkingLevel,
@@ -1935,6 +1943,10 @@ export default function App() {
                 }}
                 onArchiveSession={archiveSession}
                 onDeleteSession={deleteSessionPermanently}
+                onUnarchiveSession={(sessionId) => {
+                  void unarchiveSession(sessionId);
+                }}
+                archivedSummaries={archivedSummaries}
                 onDeleteProject={(groupId) => {
                   void deleteProject(groupId);
                 }}
