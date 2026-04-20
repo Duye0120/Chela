@@ -93,6 +93,12 @@ const desktopApi: DesktopApi = {
     getLogSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetLogSnapshot),
     openLogFolder: (logId) => ipcRenderer.invoke(IPC_CHANNELS.settingsOpenLogFolder, logId),
   },
+  memory: {
+    add: (input) => ipcRenderer.invoke(IPC_CHANNELS.memoryAdd, input),
+    search: (query, limit) => ipcRenderer.invoke(IPC_CHANNELS.memorySearch, query, limit),
+    getStats: () => ipcRenderer.invoke(IPC_CHANNELS.memoryGetStats),
+    rebuild: () => ipcRenderer.invoke(IPC_CHANNELS.memoryRebuild),
+  },
   skills: {
     listInstalled: () => ipcRenderer.invoke(IPC_CHANNELS.skillsListInstalled),
     searchCatalog: (query: string) => ipcRenderer.invoke(IPC_CHANNELS.skillsSearchCatalog, query),

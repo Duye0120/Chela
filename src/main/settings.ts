@@ -6,6 +6,10 @@ import type {
   Settings,
   ThinkingLevel,
 } from "../shared/contracts.js";
+import {
+  DEFAULT_MEMORY_EMBEDDING_MODEL_ID,
+  DEFAULT_MEMORY_SEARCH_CANDIDATE_LIMIT,
+} from "../shared/memory.js";
 import { DEFAULT_MODEL_ENTRY_ID } from "../shared/provider-directory.js";
 import { normalizeTimeZoneSetting, SYSTEM_TIME_ZONE } from "../shared/timezone.js";
 
@@ -61,6 +65,19 @@ function createDefaultNetworkSettings(): Settings["network"] {
   };
 }
 
+function createDefaultMemorySettings(): Settings["memory"] {
+  return {
+    enabled: true,
+    autoRetrieve: true,
+    queryRewrite: true,
+    searchCandidateLimit: DEFAULT_MEMORY_SEARCH_CANDIDATE_LIMIT,
+    similarityThreshold: 65,
+    autoSummarize: true,
+    toolModelId: null,
+    embeddingModelId: DEFAULT_MEMORY_EMBEDDING_MODEL_ID,
+  };
+}
+
 const DEFAULT_SETTINGS: Settings = {
   modelRouting: createDefaultModelRouting(),
   defaultModelId: DEFAULT_MODEL_ENTRY_ID,
@@ -83,6 +100,7 @@ const DEFAULT_SETTINGS: Settings = {
     codeFontFamily: "JetBrains Mono",
   },
   network: createDefaultNetworkSettings(),
+  memory: createDefaultMemorySettings(),
   workspace: getDefaultWorkspacePath(),
 };
 
@@ -220,6 +238,29 @@ function normalizeNetworkSettings(
   };
 }
 
+function normalizeMemorySettings(
+  source: Partial<Settings["memory"]> | null | undefined,
+): Settings["memory"] {
+  const searchCandidateLimit = Number(source?.searchCandidateLimit);
+  const similarityThreshold = Number(source?.similarityThreshold);
+
+  return {
+    enabled: source?.enabled !== false,
+    autoRetrieve: source?.autoRetrieve !== false,
+    queryRewrite: source?.queryRewrite !== false,
+    searchCandidateLimit: Number.isFinite(searchCandidateLimit)
+      ? Math.min(500, Math.max(1, Math.round(searchCandidateLimit)))
+      : DEFAULT_SETTINGS.memory.searchCandidateLimit,
+    similarityThreshold: Number.isFinite(similarityThreshold)
+      ? Math.min(100, Math.max(0, Math.round(similarityThreshold)))
+      : DEFAULT_SETTINGS.memory.similarityThreshold,
+    autoSummarize: source?.autoSummarize !== false,
+    toolModelId: normalizeOptionalModelId(source?.toolModelId),
+    embeddingModelId:
+      source?.embeddingModelId ?? DEFAULT_SETTINGS.memory.embeddingModelId,
+  };
+}
+
 function mergeSettings(source?: Partial<Settings> | null): Settings {
   const sourceWithLegacy = (source ?? {}) as Partial<Settings> & {
     defaultModel?: unknown;
@@ -260,6 +301,7 @@ function mergeSettings(source?: Partial<Settings> | null): Settings {
       ...source?.ui,
     },
     network: normalizeNetworkSettings(source?.network),
+    memory: normalizeMemorySettings(source?.memory),
   };
 }
 
@@ -310,6 +352,10 @@ export function updateSettings(partial: Partial<Settings>): void {
         ...current.network.proxy,
         ...partial.network?.proxy,
       },
+    },
+    memory: {
+      ...current.memory,
+      ...partial.memory,
     },
   });
   const serialized = {

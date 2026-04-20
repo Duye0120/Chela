@@ -1,4 +1,5 @@
 import type { AgentEvent, ConfirmationResponse } from "./agent-events.js";
+import type { MemoryEmbeddingModelId } from "./memory.js";
 
 export type ChatRole = "user" | "assistant" | "system";
 export type ChatMessageStatus = "idle" | "streaming" | "done" | "error";
@@ -39,6 +40,7 @@ export type AgentResponse = {
   steps: AgentStep[];
   finalText: string;
   skillUsages?: RuntimeSkillUsage[];
+  runChangeSummary?: RunChangeSummary | null;
   startedAt: number;
   endedAt?: number;
   usage?: MessageUsage;
@@ -189,7 +191,57 @@ export type Settings = {
     };
     timeoutMs: number;
   };
+  memory: {
+    enabled: boolean;
+    autoRetrieve: boolean;
+    queryRewrite: boolean;
+    searchCandidateLimit: number;
+    similarityThreshold: number;
+    autoSummarize: boolean;
+    toolModelId: string | null;
+    embeddingModelId: MemoryEmbeddingModelId;
+  };
   workspace: string;
+};
+
+export type MemoryMetadata = {
+  source?: string;
+  tags?: string[];
+  sessionId?: string;
+  messageId?: string;
+  [key: string]: unknown;
+};
+
+export type MemoryAddInput = {
+  content: string;
+  metadata?: MemoryMetadata | null;
+};
+
+export type MemoryRecord = {
+  id: number;
+  content: string;
+  metadata: MemoryMetadata | null;
+  createdAt: string;
+};
+
+export type MemorySearchResult = MemoryRecord & {
+  score: number;
+};
+
+export type MemoryStats = {
+  totalMemories: number;
+  indexedModelId: string | null;
+  selectedModelId: MemoryEmbeddingModelId;
+  candidateLimit: number;
+  lastIndexedAt: string | null;
+  lastRebuiltAt: string | null;
+  workerState: "idle" | "starting" | "ready" | "error";
+};
+
+export type MemoryRebuildResult = {
+  rebuiltCount: number;
+  modelId: MemoryEmbeddingModelId;
+  completedAt: string;
 };
 
 export type SoulFilesStatus = {
@@ -263,6 +315,21 @@ export type RuntimeSkillUsage = SkillUsageTarget & {
   skillLabel: string;
 };
 
+export type RunChangeSummaryFile = {
+  path: string;
+  status: "modified" | "deleted" | "untracked";
+  additions: number;
+  deletions: number;
+  changeKind: "added" | "updated" | "reverted";
+};
+
+export type RunChangeSummary = {
+  fileCount: number;
+  additions: number;
+  deletions: number;
+  files: RunChangeSummaryFile[];
+};
+
 export type InstalledSkillSource = "project" | "user";
 
 export type InstalledSkillInstance = {
@@ -329,6 +396,7 @@ export type RunKind = "chat" | "compact" | "memory_refresh" | "system" | "subage
 
 export type ChatMessageMeta = Record<string, unknown> & {
   skillUsages?: RuntimeSkillUsage[];
+  runChangeSummary?: RunChangeSummary | null;
 };
 
 export type ChatMessage = {
@@ -823,6 +891,12 @@ export type DesktopApi = {
     update: (partial: Partial<Settings>) => Promise<void>;
     getLogSnapshot: () => Promise<DiagnosticLogBundle>;
     openLogFolder: (logId: DiagnosticLogId) => Promise<void>;
+  };
+  memory: {
+    add: (input: MemoryAddInput) => Promise<MemoryRecord>;
+    search: (query: string, limit?: number) => Promise<MemorySearchResult[]>;
+    getStats: () => Promise<MemoryStats>;
+    rebuild: () => Promise<MemoryRebuildResult>;
   };
   skills: {
     listInstalled: () => Promise<InstalledSkillDetail[]>;

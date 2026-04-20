@@ -7,6 +7,7 @@ import { registerSessionsIpc } from "./ipc/sessions.js";
 import { registerChatIpc } from "./ipc/chat.js";
 import { registerHarnessIpc } from "./ipc/harness.js";
 import { registerSettingsIpc } from "./ipc/settings.js";
+import { registerMemoryIpc } from "./ipc/memory.js";
 import { registerWorkspaceIpc } from "./ipc/workspace.js";
 import { registerProvidersIpc } from "./ipc/providers.js";
 import { registerWorkbenchIpc } from "./ipc/workbench.js";
@@ -50,6 +51,8 @@ function registerIpcHandlers() {
   registerHarnessIpc();
 
   registerSettingsIpc();
+
+  registerMemoryIpc();
 
   registerSkillsIpc();
 
