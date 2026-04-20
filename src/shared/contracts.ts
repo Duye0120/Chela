@@ -248,6 +248,7 @@ export type SoulFilesStatus = {
   soul: { exists: boolean; sizeBytes: number };
   user: { exists: boolean; sizeBytes: number };
   agents: { exists: boolean; sizeBytes: number };
+  claude: { exists: boolean; sizeBytes: number };
 };
 
 export type SelectedFile = {

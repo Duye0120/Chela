@@ -6,18 +6,36 @@ const SOUL_DIR = ".pi";
 const SOUL_FILE = "SOUL.md";
 const USER_FILE = "USER.md";
 const AGENTS_FILE = "AGENTS.md";
+const CLAUDE_FILE = "CLAUDE.md";
+
+function resolveSoulFilePaths(workspacePath: string, filename: string): string[] {
+  return [
+    join(workspacePath, filename),
+    join(workspacePath, SOUL_DIR, filename),
+  ];
+}
+
+function readFirstExistingFile(paths: string[]): string {
+  for (const filePath of paths) {
+    if (!existsSync(filePath)) {
+      continue;
+    }
+
+    try {
+      return readFileSync(filePath, "utf-8");
+    } catch {
+      return "";
+    }
+  }
+
+  return "";
+}
 
 /**
  * Read a Soul file from the workspace. Returns empty string if not found.
  */
 function readSoulFile(workspacePath: string, filename: string): string {
-  const filePath = join(workspacePath, SOUL_DIR, filename);
-  if (!existsSync(filePath)) return "";
-  try {
-    return readFileSync(filePath, "utf-8");
-  } catch {
-    return "";
-  }
+  return readFirstExistingFile(resolveSoulFilePaths(workspacePath, filename));
 }
 
 /**
@@ -25,20 +43,27 @@ function readSoulFile(workspacePath: string, filename: string): string {
  */
 export function getSoulFilesStatus(workspacePath: string): SoulFilesStatus {
   function fileInfo(filename: string) {
-    const filePath = join(workspacePath, SOUL_DIR, filename);
-    if (!existsSync(filePath)) return { exists: false, sizeBytes: 0 };
-    try {
-      const content = readFileSync(filePath, "utf-8");
-      return { exists: true, sizeBytes: Buffer.byteLength(content, "utf-8") };
-    } catch {
-      return { exists: false, sizeBytes: 0 };
+    for (const filePath of resolveSoulFilePaths(workspacePath, filename)) {
+      if (!existsSync(filePath)) {
+        continue;
+      }
+
+      try {
+        const content = readFileSync(filePath, "utf-8");
+        return { exists: true, sizeBytes: Buffer.byteLength(content, "utf-8") };
+      } catch {
+        return { exists: false, sizeBytes: 0 };
+      }
     }
+
+    return { exists: false, sizeBytes: 0 };
   }
 
   return {
     soul: fileInfo(SOUL_FILE),
     user: fileInfo(USER_FILE),
     agents: fileInfo(AGENTS_FILE),
+    claude: fileInfo(CLAUDE_FILE),
   };
 }
 
@@ -50,8 +75,9 @@ export function buildSoulPromptSection(workspacePath: string): string {
   const soul = readSoulFile(workspacePath, SOUL_FILE);
   const user = readSoulFile(workspacePath, USER_FILE);
   const agents = readSoulFile(workspacePath, AGENTS_FILE);
+  const claude = readSoulFile(workspacePath, CLAUDE_FILE);
 
-  if (!soul && !user && !agents) return "";
+  if (!soul && !user && !agents && !claude) return "";
 
   const sections: string[] = [];
 
@@ -63,6 +89,9 @@ export function buildSoulPromptSection(workspacePath: string): string {
   }
   if (agents) {
     sections.push("## Agent 配置（AGENTS.md）\n\n" + agents);
+  }
+  if (claude) {
+    sections.push("## Claude 配置（CLAUDE.md）\n\n" + claude);
   }
 
   return sections.join("\n\n---\n\n");
