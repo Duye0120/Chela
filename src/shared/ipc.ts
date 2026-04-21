@@ -29,8 +29,9 @@ export const IPC_CHANNELS = {
   // Chat
   chatSend: "chat:send",
   chatTrimSessionMessages: "chat:trim-session-messages",
-  chatQueueRedirect: "chat:queue-redirect",
-  chatClearRedirectDraft: "chat:clear-redirect-draft",
+  chatEnqueueQueuedMessage: "chat:enqueue-queued-message",
+  chatTriggerQueuedMessage: "chat:trigger-queued-message",
+  chatRemoveQueuedMessage: "chat:remove-queued-message",
   contextGetSummary: "context:get-summary",
   contextCompact: "context:compact",
 

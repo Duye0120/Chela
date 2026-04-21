@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   existsSync,
   readFileSync,
@@ -10,6 +11,7 @@ import { join } from "node:path";
 import type {
   ChatSession,
   ChatSessionSummary,
+  QueuedMessage,
   SessionMemorySnapshot,
   SessionTranscriptEvent,
 } from "../../shared/contracts.js";
@@ -137,8 +139,10 @@ function materializeSession(meta: PersistedSessionMeta): ChatSession {
     archived: meta.archived,
     groupId: meta.groupId,
     pinned: meta.pinned,
-    pendingRedirectDraft: meta.pendingRedirectDraft || undefined,
-    pendingRedirectUpdatedAt: meta.pendingRedirectUpdatedAt,
+    queuedMessages:
+      Array.isArray(meta.queuedMessages) && meta.queuedMessages.length > 0
+        ? [...meta.queuedMessages]
+        : undefined,
   };
 }
 
@@ -381,8 +385,6 @@ export function saveSessionProjection(session: ChatSession): void {
   meta.pinned = session.pinned;
   meta.draft = session.draft;
   meta.attachments = session.attachments;
-  meta.pendingRedirectDraft = session.pendingRedirectDraft ?? "";
-  meta.pendingRedirectUpdatedAt = session.pendingRedirectUpdatedAt;
   writeMeta(meta);
   updateIndexWithMeta(meta);
   indexSessionSearchDocument(session.id);
@@ -530,26 +532,93 @@ export function setPersistedSessionPinned(sessionId: string, pinned: boolean): v
   });
 }
 
-export function setPersistedRedirectDraft(sessionId: string, text: string): void {
-  const nextText = text.trim();
-  updateSessionMeta(sessionId, (meta) => {
-    meta.pendingRedirectDraft = nextText;
-    meta.pendingRedirectUpdatedAt = nextText
-      ? new Date().toISOString()
-      : undefined;
-  });
-}
-
-export function clearPersistedRedirectDraft(sessionId: string): void {
-  updateSessionMeta(sessionId, (meta) => {
-    meta.pendingRedirectDraft = "";
-    delete meta.pendingRedirectUpdatedAt;
-  });
-}
-
-export function getPersistedRedirectDraft(sessionId: string): string {
+export function listPersistedQueuedMessages(sessionId: string): QueuedMessage[] {
   ensureSessionStorageReady();
-  return readMeta(sessionId)?.pendingRedirectDraft?.trim() ?? "";
+  return [...(readMeta(sessionId)?.queuedMessages ?? [])];
+}
+
+export function enqueuePersistedQueuedMessage(
+  sessionId: string,
+  text: string,
+): QueuedMessage {
+  const nextQueuedMessage: QueuedMessage = {
+    id: `queued-${randomUUID()}`,
+    text,
+    createdAt: new Date().toISOString(),
+  };
+
+  const meta = updateSessionMeta(sessionId, (currentMeta) => {
+    currentMeta.queuedMessages = [
+      ...(currentMeta.queuedMessages ?? []),
+      nextQueuedMessage,
+    ];
+  });
+
+  if (!meta) {
+    throw new Error(`会话不存在：${sessionId}`);
+  }
+
+  return nextQueuedMessage;
+}
+
+export function movePersistedQueuedMessageToFront(
+  sessionId: string,
+  messageId: string,
+): QueuedMessage | null {
+  let queuedMessage: QueuedMessage | null = null;
+
+  updateSessionMeta(sessionId, (meta) => {
+    const currentQueue = meta.queuedMessages ?? [];
+    const matchedMessage = currentQueue.find((item) => item.id === messageId);
+    if (!matchedMessage) {
+      return;
+    }
+
+    queuedMessage = matchedMessage;
+    meta.queuedMessages = [
+      matchedMessage,
+      ...currentQueue.filter((item) => item.id !== messageId),
+    ];
+  });
+
+  return queuedMessage;
+}
+
+export function removePersistedQueuedMessage(
+  sessionId: string,
+  messageId: string,
+): void {
+  updateSessionMeta(sessionId, (meta) => {
+    meta.queuedMessages = (meta.queuedMessages ?? []).filter(
+      (item) => item.id !== messageId,
+    );
+  });
+}
+
+export function dequeuePersistedQueuedMessage(
+  sessionId: string,
+): QueuedMessage | null {
+  let dequeuedMessage: QueuedMessage | null = null;
+
+  updateSessionMeta(sessionId, (meta) => {
+    const [head, ...rest] = meta.queuedMessages ?? [];
+    dequeuedMessage = head ?? null;
+    meta.queuedMessages = rest;
+  });
+
+  return dequeuedMessage;
+}
+
+export function restorePersistedQueuedMessageToFront(
+  sessionId: string,
+  queuedMessage: QueuedMessage,
+): void {
+  updateSessionMeta(sessionId, (meta) => {
+    meta.queuedMessages = [
+      queuedMessage,
+      ...(meta.queuedMessages ?? []).filter((item) => item.id !== queuedMessage.id),
+    ];
+  });
 }
 
 export function getPersistedSnapshot(sessionId: string): SessionMemorySnapshot {

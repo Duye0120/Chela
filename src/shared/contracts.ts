@@ -435,8 +435,7 @@ export type ChatSession = {
   archived?: boolean;
   groupId?: string;
   pinned?: boolean;
-  pendingRedirectDraft?: string;
-  pendingRedirectUpdatedAt?: string;
+  queuedMessages?: QueuedMessage[];
 };
 
 export type ChatSessionSummary = {
@@ -667,15 +666,34 @@ export type InterruptedApprovalGroup = {
   approvals: InterruptedApprovalNotice[];
 };
 
+export type SendMessageOrigin = "user" | "resume_interrupted_approval";
+
 export type SendMessageInput = AgentRunScope & {
   text: string;
   attachments: SelectedFile[];
+  origin?: SendMessageOrigin;
 };
 
-export type RedirectMessageInput = {
-  sessionId: string;
-  runId?: string | null;
+export type QueuedMessage = {
+  id: string;
   text: string;
+  createdAt: string;
+};
+
+export type EnqueueQueuedMessageInput = {
+  sessionId: string;
+  text: string;
+};
+
+export type TriggerQueuedMessageInput = {
+  sessionId: string;
+  messageId: string;
+  runId?: string | null;
+};
+
+export type RemoveQueuedMessageInput = {
+  sessionId: string;
+  messageId: string;
 };
 
 export type SessionSearchResult = {
@@ -864,8 +882,9 @@ export type DesktopApi = {
     /** Phase 0: returns mock reply. Phase 1+: returns void, response comes via agent.onEvent */
     send: (input: SendMessageInput) => Promise<AssistantMessage | void>;
     trimSessionMessages: (input: TrimSessionMessagesInput) => Promise<void>;
-    queueRedirect: (input: RedirectMessageInput) => Promise<void>;
-    clearRedirectDraft: (sessionId: string) => Promise<void>;
+    enqueueQueuedMessage: (input: EnqueueQueuedMessageInput) => Promise<void>;
+    triggerQueuedMessage: (input: TriggerQueuedMessageInput) => Promise<void>;
+    removeQueuedMessage: (input: RemoveQueuedMessageInput) => Promise<void>;
   };
   context: {
     getSummary: (sessionId: string) => Promise<ContextSummary>;

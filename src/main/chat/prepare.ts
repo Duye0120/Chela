@@ -62,6 +62,7 @@ export function createChatRunContext(input: SendMessageInput): ChatRunContext {
 
 export async function prepareChatRun(context: ChatRunContext): Promise<void> {
   const { input, runScope, resolvedModel, settings, requestedModelEntryId } = context;
+  const origin = input.origin ?? "user";
 
   appLogger.info({
     scope: "chat.send",
@@ -71,6 +72,7 @@ export async function prepareChatRun(context: ChatRunContext): Promise<void> {
       runId: input.runId,
       textLength: input.text.length,
       attachmentCount: input.attachments.length,
+      origin,
       requestedModelEntryId,
       modelEntryId: resolvedModel.entry.id,
       prepareFailover: context.failover.prepare,
@@ -87,17 +89,20 @@ export async function prepareChatRun(context: ChatRunContext): Promise<void> {
   });
   context.runCreated = true;
 
-  appendUserMessageEvent({
-    sessionId: input.sessionId,
-    text: input.text,
-    attachments: input.attachments,
-    modelEntryId: resolvedModel.entry.id,
-    thinkingLevel: settings.thinkingLevel,
-  });
-  bus.emit("message:user", {
-    sessionId: input.sessionId,
-    text: input.text,
-  });
+  if (origin === "user") {
+    appendUserMessageEvent({
+      sessionId: input.sessionId,
+      text: input.text,
+      attachments: input.attachments,
+      modelEntryId: resolvedModel.entry.id,
+      thinkingLevel: settings.thinkingLevel,
+    });
+    bus.emit("message:user", {
+      sessionId: input.sessionId,
+      text: input.text,
+    });
+  }
+
   appendRunStartedEvent({
     sessionId: input.sessionId,
     runId: input.runId,
@@ -106,6 +111,7 @@ export async function prepareChatRun(context: ChatRunContext): Promise<void> {
     modelEntryId: resolvedModel.entry.id,
     thinkingLevel: settings.thinkingLevel,
     metadata: {
+      origin,
       requestedModelEntryId,
       prepareFailedEntries: context.failover.prepare.failedEntries,
       prepareFailover: context.failover.prepare.isFailover,

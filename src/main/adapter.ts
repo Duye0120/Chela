@@ -111,6 +111,16 @@ function mergeRuntimeSkillUsages(
   return [...byKey.values()];
 }
 
+function hasRenderableAssistantSteps(steps: AgentStep[]): boolean {
+  return steps.some((step) => {
+    if (step.kind === "thinking") {
+      return Boolean(step.thinkingText?.trim());
+    }
+
+    return true;
+  });
+}
+
 export class ElectronAdapter {
   private readonly window: BrowserWindow;
   private readonly scope: AgentEventScope;
@@ -556,7 +566,7 @@ export class ElectronAdapter {
       }
     }
 
-    if (!finalText && steps.length === 0 && !this.buffer.usage) {
+    if (!finalText && !hasRenderableAssistantSteps(steps)) {
       return null;
     }
 

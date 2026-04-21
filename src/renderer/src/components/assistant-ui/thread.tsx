@@ -44,6 +44,7 @@ import type {
   ModelEntry,
   PendingApprovalGroup,
   PendingApprovalNotice,
+  QueuedMessage,
   RunChangeSummary,
   RuntimeSkillUsage,
   ProviderSource,
@@ -95,6 +96,10 @@ import {
   toPersistedMessageAttachment,
 } from "@renderer/lib/assistant-ui-attachments";
 import {
+  buildInterruptedApprovalRunConfig,
+  readInterruptedApprovalInternalRun,
+} from "@renderer/lib/interrupted-approval-run-config";
+import {
   buildSelectableModelOptions,
   findEntryLabel,
   loadProviderDirectory,
@@ -124,7 +129,8 @@ type ThreadProps = {
   onModelChange?: (modelEntryId: string) => void;
   onThinkingLevelChange?: (level: ThinkingLevel) => void;
   onCancelRun?: () => void;
-  pendingRedirectDraft?: string;
+  queuedMessages?: QueuedMessage[];
+  runCompletionSerial?: number;
   runStage?: ChatRunStage;
   runStatusLabel?: string;
   isCancelling?: boolean;
@@ -139,8 +145,9 @@ type ThreadProps = {
     allowed: boolean,
   ) => Promise<void>;
   onCompactContext?: () => void | Promise<void>;
-  onQueueRedirectDraft?: (text: string) => Promise<void>;
-  onClearRedirectDraft?: () => Promise<void>;
+  onEnqueueQueuedMessage?: (text: string) => Promise<void>;
+  onTriggerQueuedMessage?: (messageId: string) => Promise<void>;
+  onRemoveQueuedMessage?: (messageId: string) => Promise<void>;
   onBranchChanged?: () => void | Promise<void>;
   disableGlobalSideEffects?: boolean;
 };
@@ -159,7 +166,8 @@ type ThreadResolvedProps = {
   onModelChange: (modelEntryId: string) => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
   onCancelRun: () => void;
-  pendingRedirectDraft: string;
+  queuedMessages: QueuedMessage[];
+  runCompletionSerial: number;
   runStage: ChatRunStage;
   runStatusLabel: string;
   isCancelling: boolean;
@@ -174,8 +182,9 @@ type ThreadResolvedProps = {
     allowed: boolean,
   ) => Promise<void>;
   onCompactContext: () => void | Promise<void>;
-  onQueueRedirectDraft: (text: string) => Promise<void>;
-  onClearRedirectDraft: () => Promise<void>;
+  onEnqueueQueuedMessage: (text: string) => Promise<void>;
+  onTriggerQueuedMessage: (messageId: string) => Promise<void>;
+  onRemoveQueuedMessage: (messageId: string) => Promise<void>;
   onBranchChanged: () => void | Promise<void>;
   disableGlobalSideEffects: boolean;
 };
@@ -271,7 +280,8 @@ export const Thread: FC<ThreadProps> = ({
   onModelChange = () => undefined,
   onThinkingLevelChange = () => undefined,
   onCancelRun = () => undefined,
-  pendingRedirectDraft = "",
+  queuedMessages = [],
+  runCompletionSerial = 0,
   runStage = "idle",
   runStatusLabel = "",
   isCancelling = false,
@@ -285,8 +295,9 @@ export const Thread: FC<ThreadProps> = ({
   },
   onResolvePendingApproval = async () => undefined,
   onCompactContext = () => undefined,
-  onQueueRedirectDraft = async () => undefined,
-  onClearRedirectDraft = async () => undefined,
+  onEnqueueQueuedMessage = async () => undefined,
+  onTriggerQueuedMessage = async () => undefined,
+  onRemoveQueuedMessage = async () => undefined,
   onBranchChanged = () => undefined,
   disableGlobalSideEffects = false,
 }) => {
@@ -435,7 +446,8 @@ export const Thread: FC<ThreadProps> = ({
               onModelChange={onModelChange}
               onThinkingLevelChange={onThinkingLevelChange}
               onCancelRun={onCancelRun}
-              pendingRedirectDraft={pendingRedirectDraft}
+              queuedMessages={queuedMessages}
+              runCompletionSerial={runCompletionSerial}
               runStage={runStage}
               runStatusLabel={runStatusLabel}
               isCancelling={isCancelling}
@@ -448,8 +460,9 @@ export const Thread: FC<ThreadProps> = ({
               onResumeInterruptedApproval={onResumeInterruptedApproval}
               onResolvePendingApproval={onResolvePendingApproval}
               onCompactContext={onCompactContext}
-              onQueueRedirectDraft={onQueueRedirectDraft}
-              onClearRedirectDraft={onClearRedirectDraft}
+              onEnqueueQueuedMessage={onEnqueueQueuedMessage}
+              onTriggerQueuedMessage={onTriggerQueuedMessage}
+              onRemoveQueuedMessage={onRemoveQueuedMessage}
               onBranchChanged={onBranchChanged}
               disableGlobalSideEffects={disableGlobalSideEffects}
             />
@@ -509,7 +522,8 @@ const Composer: FC<ThreadResolvedProps> = ({
   onModelChange,
   onThinkingLevelChange,
   onCancelRun,
-  pendingRedirectDraft,
+  queuedMessages,
+  runCompletionSerial,
   runStatusLabel,
   isCancelling,
   visible,
@@ -521,13 +535,20 @@ const Composer: FC<ThreadResolvedProps> = ({
   onResumeInterruptedApproval,
   onResolvePendingApproval,
   onCompactContext,
-  onQueueRedirectDraft,
-  onClearRedirectDraft,
+  onEnqueueQueuedMessage,
+  onTriggerQueuedMessage,
+  onRemoveQueuedMessage,
   onBranchChanged,
   disableGlobalSideEffects,
 }) => {
   const aui = useAui();
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
+  const queuedAutoDispatchingIdRef = useRef<string | null>(null);
+  const queuedAutoDispatchLockedRef = useRef(false);
+  const queuedAwaitingCompletionRef = useRef<{
+    messageId: string;
+    runCompletionSerial: number;
+  } | null>(null);
 
   const [inputScrollable, setInputScrollable] = useState(false);
   const supportsVision =
@@ -541,6 +562,8 @@ const Composer: FC<ThreadResolvedProps> = ({
   );
   const isVisionBlocked = hasImageAttachments && supportsVision === false;
   const isThreadRunning = useAuiState((s) => s.thread.isRunning);
+  const queuedHeadMessage = queuedMessages[0] ?? null;
+  const remainingQueuedCount = Math.max(queuedMessages.length - 1, 0);
 
   const syncInputOverflow = useCallback(() => {
     const textarea = composerInputRef.current;
@@ -566,25 +589,50 @@ const Composer: FC<ThreadResolvedProps> = ({
     [onPasteFiles],
   );
 
-  const useRecoveryPrompt = useCallback(
-    (approval: InterruptedApprovalNotice) => {
-      aui.composer().setText(approval.recoveryPrompt);
-      requestAnimationFrame(() => {
-        composerInputRef.current?.focus();
-        syncInputOverflow();
-      });
-    },
-    [aui, syncInputOverflow],
-  );
-
   const resumeInterruptedApproval = useCallback(
     async (approval: InterruptedApprovalNotice) => {
-      await onResumeInterruptedApproval(approval.runId);
-      useRecoveryPrompt(approval);
-      await aui.composer().send();
+      const requestedRunId = await onResumeInterruptedApproval(approval.runId);
+      const parentId = aui.thread().getState().messages.at(-1)?.id ?? null;
+
+      aui.thread().startRun({
+        parentId,
+        sourceId: null,
+        runConfig: buildInterruptedApprovalRunConfig(
+          approval.recoveryPrompt,
+          requestedRunId,
+        ),
+      });
       await onDismissInterruptedApproval(approval.runId);
     },
-    [aui, onDismissInterruptedApproval, onResumeInterruptedApproval, useRecoveryPrompt],
+    [aui, onDismissInterruptedApproval, onResumeInterruptedApproval],
+  );
+
+  const dispatchQueuedMessage = useCallback(
+    async (queuedMessage: QueuedMessage) => {
+      if (queuedAutoDispatchingIdRef.current === queuedMessage.id) {
+        return;
+      }
+
+      queuedAutoDispatchingIdRef.current = queuedMessage.id;
+      queuedAutoDispatchLockedRef.current = true;
+      try {
+        await onRemoveQueuedMessage(queuedMessage.id);
+
+        aui.composer().setText(queuedMessage.text);
+        requestAnimationFrame(() => {
+          void aui.composer().send();
+          requestAnimationFrame(() => {
+            queuedAutoDispatchLockedRef.current = false;
+            syncInputOverflow();
+            composerInputRef.current?.focus();
+          });
+        });
+      } catch {
+        queuedAutoDispatchingIdRef.current = null;
+        queuedAutoDispatchLockedRef.current = false;
+      }
+    },
+    [aui, onRemoveQueuedMessage, syncInputOverflow],
   );
 
   useEffect(() => {
@@ -597,20 +645,93 @@ const Composer: FC<ThreadResolvedProps> = ({
     }
   }, [visible]);
 
+  useEffect(() => {
+    if (!queuedHeadMessage) {
+      queuedAutoDispatchingIdRef.current = null;
+      queuedAutoDispatchLockedRef.current = false;
+      queuedAwaitingCompletionRef.current = null;
+      return;
+    }
+
+    if (isThreadRunning || isCancelling) {
+      return;
+    }
+
+    if (queuedAutoDispatchLockedRef.current) {
+      return;
+    }
+
+    const awaitingCompletion = queuedAwaitingCompletionRef.current;
+    if (
+      awaitingCompletion &&
+      awaitingCompletion.messageId === queuedHeadMessage.id &&
+      runCompletionSerial <= awaitingCompletion.runCompletionSerial
+    ) {
+      return;
+    }
+
+    if (
+      awaitingCompletion &&
+      awaitingCompletion.messageId === queuedHeadMessage.id &&
+      runCompletionSerial > awaitingCompletion.runCompletionSerial
+    ) {
+      queuedAwaitingCompletionRef.current = null;
+    }
+
+    if (queuedAutoDispatchingIdRef.current === queuedHeadMessage.id) {
+      return;
+    }
+
+    void dispatchQueuedMessage(queuedHeadMessage);
+  }, [
+    dispatchQueuedMessage,
+    isCancelling,
+    isThreadRunning,
+    queuedHeadMessage,
+    runCompletionSerial,
+  ]);
+
   return (
     <ComposerPrimitive.Root className="relative flex w-full flex-col gap-1.5">
       <ComposerAttachmentSync
         attachments={attachments}
         onRemoveAttachment={onRemoveAttachment}
       />
-      {pendingRedirectDraft ? (
-        <RedirectDraftCard
-          draft={pendingRedirectDraft}
-          disabled={isThreadRunning || isCancelling}
-          onTrigger={async () => {
-            await onQueueRedirectDraft(pendingRedirectDraft);
+      {pendingApprovalGroups.length > 0 ? (
+        <PendingApprovalNoticeBar
+          groups={pendingApprovalGroups}
+          onResolve={async (approval: PendingApprovalNotice, allowed: boolean) => {
+            await onResolvePendingApproval(approval.approval.requestId, allowed);
           }}
-          onClear={onClearRedirectDraft}
+        />
+      ) : null}
+      {interruptedApprovalGroups.length > 0 ? (
+        <InterruptedApprovalNoticeBar
+          groups={interruptedApprovalGroups}
+          onDismiss={onDismissInterruptedApproval}
+          onResume={resumeInterruptedApproval}
+        />
+      ) : null}
+      {queuedHeadMessage ? (
+        <QueuedMessageCard
+          message={queuedHeadMessage}
+          remainingCount={remainingQueuedCount}
+          disabled={isCancelling}
+          onTrigger={async () => {
+            if (isThreadRunning && !isCancelling) {
+              queuedAwaitingCompletionRef.current = {
+                messageId: queuedHeadMessage.id,
+                runCompletionSerial,
+              };
+            }
+
+            const triggerPromise = onTriggerQueuedMessage(queuedHeadMessage.id);
+            if (isThreadRunning && !isCancelling) {
+              onCancelRun();
+            }
+            await triggerPromise;
+          }}
+          onRemove={async () => onRemoveQueuedMessage(queuedHeadMessage.id)}
         />
       ) : null}
       <div className="flex w-full flex-col gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-composer-surface)] p-(--composer-padding) shadow-[0_12px_32px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.05)] transition-shadow focus-within:ring-2 focus-within:ring-ring/12">
@@ -631,6 +752,31 @@ const Composer: FC<ThreadResolvedProps> = ({
             requestAnimationFrame(syncInputOverflow);
           }}
           onPaste={handleInputPaste}
+          onKeyDown={(event) => {
+            if (
+              event.key !== "Enter" ||
+              event.shiftKey ||
+              event.nativeEvent.isComposing ||
+              !isThreadRunning ||
+              isCancelling
+            ) {
+              return;
+            }
+
+            const nextDraft = event.currentTarget.value.trim();
+            if (!nextDraft) {
+              return;
+            }
+
+            event.preventDefault();
+            void onEnqueueQueuedMessage(nextDraft).then(() => {
+              aui.composer().setText("");
+              requestAnimationFrame(() => {
+                syncInputOverflow();
+                composerInputRef.current?.focus();
+              });
+            });
+          }}
           aria-label="消息输入框"
         />
         <ComposerAction
@@ -644,7 +790,6 @@ const Composer: FC<ThreadResolvedProps> = ({
           onModelChange={onModelChange}
           onThinkingLevelChange={onThinkingLevelChange}
           onCancelRun={onCancelRun}
-          onQueueRedirectDraft={onQueueRedirectDraft}
           runStatusLabel={runStatusLabel}
           isCancelling={isCancelling}
           isVisionBlocked={isVisionBlocked}
@@ -655,22 +800,6 @@ const Composer: FC<ThreadResolvedProps> = ({
           </p>
         ) : null}
       </div>
-      {pendingApprovalGroups.length > 0 ? (
-        <PendingApprovalNoticeBar
-          groups={pendingApprovalGroups}
-          onResolve={async (approval: PendingApprovalNotice, allowed: boolean) => {
-            await onResolvePendingApproval(approval.approval.requestId, allowed);
-          }}
-        />
-      ) : null}
-      {interruptedApprovalGroups.length > 0 ? (
-        <InterruptedApprovalNoticeBar
-          groups={interruptedApprovalGroups}
-          onDismiss={onDismissInterruptedApproval}
-          onUseRecoveryPrompt={useRecoveryPrompt}
-          onResume={resumeInterruptedApproval}
-        />
-      ) : null}
       <ComposerStatusBar
         branchSummary={branchSummary}
         contextSummary={contextSummary}
@@ -683,21 +812,32 @@ const Composer: FC<ThreadResolvedProps> = ({
   );
 };
 
-const RedirectDraftCard: FC<{
-  draft: string;
+const QueuedMessageCard: FC<{
+  message: QueuedMessage;
+  remainingCount: number;
   disabled: boolean;
   onTrigger: () => Promise<void>;
-  onClear: () => Promise<void>;
-}> = ({ draft, disabled, onTrigger, onClear }) => {
+  onRemove: () => Promise<void>;
+}> = ({ message, remainingCount, disabled, onTrigger, onRemove }) => {
   return (
-    <div className="w-[min(760px,calc(100%-3.5rem))] rounded-[calc(var(--radius-shell)+2px)] bg-[color:var(--color-composer-surface)]/94 px-4 py-3 shadow-[0_16px_36px_rgba(15,23,42,0.08)] ring-1 ring-black/6 backdrop-blur-sm dark:ring-white/8">
-      <div className="flex items-start justify-between gap-3">
+    <div className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-3 py-2 text-[13px] text-[color:var(--color-text-secondary)] shadow-[var(--color-control-shadow)]">
+      <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[12px] font-medium text-[color:var(--color-text-secondary)]">
-            当前回复结束后继续
-          </p>
-          <p className="mt-1 whitespace-pre-wrap text-[13px] leading-6 text-foreground">
-            {draft}
+          <div className="flex items-center gap-2">
+            <p className="text-[12px] font-medium text-[color:var(--color-text-secondary)]">
+              当前回复结束后继续
+            </p>
+            {remainingCount > 0 ? (
+              <Badge variant="secondary" className="px-2 py-0.5 text-[10px]">
+                还有 {remainingCount} 条
+              </Badge>
+            ) : null}
+          </div>
+          <p
+            className="mt-1 truncate text-[13px] leading-5 text-foreground"
+            title={message.text}
+          >
+            {message.text}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -706,10 +846,10 @@ const RedirectDraftCard: FC<{
             variant="ghost"
             size="icon"
             onClick={() => {
-              void onClear();
+              void onRemove();
             }}
-            className="h-8 w-8 rounded-[var(--radius-shell)] text-[color:var(--color-text-secondary)] hover:bg-black/4 hover:text-foreground dark:hover:bg-white/8"
-            aria-label="删除引导草稿"
+            className="h-8 w-8 rounded-[var(--radius-shell)] text-[color:var(--color-text-secondary)] hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground"
+            aria-label="删除排队消息"
           >
             <XIcon className="size-4" />
           </Button>
@@ -720,7 +860,7 @@ const RedirectDraftCard: FC<{
             onClick={() => {
               void onTrigger();
             }}
-            className="h-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] px-3 text-white shadow-none hover:bg-[color:var(--color-accent-hover)]"
+            className="h-8 rounded-[var(--radius-shell)] px-3 shadow-none"
           >
             引导
           </Button>
@@ -743,7 +883,6 @@ const ComposerAction: FC<
     | "onModelChange"
     | "onThinkingLevelChange"
     | "onCancelRun"
-    | "onQueueRedirectDraft"
     | "runStatusLabel"
     | "isCancelling"
   > & {
@@ -760,14 +899,11 @@ const ComposerAction: FC<
   onModelChange,
   onThinkingLevelChange,
   onCancelRun,
-  onQueueRedirectDraft,
   runStatusLabel,
   isCancelling,
   isVisionBlocked,
 }) => {
-    const aui = useAui();
     const isThreadRunning = useAuiState((s) => s.thread.isRunning);
-    const composerText = useAuiState((s) => s.composer.text);
     const composerHasText = useAuiState(
       (s) => s.composer.text.trim().length > 0,
     );
@@ -861,25 +997,6 @@ const ComposerAction: FC<
         </div>
         {showStopAction ? (
           <div className="flex items-center gap-2">
-            {composerHasText ? (
-              <Button
-                type="button"
-                variant="default"
-                onClick={() => {
-                  const nextDraft = composerText.trim();
-                  if (!nextDraft) {
-                    return;
-                  }
-
-                  void onQueueRedirectDraft(nextDraft).then(() => {
-                    aui.composer().setText("");
-                  });
-                }}
-                className="h-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] px-3 text-white shadow-none hover:bg-[color:var(--color-accent-hover)]"
-              >
-                引导
-              </Button>
-            ) : null}
             <Button
               type="button"
               variant="default"
@@ -1321,11 +1438,7 @@ const AssistantActionBar: FC = () => {
       autohide="not-last"
       className="-ml-1 flex gap-1 text-muted-foreground items-center"
     >
-      <ActionBarPrimitive.Reload asChild>
-        <TooltipIconButton tooltip="重新生成">
-          <RotateCcwIcon className="size-4" />
-        </TooltipIconButton>
-      </ActionBarPrimitive.Reload>
+      <AssistantReloadButton />
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton tooltip="复制">
           <AuiIf condition={(s) => s.message.isCopied}>
@@ -1338,6 +1451,34 @@ const AssistantActionBar: FC = () => {
       </ActionBarPrimitive.Copy>
       <MessageBranchPicker />
     </ActionBarPrimitive.Root>
+  );
+};
+
+const AssistantReloadButton: FC = () => {
+  const aui = useAui();
+  const internalRunPrompt = useAuiState((s) => {
+    const internalRun = readInterruptedApprovalInternalRun(
+      s.message.metadata?.custom,
+    );
+    return internalRun?.prompt ?? null;
+  });
+
+  return (
+    <TooltipIconButton
+      tooltip="重新生成"
+      onClick={() => {
+        if (internalRunPrompt) {
+          aui.message().reload({
+            runConfig: buildInterruptedApprovalRunConfig(internalRunPrompt),
+          });
+          return;
+        }
+
+        aui.message().reload();
+      }}
+    >
+      <RotateCcwIcon className="size-4" />
+    </TooltipIconButton>
   );
 };
 

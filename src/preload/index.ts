@@ -3,14 +3,16 @@ import type {
   AgentRunScope,
   ChatSession,
   DesktopApi,
+  EnqueueQueuedMessageInput,
+  RemoveQueuedMessageInput,
   PendingApprovalGroup,
   InterruptedApprovalGroup,
   InterruptedApprovalNotice,
-  RedirectMessageInput,
   SessionSearchResult,
   SessionGroup,
   WindowFrameState,
   SendMessageInput,
+  TriggerQueuedMessageInput,
   SessionGroupCreateInput,
   TrimSessionMessagesInput,
 } from "../shared/contracts.js";
@@ -52,10 +54,12 @@ const desktopApi: DesktopApi = {
     send: (input: SendMessageInput) => ipcRenderer.invoke(IPC_CHANNELS.chatSend, input),
     trimSessionMessages: (input: TrimSessionMessagesInput) =>
       ipcRenderer.invoke(IPC_CHANNELS.chatTrimSessionMessages, input),
-    queueRedirect: (input: RedirectMessageInput) =>
-      ipcRenderer.invoke(IPC_CHANNELS.chatQueueRedirect, input),
-    clearRedirectDraft: (sessionId: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.chatClearRedirectDraft, sessionId),
+    enqueueQueuedMessage: (input: EnqueueQueuedMessageInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.chatEnqueueQueuedMessage, input),
+    triggerQueuedMessage: (input: TriggerQueuedMessageInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.chatTriggerQueuedMessage, input),
+    removeQueuedMessage: (input: RemoveQueuedMessageInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.chatRemoveQueuedMessage, input),
   },
   context: {
     getSummary: (sessionId: string) =>

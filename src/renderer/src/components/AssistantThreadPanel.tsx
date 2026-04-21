@@ -37,6 +37,12 @@ import {
   selectedFileToCompleteAttachment,
   type PersistedMessageAttachment,
 } from "@renderer/lib/assistant-ui-attachments";
+import {
+  readInterruptedApprovalInternalRun,
+  resolveSendMessageOrigin,
+  toInterruptedApprovalReloadConfig,
+  type InterruptedApprovalReloadConfig,
+} from "@renderer/lib/interrupted-approval-run-config";
 
 type AssistantThreadPanelProps = {
   session: ChatSession;
@@ -76,7 +82,15 @@ function createStep(kind: AgentStep["kind"], id?: string): AgentStep {
   };
 }
 
-function createResponse(id: string): AgentResponse {
+type RuntimeResponse = AgentResponse & {
+  internalRun?: InterruptedApprovalReloadConfig | null;
+  errorMessage?: string;
+};
+
+function createResponse(
+  id: string,
+  internalRun: InterruptedApprovalReloadConfig | null = null,
+): RuntimeResponse {
   return {
     id,
     status: "running",
@@ -84,7 +98,9 @@ function createResponse(id: string): AgentResponse {
     finalText: "",
     skillUsages: [],
     runChangeSummary: null,
+    internalRun,
     startedAt: Date.now(),
+    errorMessage: undefined,
   };
 }
 
@@ -167,19 +183,22 @@ function getToolResultDisplay(result: unknown): unknown {
   return getToolResultText(result) ?? result;
 }
 
-function buildRuntimeMessageCustomMetadata(response: AgentResponse) {
-  return response.skillUsages && response.skillUsages.length > 0
-    ? {
-        skillUsages: response.skillUsages,
-        ...(response.runChangeSummary
-          ? { runChangeSummary: response.runChangeSummary }
-          : {}),
-      }
-    : response.runChangeSummary
-      ? {
-          runChangeSummary: response.runChangeSummary,
-        }
-      : undefined;
+function buildRuntimeMessageCustomMetadata(response: RuntimeResponse) {
+  const custom: Record<string, unknown> = {};
+
+  if (response.skillUsages && response.skillUsages.length > 0) {
+    custom.skillUsages = response.skillUsages;
+  }
+
+  if (response.runChangeSummary) {
+    custom.runChangeSummary = response.runChangeSummary;
+  }
+
+  if (response.internalRun) {
+    custom.internalRun = response.internalRun;
+  }
+
+  return Object.keys(custom).length > 0 ? custom : undefined;
 }
 
 type ActivityThreadAssistantMessagePart = ThreadAssistantMessagePart & {
@@ -257,7 +276,7 @@ function buildAssistantParts(steps: AgentStep[], finalText: string): ThreadAssis
   return parts;
 }
 
-function toThreadMessage(message: ChatMessage): ThreadMessageLike {
+function toThreadMessage(message: ChatMessage): ThreadMessageLike | null {
   const createdAt = new Date(message.timestamp);
   const persistedAttachments = Array.isArray(message.meta?.attachments)
     ? message.meta.attachments.filter((attachment): attachment is PersistedMessageAttachment => {
@@ -277,11 +296,16 @@ function toThreadMessage(message: ChatMessage): ThreadMessageLike {
   const skillUsages = extractRuntimeSkillUsages(message.meta?.skillUsages);
 
   if (message.role === "assistant") {
+    const parts = buildAssistantParts(message.steps ?? [], message.content);
+    if (parts.length === 0) {
+      return null;
+    }
+
     return {
       id: message.id,
       role: "assistant",
       createdAt,
-      content: buildAssistantParts(message.steps ?? [], message.content),
+      content: parts,
       status:
         message.status === "error"
           ? { type: "incomplete", reason: "error", error: message.content }
@@ -351,9 +375,11 @@ function createRunQueue() {
       notify?.();
       notify = null;
     },
-    finish(update: ChatModelRunResult) {
+    finish(update?: ChatModelRunResult) {
       finished = true;
-      queue.push(update);
+      if (update) {
+        queue.push(update);
+      }
       notify?.();
       notify = null;
     },
@@ -375,7 +401,7 @@ function createRunQueue() {
   };
 }
 
-function buildRuntimeStatus(response: AgentResponse): MessageStatus {
+function buildRuntimeStatus(response: RuntimeResponse): MessageStatus {
   if (response.status === "completed") {
     return { type: "complete", reason: "stop" };
   }
@@ -388,7 +414,7 @@ function buildRuntimeStatus(response: AgentResponse): MessageStatus {
     return {
       type: "incomplete",
       reason: "error",
-      error: response.finalText || "Agent 执行失败",
+      error: response.errorMessage || "Agent 执行失败",
     };
   }
 
@@ -426,18 +452,21 @@ function SessionRuntime({
   const cancelRunRef = useRef<(() => void) | null>(null);
   const activeRunTokenRef = useRef<string | null>(null);
   const activeRunScopeRef = useRef<AgentRunScope | null>(null);
-  const pendingRequestedRunIdRef = useRef<string | null>(null);
   const stageTransitionTimerRef = useRef<number | null>(null);
   const slowConnectionTimerRef = useRef<number | null>(null);
   const resetRunStateTimerRef = useRef<number | null>(null);
   const [runStage, setRunStage] = useState<ChatRunStage>("idle");
   const [isSlowConnection, setIsSlowConnection] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [runCompletionSerial, setRunCompletionSerial] = useState(0);
   const [pendingApprovalGroups, setPendingApprovalGroups] = useState<
     PendingApprovalGroup[]
   >([]);
   const initialMessagesRef = useRef<ThreadMessageLike[]>(
-    session.messages.map(toThreadMessage),
+    session.messages.flatMap((message) => {
+      const nextMessage = toThreadMessage(message);
+      return nextMessage ? [nextMessage] : [];
+    }),
   );
   const initialMessages = initialMessagesRef.current;
 
@@ -606,11 +635,10 @@ function SessionRuntime({
     cancelRunRef.current?.();
   }, []);
 
-  const handleQueueRedirect = useCallback(
+  const handleEnqueueQueuedMessage = useCallback(
     async (text: string) => {
-      await desktopApi.chat.queueRedirect({
+      await desktopApi.chat.enqueueQueuedMessage({
         sessionId: latestSessionRef.current.id,
-        runId: activeRunScopeRef.current?.runId ?? null,
         text,
       });
       await latestReloadSessionRef.current(latestSessionRef.current.id);
@@ -618,33 +646,39 @@ function SessionRuntime({
     [desktopApi],
   );
 
-  const handleClearRedirectDraft = useCallback(async () => {
-    await desktopApi.chat.clearRedirectDraft(latestSessionRef.current.id);
+  const handleTriggerQueuedMessage = useCallback(
+    async (messageId: string) => {
+      await desktopApi.chat.triggerQueuedMessage({
+        sessionId: latestSessionRef.current.id,
+        messageId,
+        runId: activeRunScopeRef.current?.runId ?? null,
+      });
+      await latestReloadSessionRef.current(latestSessionRef.current.id);
+    },
+    [desktopApi],
+  );
+
+  const handleRemoveQueuedMessage = useCallback(async (messageId: string) => {
+    await desktopApi.chat.removeQueuedMessage({
+      sessionId: latestSessionRef.current.id,
+      messageId,
+    });
     await latestReloadSessionRef.current(latestSessionRef.current.id);
   }, [desktopApi]);
 
-  const handleResumeInterruptedApproval = useCallback(
-    async (interruptedRunId: string) => {
-      const nextRunId = await onResumeInterruptedApproval(interruptedRunId);
-      pendingRequestedRunIdRef.current = nextRunId;
-      return nextRunId;
-    },
-    [onResumeInterruptedApproval],
-  );
-
   const chatModel = useMemo<ChatModelAdapter>(() => ({
-    run: async function* ({ messages, abortSignal }) {
+    run: async function* ({ messages, runConfig, abortSignal }) {
       const currentSession = latestSessionRef.current;
-      const runId = pendingRequestedRunIdRef.current ?? crypto.randomUUID();
-      pendingRequestedRunIdRef.current = null;
+      const internalRun = readInterruptedApprovalInternalRun(runConfig?.custom);
+      const runId = internalRun?.requestedRunId ?? crypto.randomUUID();
       const runScope: AgentRunScope = {
         sessionId: currentSession.id,
         runId,
       };
-      const text = extractUserText(messages);
-      const pendingAttachments = currentSession.attachments;
+      const text = internalRun?.prompt ?? extractUserText(messages);
+      const pendingAttachments = internalRun ? [] : currentSession.attachments;
       const title =
-        currentSession.messages.length === 0
+        !internalRun && currentSession.messages.length === 0
           ? deriveSessionTitle(text, pendingAttachments)
           : currentSession.title;
       const sessionAfterUserMessage: ChatSession = {
@@ -655,12 +689,17 @@ function SessionRuntime({
         updatedAt: new Date().toISOString(),
       };
 
-      latestPersistSessionRef.current(sessionAfterUserMessage);
+      if (!internalRun) {
+        latestPersistSessionRef.current(sessionAfterUserMessage);
+      }
       activeRunScopeRef.current = runScope;
       latestRunStateChangeRef.current(currentSession.id, true);
 
       const runToken = beginRunFeedback();
-      const response = createResponse(runId);
+      const response = createResponse(
+        runId,
+        toInterruptedApprovalReloadConfig(internalRun),
+      );
       const queue = createRunQueue();
 
       let settled = false;
@@ -671,8 +710,13 @@ function SessionRuntime({
       const publish = () => {
         if (settled) return;
 
+        const parts = buildAssistantParts(response.steps, response.finalText);
+        if (parts.length === 0) {
+          return;
+        }
+
         queue.push({
-          content: buildAssistantParts(response.steps, response.finalText),
+          content: parts,
           status: buildRuntimeStatus(response),
           metadata: {
             custom: buildRuntimeMessageCustomMetadata(response),
@@ -711,8 +755,14 @@ function SessionRuntime({
           }
         }
 
+        const parts = buildAssistantParts(response.steps, response.finalText);
+        if (parts.length === 0 && nextStatus === "cancelled") {
+          queue.finish();
+          return;
+        }
+
         const update: ChatModelRunResult = {
-          content: buildAssistantParts(response.steps, response.finalText),
+          content: parts,
           status: buildRuntimeStatus(response),
           metadata: {
             custom: buildRuntimeMessageCustomMetadata(response),
@@ -729,6 +779,7 @@ function SessionRuntime({
 
         if (settled) {
           if (event.type === "agent_end" || event.type === "agent_error") {
+            setRunCompletionSerial((current) => current + 1);
             void latestReloadSessionRef.current(currentSession.id);
           }
           return;
@@ -843,10 +894,10 @@ function SessionRuntime({
           }
 
           case "agent_error":
-            response.finalText += response.finalText
-              ? `\n\n**错误：** ${event.message}`
-              : `**错误：** ${event.message}`;
+            response.errorMessage =
+              event.message?.trim() || "Agent 执行失败";
             finalize("error");
+            setRunCompletionSerial((current) => current + 1);
             void refreshPendingApprovalGroups(currentSession.id);
             void latestReloadSessionRef.current(currentSession.id);
             break;
@@ -854,6 +905,7 @@ function SessionRuntime({
           case "agent_end":
             response.runChangeSummary = event.runChangeSummary ?? null;
             finalize("completed");
+            setRunCompletionSerial((current) => current + 1);
             void refreshPendingApprovalGroups(currentSession.id);
             void latestReloadSessionRef.current(currentSession.id);
             break;
@@ -881,11 +933,12 @@ function SessionRuntime({
           runId,
           text,
           attachments: pendingAttachments,
+          origin: resolveSendMessageOrigin(internalRun),
         })
         .catch((error) => {
           if (settled) return;
 
-          response.finalText =
+          response.errorMessage =
             error instanceof Error ? error.message : "发送失败，请稍后重试。";
           finalize("error");
           void latestReloadSessionRef.current(currentSession.id);
@@ -918,7 +971,8 @@ function SessionRuntime({
         onModelChange={onModelChange}
         onThinkingLevelChange={onThinkingLevelChange}
         onCancelRun={handleCancelRun}
-        pendingRedirectDraft={session.pendingRedirectDraft ?? ""}
+        queuedMessages={session.queuedMessages ?? []}
+        runCompletionSerial={runCompletionSerial}
         runStage={runStage}
         runStatusLabel={runStatusLabel}
         isCancelling={isCancelling}
@@ -927,7 +981,7 @@ function SessionRuntime({
         contextSummary={contextSummary}
         interruptedApprovalGroups={interruptedApprovalGroups}
         onDismissInterruptedApproval={onDismissInterruptedApproval}
-        onResumeInterruptedApproval={handleResumeInterruptedApproval}
+        onResumeInterruptedApproval={onResumeInterruptedApproval}
         pendingApprovalGroups={pendingApprovalGroups}
         onResolvePendingApproval={async (requestId, allowed) => {
           await desktopApi.agent.confirmResponse({
@@ -944,8 +998,9 @@ function SessionRuntime({
             // Compact 失败时保留当前线程 UI，不额外打断聊天流。
           }
         }}
-        onQueueRedirectDraft={handleQueueRedirect}
-        onClearRedirectDraft={handleClearRedirectDraft}
+        onEnqueueQueuedMessage={handleEnqueueQueuedMessage}
+        onTriggerQueuedMessage={handleTriggerQueuedMessage}
+        onRemoveQueuedMessage={handleRemoveQueuedMessage}
         onBranchChanged={onBranchChanged}
         disableGlobalSideEffects={disableGlobalSideEffects}
       />

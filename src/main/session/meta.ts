@@ -4,6 +4,7 @@ import type {
   AgentResponseStatus,
   ChatSession,
   ChatSessionSummary,
+  QueuedMessage,
   SelectedFile,
 } from "../../shared/contracts.js";
 import { atomicWrite, readJsonFile } from "./io.js";
@@ -45,6 +46,7 @@ export type PersistedSessionMeta = {
   autoCompactFailureCount: number;
   autoCompactBlockedAt?: string;
   todos?: SessionTodoItem[];
+  queuedMessages?: QueuedMessage[];
   pendingRedirectDraft?: string;
   pendingRedirectUpdatedAt?: string;
 };
@@ -67,13 +69,67 @@ export function createMetaFromSession(session: ChatSession): PersistedSessionMet
     snapshotRevision: 0,
     autoCompactFailureCount: 0,
     todos: [],
+    queuedMessages: session.queuedMessages ?? [],
     pendingRedirectDraft: "",
   };
+}
+
+function normalizeTimestamp(
+  value: unknown,
+  fallback = new Date().toISOString(),
+): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : fallback;
+}
+
+function normalizeQueuedMessage(
+  message: Partial<QueuedMessage>,
+): QueuedMessage {
+  return {
+    id:
+      typeof message.id === "string" && message.id.trim()
+        ? message.id
+        : `queued-${randomUUID()}`,
+    text: typeof message.text === "string" ? message.text.trim() : "",
+    createdAt: normalizeTimestamp(message.createdAt),
+  };
+}
+
+function migrateLegacyRedirectDraft(meta: PersistedSessionMeta): QueuedMessage[] {
+  const text =
+    typeof meta.pendingRedirectDraft === "string"
+      ? meta.pendingRedirectDraft.trim()
+      : "";
+
+  if (!text) {
+    return [];
+  }
+
+  return [
+    {
+      id: `queued-${randomUUID()}`,
+      text,
+      createdAt: normalizeTimestamp(
+        meta.pendingRedirectUpdatedAt,
+        normalizeTimestamp(meta.updatedAt),
+      ),
+    },
+  ];
 }
 
 export function normalizePersistedSessionMeta(
   meta: PersistedSessionMeta,
 ): PersistedSessionMeta {
+  const queuedMessages = Array.isArray(meta.queuedMessages)
+    ? meta.queuedMessages
+        .map((item) => normalizeQueuedMessage(item))
+        .filter((item) => item.text.length > 0)
+    : migrateLegacyRedirectDraft(meta);
+
   return {
     ...meta,
     titleManuallySet: meta.titleManuallySet === true,
@@ -87,14 +143,9 @@ export function normalizePersistedSessionMeta(
       ? Math.max(0, meta.autoCompactFailureCount)
       : 0,
     todos: Array.isArray(meta.todos) ? meta.todos.map(normalizeTodoItem) : [],
-    pendingRedirectDraft:
-      typeof meta.pendingRedirectDraft === "string"
-        ? meta.pendingRedirectDraft
-        : "",
-    pendingRedirectUpdatedAt:
-      typeof meta.pendingRedirectUpdatedAt === "string"
-        ? meta.pendingRedirectUpdatedAt
-        : undefined,
+    queuedMessages,
+    pendingRedirectDraft: "",
+    pendingRedirectUpdatedAt: undefined,
   };
 }
 

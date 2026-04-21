@@ -62,7 +62,9 @@
     "tiptap-markdown": "^0.9.0",
     "undici": "^7.22.0",
     "zod": "^3.25.76",
-    "zustand": "^5.0.12"
+    "zustand": "^5.0.12",
+    "@xenova/transformers": "^2.17.2",
+    "better-sqlite3": "^12.9.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

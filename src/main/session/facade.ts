@@ -1,16 +1,19 @@
 import type { ChatSession, ChatSessionSummary } from "../../shared/contracts.js";
 import {
   archivePersistedSession,
-  clearPersistedRedirectDraft,
   createPersistedSession,
+  dequeuePersistedQueuedMessage,
   deletePersistedSession,
-  getPersistedRedirectDraft,
+  enqueuePersistedQueuedMessage,
   listPersistedArchivedSessions,
+  listPersistedQueuedMessages,
   listPersistedSessions,
   loadPersistedSession,
+  movePersistedQueuedMessageToFront,
+  removePersistedQueuedMessage,
   renamePersistedSession,
+  restorePersistedQueuedMessageToFront,
   saveSessionProjection,
-  setPersistedRedirectDraft,
   setPersistedSessionGroup,
   setPersistedSessionPinned,
   trimPersistedSessionMessages,
@@ -74,16 +77,41 @@ export function setSessionPinned(sessionId: string, pinned: boolean): void {
   setPersistedSessionPinned(sessionId, pinned);
 }
 
-export function setSessionRedirectDraft(sessionId: string, text: string): void {
-  setPersistedRedirectDraft(sessionId, text);
+export function listSessionQueuedMessages(sessionId: string) {
+  return listPersistedQueuedMessages(sessionId);
 }
 
-export function clearSessionRedirectDraft(sessionId: string): void {
-  clearPersistedRedirectDraft(sessionId);
+export function enqueueSessionQueuedMessage(sessionId: string, text: string) {
+  return enqueuePersistedQueuedMessage(sessionId, text);
 }
 
-export function getSessionRedirectDraft(sessionId: string): string {
-  return getPersistedRedirectDraft(sessionId);
+export function moveSessionQueuedMessageToFront(
+  sessionId: string,
+  messageId: string,
+) {
+  return movePersistedQueuedMessageToFront(sessionId, messageId);
+}
+
+export function removeSessionQueuedMessage(
+  sessionId: string,
+  messageId: string,
+) {
+  removePersistedQueuedMessage(sessionId, messageId);
+}
+
+export function dequeueSessionQueuedMessage(sessionId: string) {
+  return dequeuePersistedQueuedMessage(sessionId);
+}
+
+export function restoreSessionQueuedMessageToFront(
+  sessionId: string,
+  queuedMessage: ReturnType<typeof dequeuePersistedQueuedMessage>,
+) {
+  if (!queuedMessage) {
+    return;
+  }
+
+  restorePersistedQueuedMessageToFront(sessionId, queuedMessage);
 }
 
 export function searchSessionSummaries(query: string, limit?: number) {
