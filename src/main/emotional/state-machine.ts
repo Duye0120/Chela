@@ -92,6 +92,8 @@ const DEFAULT_STATE: EmotionalState = {
 // ---------------------------------------------------------------------------
 
 let state: EmotionalState = { ...DEFAULT_STATE };
+let initialized = false;
+let teardownEmotionalStateMachine: (() => void) | null = null;
 
 // 实时追踪
 let recentMessageTimestamps: number[] = [];
@@ -323,14 +325,35 @@ function onRunCompleted(): void {
 // ---------------------------------------------------------------------------
 
 export function initEmotionalStateMachine(): void {
+  if (initialized) {
+    return;
+  }
+
+  initialized = true;
   state = loadState();
 
-  bus.on("message:user", onUserMessage);
-  bus.on("tool:failed", onToolFailed);
-  bus.on("run:completed", onRunCompleted);
+  const disposers = [
+    bus.on("message:user", onUserMessage),
+    bus.on("tool:failed", onToolFailed),
+    bus.on("run:completed", onRunCompleted),
+  ];
+
+  teardownEmotionalStateMachine = () => {
+    disposers.forEach((dispose) => dispose());
+    disposers.length = 0;
+    recentMessageTimestamps = [];
+    recentErrorCount = 0;
+    lastMessageLength = 0;
+    teardownEmotionalStateMachine = null;
+    initialized = false;
+  };
 
   appLogger.info({
     scope: "emotional",
     message: `情感状态机已启动 — 当前模式: ${state.currentMode}`,
   });
+}
+
+export function stopEmotionalStateMachine(): void {
+  teardownEmotionalStateMachine?.();
 }

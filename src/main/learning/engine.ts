@@ -56,6 +56,8 @@ const failureAccum = new Map<string, SignalAccumulator>();
 const rejectionAccum = new Map<string, SignalAccumulator>();
 // 已产出的学习记录（避免重复）
 const producedLearnings = new Set<string>();
+let initialized = false;
+let teardownActiveLearning: (() => void) | null = null;
 
 // ---------------------------------------------------------------------------
 // Signal Collection — 通过 Event Bus 被动收集
@@ -215,10 +217,15 @@ export function reportLearningSignal(signal: LearningSignal): void {
 // ---------------------------------------------------------------------------
 
 export function initActiveLearning(): void {
+  if (initialized) {
+    return;
+  }
+
+  initialized = true;
   // 订阅工具失败事件
-  bus.on("tool:failed", onToolFailed);
+  const disposeToolFailed = bus.on("tool:failed", onToolFailed);
   // 订阅审批拒绝事件
-  bus.on("approval:resolved", onApprovalResolved);
+  const disposeApprovalResolved = bus.on("approval:resolved", onApprovalResolved);
 
   // 注册定期信号衰减任务
   scheduler.register(
@@ -236,4 +243,19 @@ export function initActiveLearning(): void {
     scope: "active-learning",
     message: "主动学习引擎已启动",
   });
+
+  teardownActiveLearning = () => {
+    disposeToolFailed();
+    disposeApprovalResolved();
+    scheduler.unregister("active-learning-decay");
+    failureAccum.clear();
+    rejectionAccum.clear();
+    producedLearnings.clear();
+    teardownActiveLearning = null;
+    initialized = false;
+  };
+}
+
+export function stopActiveLearning(): void {
+  teardownActiveLearning?.();
 }

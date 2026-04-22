@@ -43,6 +43,7 @@ type ActiveRunTracker = {
 const activeRuns = new Map<string, ActiveRunTracker>();
 let metricsPath = "";
 let initialized = false;
+let teardownMetrics: (() => void) | null = null;
 
 function getMetricsPath(): string {
   if (!metricsPath) {
@@ -128,53 +129,67 @@ export function initMetrics(): void {
   if (initialized) return;
   initialized = true;
 
-  bus.on("run:started", ({ runId, sessionId, modelEntryId }) => {
-    activeRuns.set(runId, {
-      sessionId,
-      modelEntryId,
-      startedAt: Date.now(),
-      toolCalls: 0,
-      toolFails: 0,
-    });
-  });
+  const disposers = [
+    bus.on("run:started", ({ runId, sessionId, modelEntryId }) => {
+      activeRuns.set(runId, {
+        sessionId,
+        modelEntryId,
+        startedAt: Date.now(),
+        toolCalls: 0,
+        toolFails: 0,
+      });
+    }),
 
-  bus.on("tool:completed", ({ runId }) => {
-    const tracker = activeRuns.get(runId);
-    if (tracker) tracker.toolCalls++;
-  });
+    bus.on("tool:completed", ({ runId }) => {
+      const tracker = activeRuns.get(runId);
+      if (tracker) tracker.toolCalls++;
+    }),
 
-  bus.on("tool:failed", ({ runId }) => {
-    const tracker = activeRuns.get(runId);
-    if (tracker) {
-      tracker.toolCalls++;
-      tracker.toolFails++;
-    }
-  });
+    bus.on("tool:failed", ({ runId }) => {
+      const tracker = activeRuns.get(runId);
+      if (tracker) {
+        tracker.toolCalls++;
+        tracker.toolFails++;
+      }
+    }),
 
-  bus.on("run:completed", ({ runId, finalState }) => {
-    const tracker = activeRuns.get(runId);
-    if (!tracker) return;
+    bus.on("run:completed", ({ runId, finalState }) => {
+      const tracker = activeRuns.get(runId);
+      if (!tracker) return;
 
-    const endedAt = Date.now();
-    const metric: RunMetrics = {
-      runId,
-      sessionId: tracker.sessionId,
-      modelEntryId: tracker.modelEntryId,
-      startedAt: tracker.startedAt,
-      endedAt,
-      durationMs: endedAt - tracker.startedAt,
-      toolCallCount: tracker.toolCalls,
-      toolFailCount: tracker.toolFails,
-      finalState,
-    };
+      const endedAt = Date.now();
+      const metric: RunMetrics = {
+        runId,
+        sessionId: tracker.sessionId,
+        modelEntryId: tracker.modelEntryId,
+        startedAt: tracker.startedAt,
+        endedAt,
+        durationMs: endedAt - tracker.startedAt,
+        toolCallCount: tracker.toolCalls,
+        toolFailCount: tracker.toolFails,
+        finalState,
+      };
 
-    appendMetric(metric);
-    activeRuns.delete(runId);
-  });
+      appendMetric(metric);
+      activeRuns.delete(runId);
+    }),
+  ];
+
+  teardownMetrics = () => {
+    disposers.forEach((dispose) => dispose());
+    disposers.length = 0;
+    activeRuns.clear();
+    teardownMetrics = null;
+    initialized = false;
+  };
 
   appLogger.info({
     scope: "metrics",
     message: "性能指标采集已启用",
     data: { path: getMetricsPath() },
   });
+}
+
+export function stopMetrics(): void {
+  teardownMetrics?.();
 }
