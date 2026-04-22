@@ -248,8 +248,8 @@ function buildAssistantParts(steps: AgentStep[], finalText: string): ThreadAssis
         step.status === "executing"
           ? getToolResultDisplay(step.streamOutput)
           : getToolResultDisplay(
-              step.toolError ?? step.toolResult ?? step.streamOutput,
-            );
+            step.toolError ?? step.toolResult ?? step.streamOutput,
+          );
 
       parts.push({
         type: "tool-call",
@@ -280,18 +280,18 @@ function toThreadMessage(message: ChatMessage): ThreadMessageLike | null {
   const createdAt = new Date(message.timestamp);
   const persistedAttachments = Array.isArray(message.meta?.attachments)
     ? message.meta.attachments.filter((attachment): attachment is PersistedMessageAttachment => {
-        if (!attachment || typeof attachment !== "object") return false;
+      if (!attachment || typeof attachment !== "object") return false;
 
-        const candidate = attachment as Partial<PersistedMessageAttachment>;
-        return (
-          typeof candidate.id === "string" &&
-          typeof candidate.name === "string" &&
-          typeof candidate.size === "number" &&
-          typeof candidate.kind === "string" &&
-          typeof candidate.extension === "string" &&
-          typeof candidate.path === "string"
-        );
-      })
+      const candidate = attachment as Partial<PersistedMessageAttachment>;
+      return (
+        typeof candidate.id === "string" &&
+        typeof candidate.name === "string" &&
+        typeof candidate.size === "number" &&
+        typeof candidate.kind === "string" &&
+        typeof candidate.extension === "string" &&
+        typeof candidate.path === "string"
+      );
+    })
     : [];
   const skillUsages = extractRuntimeSkillUsages(message.meta?.skillUsages);
 
@@ -637,11 +637,12 @@ function SessionRuntime({
 
   const handleEnqueueQueuedMessage = useCallback(
     async (text: string) => {
-      await desktopApi.chat.enqueueQueuedMessage({
+      const queuedMessage = await desktopApi.chat.enqueueQueuedMessage({
         sessionId: latestSessionRef.current.id,
         text,
       });
       await latestReloadSessionRef.current(latestSessionRef.current.id);
+      return queuedMessage.id;
     },
     [desktopApi],
   );
@@ -656,6 +657,16 @@ function SessionRuntime({
       await latestReloadSessionRef.current(latestSessionRef.current.id);
     },
     [desktopApi],
+  );
+
+  const handleGuideQueuedMessage = useCallback(
+    async (text: string) => {
+      const queuedId = await handleEnqueueQueuedMessage(text);
+      const triggerPromise = handleTriggerQueuedMessage(queuedId);
+      cancelRunRef.current?.();
+      await triggerPromise;
+    },
+    [handleEnqueueQueuedMessage, handleTriggerQueuedMessage],
   );
 
   const handleRemoveQueuedMessage = useCallback(async (messageId: string) => {
@@ -704,7 +715,7 @@ function SessionRuntime({
 
       let settled = false;
       let cleanedUp = false;
-      let unsubscribe: () => void = () => {};
+      let unsubscribe: () => void = () => { };
       let abort: (() => void) | null = null;
 
       const publish = () => {
@@ -727,7 +738,6 @@ function SessionRuntime({
       const cleanup = () => {
         if (cleanedUp) return;
         cleanedUp = true;
-        unsubscribe();
         if (abort) {
           abortSignal.removeEventListener("abort", abort);
         }
@@ -757,7 +767,14 @@ function SessionRuntime({
 
         const parts = buildAssistantParts(response.steps, response.finalText);
         if (parts.length === 0 && nextStatus === "cancelled") {
-          queue.finish();
+          // 取消时若未产出任何内容，写入一句占位文本，避免 UI 残留空白消息格子。
+          queue.finish({
+            content: [{ type: "text", text: "（已取消）" }],
+            status: buildRuntimeStatus(response),
+            metadata: {
+              custom: buildRuntimeMessageCustomMetadata(response),
+            },
+          });
           return;
         }
 
@@ -781,6 +798,7 @@ function SessionRuntime({
           if (event.type === "agent_end" || event.type === "agent_error") {
             setRunCompletionSerial((current) => current + 1);
             void latestReloadSessionRef.current(currentSession.id);
+            unsubscribe();
           }
           return;
         }
@@ -900,6 +918,7 @@ function SessionRuntime({
             setRunCompletionSerial((current) => current + 1);
             void refreshPendingApprovalGroups(currentSession.id);
             void latestReloadSessionRef.current(currentSession.id);
+            unsubscribe();
             break;
 
           case "agent_end":
@@ -908,6 +927,7 @@ function SessionRuntime({
             setRunCompletionSerial((current) => current + 1);
             void refreshPendingApprovalGroups(currentSession.id);
             void latestReloadSessionRef.current(currentSession.id);
+            unsubscribe();
             break;
         }
       };
@@ -959,7 +979,7 @@ function SessionRuntime({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-        <Thread
+      <Thread
         attachments={session.attachments}
         isPickingFiles={isPickingFiles}
         terminalOpen={terminalOpen}
@@ -1000,6 +1020,7 @@ function SessionRuntime({
         }}
         onEnqueueQueuedMessage={handleEnqueueQueuedMessage}
         onTriggerQueuedMessage={handleTriggerQueuedMessage}
+        onGuideQueuedMessage={handleGuideQueuedMessage}
         onRemoveQueuedMessage={handleRemoveQueuedMessage}
         onBranchChanged={onBranchChanged}
         disableGlobalSideEffects={disableGlobalSideEffects}

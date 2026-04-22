@@ -34,7 +34,9 @@ import {
   LoaderCircleIcon,
   PencilIcon,
   RotateCcwIcon,
+  SendHorizonalIcon,
   SquareIcon,
+  Wand2Icon,
   XIcon,
 } from "lucide-react";
 import type {
@@ -145,8 +147,9 @@ type ThreadProps = {
     allowed: boolean,
   ) => Promise<void>;
   onCompactContext?: () => void | Promise<void>;
-  onEnqueueQueuedMessage?: (text: string) => Promise<void>;
+  onEnqueueQueuedMessage?: (text: string) => Promise<string>;
   onTriggerQueuedMessage?: (messageId: string) => Promise<void>;
+  onGuideQueuedMessage?: (text: string) => Promise<void>;
   onRemoveQueuedMessage?: (messageId: string) => Promise<void>;
   onBranchChanged?: () => void | Promise<void>;
   disableGlobalSideEffects?: boolean;
@@ -182,8 +185,9 @@ type ThreadResolvedProps = {
     allowed: boolean,
   ) => Promise<void>;
   onCompactContext: () => void | Promise<void>;
-  onEnqueueQueuedMessage: (text: string) => Promise<void>;
+  onEnqueueQueuedMessage: (text: string) => Promise<string>;
   onTriggerQueuedMessage: (messageId: string) => Promise<void>;
+  onGuideQueuedMessage: (text: string) => Promise<void>;
   onRemoveQueuedMessage: (messageId: string) => Promise<void>;
   onBranchChanged: () => void | Promise<void>;
   disableGlobalSideEffects: boolean;
@@ -295,8 +299,9 @@ export const Thread: FC<ThreadProps> = ({
   },
   onResolvePendingApproval = async () => undefined,
   onCompactContext = () => undefined,
-  onEnqueueQueuedMessage = async () => undefined,
+  onEnqueueQueuedMessage = async () => "",
   onTriggerQueuedMessage = async () => undefined,
+  onGuideQueuedMessage = async () => undefined,
   onRemoveQueuedMessage = async () => undefined,
   onBranchChanged = () => undefined,
   disableGlobalSideEffects = false,
@@ -462,6 +467,7 @@ export const Thread: FC<ThreadProps> = ({
               onCompactContext={onCompactContext}
               onEnqueueQueuedMessage={onEnqueueQueuedMessage}
               onTriggerQueuedMessage={onTriggerQueuedMessage}
+              onGuideQueuedMessage={onGuideQueuedMessage}
               onRemoveQueuedMessage={onRemoveQueuedMessage}
               onBranchChanged={onBranchChanged}
               disableGlobalSideEffects={disableGlobalSideEffects}
@@ -537,6 +543,7 @@ const Composer: FC<ThreadResolvedProps> = ({
   onCompactContext,
   onEnqueueQueuedMessage,
   onTriggerQueuedMessage,
+  onGuideQueuedMessage,
   onRemoveQueuedMessage,
   onBranchChanged,
   disableGlobalSideEffects,
@@ -618,16 +625,27 @@ const Composer: FC<ThreadResolvedProps> = ({
       try {
         await onRemoveQueuedMessage(queuedMessage.id);
 
-        aui.composer().setText(queuedMessage.text);
-        requestAnimationFrame(() => {
-          void aui.composer().send();
-          requestAnimationFrame(() => {
-            queuedAutoDispatchLockedRef.current = false;
-            syncInputOverflow();
-            composerInputRef.current?.focus();
+        // 等一帧让 runtime 真正进入 idle，再 append 用户消息触发新 run。
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+
+        try {
+          aui.thread().append({
+            role: "user",
+            content: [{ type: "text", text: queuedMessage.text }],
           });
+        } catch (error) {
+          console.error("[queued-dispatch] thread.append 失败", error);
+        }
+
+        requestAnimationFrame(() => {
+          queuedAutoDispatchLockedRef.current = false;
+          syncInputOverflow();
+          composerInputRef.current?.focus();
         });
-      } catch {
+      } catch (error) {
+        console.error("[queued-dispatch] 派发挂起消息失败", error);
         queuedAutoDispatchingIdRef.current = null;
         queuedAutoDispatchLockedRef.current = false;
       }
@@ -793,6 +811,14 @@ const Composer: FC<ThreadResolvedProps> = ({
           runStatusLabel={runStatusLabel}
           isCancelling={isCancelling}
           isVisionBlocked={isVisionBlocked}
+          onEnqueueQueuedMessage={onEnqueueQueuedMessage}
+          onGuideQueuedMessage={onGuideQueuedMessage}
+          onAfterComposerEnqueue={() => {
+            requestAnimationFrame(() => {
+              syncInputOverflow();
+              composerInputRef.current?.focus();
+            });
+          }}
         />
         {isVisionBlocked ? (
           <p className="px-1 text-[12px] leading-5 text-[color:var(--color-status-error)]">
@@ -887,6 +913,9 @@ const ComposerAction: FC<
     | "isCancelling"
   > & {
     isVisionBlocked: boolean;
+    onEnqueueQueuedMessage: (text: string) => Promise<string>;
+    onGuideQueuedMessage: (text: string) => Promise<void>;
+    onAfterComposerEnqueue?: () => void;
   }
 > = ({
   isPickingFiles,
@@ -902,11 +931,14 @@ const ComposerAction: FC<
   runStatusLabel,
   isCancelling,
   isVisionBlocked,
+  onEnqueueQueuedMessage,
+  onGuideQueuedMessage,
+  onAfterComposerEnqueue,
 }) => {
+    const aui = useAui();
     const isThreadRunning = useAuiState((s) => s.thread.isRunning);
-    const composerHasText = useAuiState(
-      (s) => s.composer.text.trim().length > 0,
-    );
+    const composerText = useAuiState((s) => s.composer.text);
+    const composerHasText = composerText.trim().length > 0;
     const currentModel = modelOptions.find((model) => model.id === currentModelId);
     const normalizedThinkingLevel = normalizeThinkingLevel(thinkingLevel);
     const effectiveThinkingLevel = getEffectiveThinkingLevel(
@@ -996,7 +1028,47 @@ const ComposerAction: FC<
           )}
         </div>
         {showStopAction ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <TooltipIconButton
+              tooltip="发送（当前回复结束后再发送这条）"
+              side="bottom"
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={!composerHasText || isCancelling}
+              onClick={() => {
+                const draft = composerText.trim();
+                if (!draft) return;
+                void onEnqueueQueuedMessage(draft).then(() => {
+                  aui.composer().setText("");
+                  onAfterComposerEnqueue?.();
+                });
+              }}
+              className="size-8 rounded-[var(--radius-shell)] text-[color:var(--color-text-secondary)] hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground disabled:opacity-40"
+              aria-label="发送：当前回复结束后再发送"
+            >
+              <SendHorizonalIcon className="size-4" />
+            </TooltipIconButton>
+            <TooltipIconButton
+              tooltip="引导（停止当前回复并立即接着说）"
+              side="bottom"
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={!composerHasText || isCancelling}
+              onClick={() => {
+                const draft = composerText.trim();
+                if (!draft) return;
+                void onGuideQueuedMessage(draft).then(() => {
+                  aui.composer().setText("");
+                  onAfterComposerEnqueue?.();
+                });
+              }}
+              className="size-8 rounded-[var(--radius-shell)] text-[color:var(--color-accent)] hover:bg-[color:var(--color-accent)]/12 hover:text-[color:var(--color-accent)] disabled:opacity-40"
+              aria-label="引导：停止当前回复并立即接着说"
+            >
+              <Wand2Icon className="size-4" />
+            </TooltipIconButton>
             <Button
               type="button"
               variant="default"
@@ -1307,8 +1379,8 @@ const AssistantMessageRunChangeSummary: FC = () => {
   const summary = useAuiState((s) => {
     const custom = s.message.metadata?.custom as
       | {
-          runChangeSummary?: RunChangeSummary | null;
-        }
+        runChangeSummary?: RunChangeSummary | null;
+      }
       | undefined;
     return custom?.runChangeSummary ?? null;
   });
