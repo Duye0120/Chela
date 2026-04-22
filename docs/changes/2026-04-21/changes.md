@@ -1,5 +1,29 @@
 # 2026-04-21 变更记录
 
+## 聊天链路四项体验修复（B1 / D1 / B2 / A1+A2）
+
+**时间**: 19:10
+
+**改了什么**：
+- **B1（高优先级）**：用户主动按「停止」按钮取消时，记录当前队列首位 id 到 `queuedManualCancelHeadIdRef`；auto-dispatch effect 在 `isCancelling` 复位后看到此标记会跳过派发，必须用户显式点队列卡的「引导」才继续。`thread.tsx` 新增 `handleManualCancelRun` 包装传给 `ComposerAction.onCancelRun`；`onTrigger`（引导）路径继续走 `awaitingCompletion`，不受影响。
+- **D1 + B2**：渲染端 `AssistantThreadPanel.finalize("cancelled")` 在 `finalText` 为空时**总是**在末尾追加 `（已取消）` 占位文字（不再只在 parts 全空时才补）；main 端 `ElectronAdapter.buildAssistantMessage` 在 cancelled + 无 finalText 时把 `content` 写为 `（已取消）`，确保 reload 历史也能看到取消标识。
+- **A1/A2**：`dispatchQueuedMessage` 的双 RAF 改为单 RAF — 等一帧后 `aui.thread().append(...)`，并在 `try/finally` 同一帧内释放锁，消除两个 RAF 之间 effect 重入的窗口。
+
+**为什么改**：
+1. **B1**：原实现下，用户在 run 中入队消息 B 然后按取消键，`isCancelling` 在 320ms 后复位时 effect 会自动派发 B —— 用户的取消意图被违背。
+2. **D1 / B2**：用户取消 run 时如果只有 thinking 或者完全没产出，UI 要么显示一段思考挂着（无取消信号），要么 reload 后历史里完全没标识。统一在两处追加占位让用户清楚知道这条 run 被取消了。
+3. **A1/A2**：原 dispatch 用 await RAF 等 idle、再调 append、再用第二个 RAF 释放锁；两个 RAF 之间 effect 可能因 `runCompletionSerial` 变化重新触发，造成重复派发风险。靠 `queuedAutoDispatchingIdRef` 兜底，但应在锁层面收紧。
+
+**涉及文件**：
+- `src/renderer/src/components/assistant-ui/thread.tsx`
+- `src/renderer/src/components/AssistantThreadPanel.tsx`
+- `src/main/adapter.ts`
+
+**结果**：
+- 用户主动取消后队列消息不再被自动接力；引导路径仍正常工作。
+- 所有取消的 run 在 UI 和持久化历史中都能看到「（已取消）」标识。
+- 队列派发的并发竞态进一步收紧，单 RAF 流程更稳定。
+
 ## 修复点击「引导」后队列消息不发送 + 残留空白格子
 
 **时间**: 17:35
