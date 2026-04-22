@@ -85,33 +85,55 @@ async function runRipgrepGlob(
       return !normalized.includes("\\.git\\");
     });
 
-  const entries = paths
+  // 当结果数超过排序阈值时，跳过 stat 取 mtime 的开销，直接按 ripgrep 输出顺序裁剪。
+  // 这能让超大目录的 glob 查询从几百毫秒降到几十毫秒。
+  const SORT_THRESHOLD = 200;
+  const skipMtimeSort = paths.length > Math.max(SORT_THRESHOLD, maxResults * 2);
+
+  const filtered = paths
     .map((filePath) => {
       const absolutePath = resolveWorkspaceBasePath(workspacePath, filePath);
       if (
-        !fs.existsSync(absolutePath) ||
         !isPathAllowed(absolutePath, workspacePath) ||
         isPathForbiddenRead(absolutePath)
       ) {
         return null;
       }
-
-      let mtimeMs = 0;
-      try {
-        mtimeMs = fs.statSync(absolutePath).mtimeMs;
-      } catch {
-        mtimeMs = 0;
-      }
-
-      return {
-        relativePath: toRelativeWorkspacePath(workspacePath, absolutePath),
-        mtimeMs,
-      };
+      return { absolutePath };
     })
-    .filter((entry): entry is { relativePath: string; mtimeMs: number } => !!entry)
-    .sort((left, right) => right.mtimeMs - left.mtimeMs);
+    .filter((entry): entry is { absolutePath: string } => !!entry);
 
-  const truncated = entries.length > maxResults;
+  let entries: { relativePath: string; mtimeMs: number }[];
+  if (skipMtimeSort) {
+    entries = filtered.slice(0, maxResults + 1).map((entry) => ({
+      relativePath: toRelativeWorkspacePath(workspacePath, entry.absolutePath),
+      mtimeMs: 0,
+    }));
+    if (filtered.length > entries.length) {
+      // Keep an extra sentinel for the truncated flag.
+      entries.push({
+        relativePath: toRelativeWorkspacePath(workspacePath, filtered[entries.length].absolutePath),
+        mtimeMs: 0,
+      });
+    }
+  } else {
+    entries = filtered
+      .map((entry) => {
+        let mtimeMs = 0;
+        try {
+          mtimeMs = fs.statSync(entry.absolutePath).mtimeMs;
+        } catch {
+          mtimeMs = 0;
+        }
+        return {
+          relativePath: toRelativeWorkspacePath(workspacePath, entry.absolutePath),
+          mtimeMs,
+        };
+      })
+      .sort((left, right) => right.mtimeMs - left.mtimeMs);
+  }
+
+  const truncated = entries.length > maxResults || skipMtimeSort && filtered.length > maxResults;
   const filenames = entries.slice(0, maxResults).map((entry) => entry.relativePath);
 
   return {
