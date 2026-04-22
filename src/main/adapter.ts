@@ -139,9 +139,26 @@ export class ElectronAdapter {
     };
   }
 
-  send(event: AgentEvent): void {
-    if (!this.window.isDestroyed()) {
+  send(event: AgentEvent): boolean {
+    if (this.window.isDestroyed()) {
+      return false;
+    }
+
+    try {
       this.window.webContents.send(IPC_CHANNELS.agentEvent, event);
+      return true;
+    } catch (error) {
+      appLogger.warn({
+        scope: "agent.runtime",
+        message: "向渲染进程发送 agent 事件失败",
+        data: {
+          sessionId: this.scope.sessionId,
+          runId: this.scope.runId,
+          eventType: event.type,
+        },
+        error,
+      });
+      return false;
     }
   }
 
@@ -542,8 +559,7 @@ export class ElectronAdapter {
       }
     }
 
-    if (this.pendingTerminalEvent) {
-      this.send(this.pendingTerminalEvent);
+    if (this.pendingTerminalEvent && this.send(this.pendingTerminalEvent)) {
       this.pendingTerminalEvent = null;
       this.terminalEventFlushed = true;
     }
@@ -554,7 +570,7 @@ export class ElectronAdapter {
     fallbackText?: string,
     runChangeSummary?: RunChangeSummary | null,
   ): ChatMessage | null {
-    const finalText =
+    const rawFinalText =
       this.buffer.finalText.trim() || (fallbackText ? fallbackText.trim() : "");
     const steps = this.buffer.steps.map((step) => ({ ...step }));
     const endedAt = Date.now();
@@ -566,9 +582,14 @@ export class ElectronAdapter {
       }
     }
 
-    if (!finalText && !hasRenderableAssistantSteps(steps)) {
+    if (!rawFinalText && !hasRenderableAssistantSteps(steps)) {
       return null;
     }
+
+    // 取消但没有最终文本时，给历史记录留一句「（已取消）」标识，
+    // 避免 reload 后只看到一段思考挂着、没有任何取消信号。
+    const finalText =
+      !rawFinalText && status === "cancelled" ? "（已取消）" : rawFinalText;
 
     return {
       id: `assistant-${this.scope.runId}`,
@@ -580,11 +601,11 @@ export class ElectronAdapter {
       meta:
         this.buffer.skillUsages.length > 0 || runChangeSummary
           ? {
-              ...(this.buffer.skillUsages.length > 0
-                ? { skillUsages: this.buffer.skillUsages }
-                : {}),
-              ...(runChangeSummary ? { runChangeSummary } : {}),
-            }
+            ...(this.buffer.skillUsages.length > 0
+              ? { skillUsages: this.buffer.skillUsages }
+              : {}),
+            ...(runChangeSummary ? { runChangeSummary } : {}),
+          }
           : undefined,
       steps,
     };

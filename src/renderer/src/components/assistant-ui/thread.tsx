@@ -307,6 +307,11 @@ export const Thread: FC<ThreadProps> = ({
   disableGlobalSideEffects = false,
 }) => {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const visibleRef = useRef(visible);
+
+  useEffect(() => {
+    visibleRef.current = visible;
+  }, [visible]);
 
   useEffect(() => {
     if (!terminalOpen || !viewportRef.current) {
@@ -360,33 +365,54 @@ export const Thread: FC<ThreadProps> = ({
   const [entries, setEntries] = useState<ModelEntry[]>([]);
 
   useEffect(() => {
-    let cancelled = false;
-
     if (!visible) {
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
+
+    let disposed = false;
+    let activeController: AbortController | null = null;
 
     const syncProviderDirectory = async (force = false) => {
       if (!window.desktopApi) return;
-      const nextDirectory = await loadProviderDirectory(window.desktopApi, { force });
-      if (!cancelled) {
+
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
+
+      try {
+        const nextDirectory = await loadProviderDirectory(window.desktopApi, {
+          force,
+          signal: controller.signal,
+        });
+
+        if (disposed || controller.signal.aborted || !visibleRef.current) {
+          return;
+        }
+
         setSources(nextDirectory.sources);
         setEntries(nextDirectory.entries);
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+
+        console.warn("[provider-directory] 同步 provider 目录失败", error);
+      } finally {
+        if (activeController === controller) {
+          activeController = null;
+        }
       }
     };
 
-    void (async () => {
-      await syncProviderDirectory();
-    })();
+    void syncProviderDirectory();
 
     const unsubscribe = subscribeProviderDirectoryChanged(() => {
       void syncProviderDirectory(true);
     });
 
     return () => {
-      cancelled = true;
+      disposed = true;
+      activeController?.abort();
       unsubscribe();
     };
   }, [visible]);
@@ -488,7 +514,7 @@ const ThreadScrollToBottom: FC = () => {
   return (
     <ThreadPrimitive.ScrollToBottom asChild>
       <TooltipIconButton
-        tooltip="Scroll to bottom"
+        tooltip="滚至底部"
         variant="outline"
         className="absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
       >
@@ -550,12 +576,16 @@ const Composer: FC<ThreadResolvedProps> = ({
 }) => {
   const aui = useAui();
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
+  const isComposingRef = useRef(false);
   const queuedAutoDispatchingIdRef = useRef<string | null>(null);
   const queuedAutoDispatchLockedRef = useRef(false);
   const queuedAwaitingCompletionRef = useRef<{
     messageId: string;
     runCompletionSerial: number;
   } | null>(null);
+  // 用户主动按「停止」时记录当时的队列首位 id；effect 看到此标记时跳过自动派发，
+  // 直到队列首位变化或用户显式点击「引导」（引导路径会设置 awaitingCompletion 覆盖）。
+  const queuedManualCancelHeadIdRef = useRef<string | null>(null);
 
   const [inputScrollable, setInputScrollable] = useState(false);
   const supportsVision =
@@ -625,7 +655,8 @@ const Composer: FC<ThreadResolvedProps> = ({
       try {
         await onRemoveQueuedMessage(queuedMessage.id);
 
-        // 等一帧让 runtime 真正进入 idle，再 append 用户消息触发新 run。
+        // 等一帧让 runtime 真正进入 idle，再 append 用户消息触发新 run；
+        // 锁的释放放在 append 之后的同一帧，避免 effect 在两个 RAF 之间重入。
         await new Promise<void>((resolve) =>
           requestAnimationFrame(() => resolve()),
         );
@@ -637,13 +668,11 @@ const Composer: FC<ThreadResolvedProps> = ({
           });
         } catch (error) {
           console.error("[queued-dispatch] thread.append 失败", error);
-        }
-
-        requestAnimationFrame(() => {
+        } finally {
           queuedAutoDispatchLockedRef.current = false;
           syncInputOverflow();
           composerInputRef.current?.focus();
-        });
+        }
       } catch (error) {
         console.error("[queued-dispatch] 派发挂起消息失败", error);
         queuedAutoDispatchingIdRef.current = null;
@@ -652,6 +681,13 @@ const Composer: FC<ThreadResolvedProps> = ({
     },
     [aui, onRemoveQueuedMessage, syncInputOverflow],
   );
+
+  // 用户主动按「停止」按钮：标记当前队列首位为「已被主动取消」，
+  // effect 在 isCancelling 复位后不会自动派发，必须用户显式点队列卡的「引导」才继续。
+  const handleManualCancelRun = useCallback(() => {
+    queuedManualCancelHeadIdRef.current = queuedHeadMessage?.id ?? null;
+    onCancelRun();
+  }, [onCancelRun, queuedHeadMessage]);
 
   useEffect(() => {
     syncInputOverflow();
@@ -668,7 +704,16 @@ const Composer: FC<ThreadResolvedProps> = ({
       queuedAutoDispatchingIdRef.current = null;
       queuedAutoDispatchLockedRef.current = false;
       queuedAwaitingCompletionRef.current = null;
+      queuedManualCancelHeadIdRef.current = null;
       return;
+    }
+
+    // 队列首位变了（用户已经处理过/移除/插队），失效旧的「主动取消」标记。
+    if (
+      queuedManualCancelHeadIdRef.current &&
+      queuedManualCancelHeadIdRef.current !== queuedHeadMessage.id
+    ) {
+      queuedManualCancelHeadIdRef.current = null;
     }
 
     if (isThreadRunning || isCancelling) {
@@ -694,6 +739,15 @@ const Composer: FC<ThreadResolvedProps> = ({
       runCompletionSerial > awaitingCompletion.runCompletionSerial
     ) {
       queuedAwaitingCompletionRef.current = null;
+    }
+
+    // 用户曾按「停止」中断当前 run，且队列首位仍是当时那条消息；
+    // 不能在 isCancelling 复位后自动派发，等用户手动点队列卡或显式发送。
+    if (
+      !awaitingCompletion &&
+      queuedManualCancelHeadIdRef.current === queuedHeadMessage.id
+    ) {
+      return;
     }
 
     if (queuedAutoDispatchingIdRef.current === queuedHeadMessage.id) {
@@ -774,6 +828,7 @@ const Composer: FC<ThreadResolvedProps> = ({
             if (
               event.key !== "Enter" ||
               event.shiftKey ||
+              isComposingRef.current ||
               event.nativeEvent.isComposing ||
               !isThreadRunning ||
               isCancelling
@@ -795,6 +850,12 @@ const Composer: FC<ThreadResolvedProps> = ({
               });
             });
           }}
+          onCompositionStart={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionEnd={() => {
+            isComposingRef.current = false;
+          }}
           aria-label="消息输入框"
         />
         <ComposerAction
@@ -807,7 +868,7 @@ const Composer: FC<ThreadResolvedProps> = ({
           thinkingLevel={thinkingLevel}
           onModelChange={onModelChange}
           onThinkingLevelChange={onThinkingLevelChange}
-          onCancelRun={onCancelRun}
+          onCancelRun={handleManualCancelRun}
           runStatusLabel={runStatusLabel}
           isCancelling={isCancelling}
           isVisionBlocked={isVisionBlocked}

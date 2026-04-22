@@ -137,6 +137,22 @@ function mergeRuntimeSkillUsages(
   return [...byKey.values()];
 }
 
+function buildPendingApprovalGroupsSignature(groups: PendingApprovalGroup[]) {
+  return groups
+    .map((group) =>
+      [
+        group.sessionId,
+        group.ownerId,
+        group.count,
+        group.latestCreatedAt,
+        group.approvals
+          .map((approval) => `${approval.approval.requestId}:${approval.state ?? "unknown"}`)
+          .join(","),
+      ].join(":"),
+    )
+    .join("|");
+}
+
 function getToolResultText(result: unknown): string | null {
   if (typeof result === "string") {
     return normalizeLineEndings(result);
@@ -449,6 +465,9 @@ function SessionRuntime({
   const latestPersistSessionRef = useRef(onPersistSession);
   const latestReloadSessionRef = useRef(onReloadSession);
   const latestRunStateChangeRef = useRef(onRunStateChange);
+  const activeRunUnsubscribeRef = useRef<(() => void) | null>(null);
+  const pendingApprovalRequestSerialRef = useRef(0);
+  const pendingApprovalSignatureRef = useRef("");
   const cancelRunRef = useRef<(() => void) | null>(null);
   const activeRunTokenRef = useRef<string | null>(null);
   const activeRunScopeRef = useRef<AgentRunScope | null>(null);
@@ -488,17 +507,37 @@ function SessionRuntime({
 
   const refreshPendingApprovalGroups = useCallback(
     async (sessionId: string) => {
+      const requestSerial = ++pendingApprovalRequestSerialRef.current;
+
       if (!desktopApi.agent.listPendingApprovalGroups) {
-        setPendingApprovalGroups([]);
+        pendingApprovalSignatureRef.current = "";
+        setPendingApprovalGroups((current) => (current.length === 0 ? current : []));
         return [] as PendingApprovalGroup[];
       }
 
       try {
         const groups = await desktopApi.agent.listPendingApprovalGroups(sessionId);
-        setPendingApprovalGroups(groups);
+        if (
+          pendingApprovalRequestSerialRef.current !== requestSerial ||
+          latestSessionRef.current.id !== sessionId
+        ) {
+          return groups;
+        }
+
+        const signature = buildPendingApprovalGroupsSignature(groups);
+        if (pendingApprovalSignatureRef.current !== signature) {
+          pendingApprovalSignatureRef.current = signature;
+          setPendingApprovalGroups(groups);
+        }
         return groups;
       } catch {
-        setPendingApprovalGroups([]);
+        if (
+          pendingApprovalRequestSerialRef.current === requestSerial &&
+          latestSessionRef.current.id === sessionId
+        ) {
+          pendingApprovalSignatureRef.current = "";
+          setPendingApprovalGroups((current) => (current.length === 0 ? current : []));
+        }
         return [] as PendingApprovalGroup[];
       }
     },
@@ -532,6 +571,12 @@ function SessionRuntime({
     clearConnectionTimers();
     clearResetRunStateTimer();
   }, [clearConnectionTimers, clearResetRunStateTimer]);
+
+  const clearActiveRunSubscription = useCallback(() => {
+    const unsubscribe = activeRunUnsubscribeRef.current;
+    activeRunUnsubscribeRef.current = null;
+    unsubscribe?.();
+  }, []);
 
   const beginRunFeedback = useCallback(() => {
     const runToken = crypto.randomUUID();
@@ -618,13 +663,14 @@ function SessionRuntime({
   );
 
   useEffect(() => () => {
+    clearActiveRunSubscription();
     clearRunFeedbackTimers();
     activeRunTokenRef.current = null;
     if (activeRunScopeRef.current) {
       latestRunStateChangeRef.current(activeRunScopeRef.current.sessionId, false);
       activeRunScopeRef.current = null;
     }
-  }, [clearRunFeedbackTimers]);
+  }, [clearActiveRunSubscription, clearRunFeedbackTimers]);
 
   const runStatusLabel = useMemo(
     () => getRunStatusLabel(runStage, { isSlowConnection }),
@@ -717,6 +763,17 @@ function SessionRuntime({
       let cleanedUp = false;
       let unsubscribe: () => void = () => { };
       let abort: (() => void) | null = null;
+      let receivedMessageEnd = false;
+
+      clearActiveRunSubscription();
+
+      const disposeSubscription = () => {
+        unsubscribe();
+        unsubscribe = () => { };
+        if (activeRunUnsubscribeRef.current === disposeSubscription) {
+          activeRunUnsubscribeRef.current = null;
+        }
+      };
 
       const publish = () => {
         if (settled) return;
@@ -738,6 +795,7 @@ function SessionRuntime({
       const cleanup = () => {
         if (cleanedUp) return;
         cleanedUp = true;
+        disposeSubscription();
         if (abort) {
           abortSignal.removeEventListener("abort", abort);
         }
@@ -766,10 +824,12 @@ function SessionRuntime({
         }
 
         const parts = buildAssistantParts(response.steps, response.finalText);
-        if (parts.length === 0 && nextStatus === "cancelled") {
-          // 取消时若未产出任何内容，写入一句占位文本，避免 UI 残留空白消息格子。
+        if (nextStatus === "cancelled" && !response.finalText.trim()) {
+          // 无论之前有没有 thinking/tool_call，只要取消时还没产出最终文本，
+          // 都在末尾补一句占位，避免 UI 没有任何「已取消」指示。
+          parts.push({ type: "text", text: "（已取消）" });
           queue.finish({
-            content: [{ type: "text", text: "（已取消）" }],
+            content: parts,
             status: buildRuntimeStatus(response),
             metadata: {
               custom: buildRuntimeMessageCustomMetadata(response),
@@ -798,7 +858,7 @@ function SessionRuntime({
           if (event.type === "agent_end" || event.type === "agent_error") {
             setRunCompletionSerial((current) => current + 1);
             void latestReloadSessionRef.current(currentSession.id);
-            unsubscribe();
+            disposeSubscription();
           }
           return;
         }
@@ -843,6 +903,7 @@ function SessionRuntime({
             break;
 
           case "message_end":
+            receivedMessageEnd = true;
             response.usage = event.usage;
             if (typeof event.finalThinking === "string" && event.finalThinking.trim()) {
               const existingThinkingStep = getLatestThinkingStep(response.steps);
@@ -912,27 +973,28 @@ function SessionRuntime({
           }
 
           case "agent_error":
-            response.errorMessage =
-              event.message?.trim() || "Agent 执行失败";
+            response.errorMessage = "执行遇到问题，请稍后重试。";
             finalize("error");
             setRunCompletionSerial((current) => current + 1);
             void refreshPendingApprovalGroups(currentSession.id);
             void latestReloadSessionRef.current(currentSession.id);
-            unsubscribe();
             break;
 
           case "agent_end":
+            if (!receivedMessageEnd && (response.finalText.trim() || response.steps.length > 0)) {
+              publish();
+            }
             response.runChangeSummary = event.runChangeSummary ?? null;
             finalize("completed");
             setRunCompletionSerial((current) => current + 1);
             void refreshPendingApprovalGroups(currentSession.id);
             void latestReloadSessionRef.current(currentSession.id);
-            unsubscribe();
             break;
         }
       };
 
       unsubscribe = desktopApi.agent.onEvent(handleEvent);
+      activeRunUnsubscribeRef.current = disposeSubscription;
 
       abort = () => {
         if (settled) return;
@@ -958,8 +1020,7 @@ function SessionRuntime({
         .catch((error) => {
           if (settled) return;
 
-          response.errorMessage =
-            error instanceof Error ? error.message : "发送失败，请稍后重试。";
+          response.errorMessage = "发送失败，请稍后重试。";
           finalize("error");
           void latestReloadSessionRef.current(currentSession.id);
         });
