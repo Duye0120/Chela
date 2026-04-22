@@ -1,5 +1,79 @@
 # 2026-04-21 变更记录
 
+## 修复点击「引导」后队列消息不发送 + 残留空白格子
+
+**时间**: 17:35
+
+**改了什么**：
+- `src/renderer/src/components/assistant-ui/thread.tsx` 重写 `dispatchQueuedMessage`：取消 `composer.setText + RAF send` 链路，改为等待一帧后直接调用 `aui.thread().append({role:"user", content:[{type:"text", text}]})`。
+- `src/renderer/src/components/AssistantThreadPanel.tsx` 在 `finalize("cancelled")` 且未产出任何内容时，向 `queue.finish` 写入 `（已取消）` 占位文本，避免聊天区出现没有任何内容的空 assistant 格子。
+
+**为什么改**：
+- 实测复现：会话进行中点击队列卡片的「引导」按钮 → 当前 run 被取消 → 但队列里的消息再也没被派发出去（`app.log` 只看到一次 `chat.send` + `消息发送被取消`，没有第二次 `chat.send`）。原因是 `aui.composer().send()` 在 runtime 处于「正在收尾」时会静默 no-op，导致 `chatModel.run` 根本没被触发。`thread.append` 直接走 runtime 的 append 通道，不依赖 composer 的 send 可用性判断。
+- 取消时残留的空白消息格子是因为 `queue.finish()` 不带 payload 时仍会落地一条空 assistant 消息，写入一句占位文字让用户能识别这是被取消的回复。
+
+**涉及文件**：
+- `src/renderer/src/components/assistant-ui/thread.tsx`
+- `src/renderer/src/components/AssistantThreadPanel.tsx`
+
+**结果**：
+- 队列消息派发不再依赖 composer 内部状态，避免在取消的临界态下静默丢消息。
+- 取消时即便没有任何内容，也会留下一条「（已取消）」提示，不再出现空格子。
+
+## Composer 运行中暴露 [发送 / 引导] 双图标
+
+**时间**: 15:35
+
+### 改了什么
+
+1. 调整 [`src/main/chat/service.ts`](D:/a_github/first_pi_agent/src/main/chat/service.ts) 与 [`src/shared/contracts.ts`](D:/a_github/first_pi_agent/src/shared/contracts.ts)，让 `chat.enqueueQueuedMessage` 把新建的 `QueuedMessage` 返回给 renderer。
+2. 调整 [`src/renderer/src/components/AssistantThreadPanel.tsx`](D:/a_github/first_pi_agent/src/renderer/src/components/AssistantThreadPanel.tsx)，新增 `handleGuideQueuedMessage`：用入队拿到的 id 立刻 `triggerQueuedMessage` + `cancelRunRef` 中断当前 run。
+3. 调整 [`src/renderer/src/components/assistant-ui/thread.tsx`](D:/a_github/first_pi_agent/src/renderer/src/components/assistant-ui/thread.tsx)，运行中输入框右侧固定渲染两个 icon 按钮：`SendHorizonalIcon`（发送：当前回复结束后再发送这条）和 `Wand2Icon`（引导：停止当前回复并立即接着说）；停止按钮保留在最右侧。两个按钮使用 `TooltipIconButton` 提示用法，无文本时禁用。
+
+### 为什么改
+
+- 用户希望模仿 Codex / Claude Code 的“运行中可以选择引导或者直接发送”体验，明确把“等当前结束再发”和“立刻打断换下一轮”分开。
+- 之前只有键盘 `Enter` 默默排队 + 队列卡上的“引导”按钮，操作意图不直观，新交互在 composer 内一眼可选。
+- 收尾顺序复用之前修的链路：renderer 自动续发依赖 `agent_end` → `runCompletionSerial`，所以双按钮直接接到现有 enqueue / trigger 接口即可。
+
+### 涉及文件
+
+- `src/main/chat/service.ts`
+- `src/shared/contracts.ts`
+- `src/renderer/src/components/AssistantThreadPanel.tsx`
+- `src/renderer/src/components/assistant-ui/thread.tsx`
+- `docs/changes/2026-04-21/changes.md`
+
+### 结果
+
+- 运行中输入文字后，可在 composer 右侧选 `发送`（排队，等当前回复结束自动续发）或 `引导`（立即停止并接着说）。
+- hover 两个 icon 会出现说明 tooltip。
+- `Enter` 仍然走“排队 / 直接发送”路径，和 `发送` 图标一致。
+- 现有队列条上的 `引导` 行为不变，可继续打断已经排好的消息。
+
+## 修复点击引导后队列消息不续发
+
+**时间**: 15:10
+
+### 改了什么
+
+1. 调整 [`src/renderer/src/components/AssistantThreadPanel.tsx`](D:/a_github/first_pi_agent/src/renderer/src/components/AssistantThreadPanel.tsx)，把 agent 事件订阅的 `unsubscribe()` 从 `cleanup()` 里移出来，改成在真正收到 `agent_end` / `agent_error` 后再退订；同时活路径上的 `agent_end` / `agent_error` 处理完成后也显式 `unsubscribe()`，避免重复处理。
+
+### 为什么改
+
+- 点击 `引导` 时 `finalize("cancelled")` 会立刻触发 `cleanup()`，旧逻辑在这里就退订了事件。结果是后端取消完成后发出的 `agent_end` 事件根本进不来 renderer，`runCompletionSerial` 永远不会被推进。
+- 队列自动续发的门控条件依赖 `runCompletionSerial > awaiting.runCompletionSerial`，所以 UI 表现就是“当前回复停了，但挂起的引导消息一直卡在队列里没继续发”。
+
+### 涉及文件
+
+- `src/renderer/src/components/AssistantThreadPanel.tsx`
+- `docs/changes/2026-04-21/changes.md`
+
+### 结果
+
+- 点击 `引导` 后，当前 run 取消完成（后端真的发出 `agent_end`）会推进 `runCompletionSerial`，队首消息会被 renderer 自动续发。
+- 正常完成 / 失败路径事件订阅一并退订，不会再因为没人解绑而泄漏监听。
+
 ## 收紧引导条与权限确认条位置
 
 **时间**: 10:39
