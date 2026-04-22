@@ -1,4 +1,5 @@
 import { app } from "electron";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { completeSimple, getModel, type Model } from "@mariozechner/pi-ai";
@@ -127,6 +128,10 @@ function maskKey(key: string): string {
   return key.slice(0, 6) + "••••" + key.slice(-4);
 }
 
+function fingerprintKey(key: string): string {
+  return createHash("sha256").update(key).digest("hex").slice(0, 16);
+}
+
 function sortSources(sources: ProviderSource[]): ProviderSource[] {
   return [...sources].sort((left, right) => {
     if (left.kind !== right.kind) {
@@ -252,9 +257,9 @@ function readProviderState(): ProviderState {
       kind: "custom" as const,
       providerType:
         source.providerType === "anthropic" ||
-        source.providerType === "openai" ||
-        source.providerType === "google" ||
-        source.providerType === "openai-compatible"
+          source.providerType === "openai" ||
+          source.providerType === "google" ||
+          source.providerType === "openai-compatible"
           ? source.providerType
           : "openai-compatible",
       mode: "custom" as const,
@@ -414,21 +419,21 @@ function updateModelRoutingFallback(
     utility: {
       modelId:
         currentRouting.utility.modelId &&
-        entryIdsToRemove.has(currentRouting.utility.modelId)
+          entryIdsToRemove.has(currentRouting.utility.modelId)
           ? fallbackEntryId
           : currentRouting.utility.modelId,
     },
     subagent: {
       modelId:
         currentRouting.subagent.modelId &&
-        entryIdsToRemove.has(currentRouting.subagent.modelId)
+          entryIdsToRemove.has(currentRouting.subagent.modelId)
           ? fallbackEntryId
           : currentRouting.subagent.modelId,
     },
     compact: {
       modelId:
         currentRouting.compact.modelId &&
-        entryIdsToRemove.has(currentRouting.compact.modelId)
+          entryIdsToRemove.has(currentRouting.compact.modelId)
           ? fallbackEntryId
           : currentRouting.compact.modelId,
     },
@@ -443,13 +448,13 @@ function getModelUsage(entryId: string): ModelUsageConflict[] {
   return getExplicitRoleModelIds().flatMap(({ role, modelId }) =>
     modelId === entryId
       ? [
-          {
-            scope: "settings",
-            referenceType: getReferenceType(role),
-            referenceId: entryId,
-            message: `该模型条目正在被${getRoleDisplayLabel(role)}引用。`,
-          } satisfies ModelUsageConflict,
-        ]
+        {
+          scope: "settings",
+          referenceType: getReferenceType(role),
+          referenceId: entryId,
+          message: `该模型条目正在被${getRoleDisplayLabel(role)}引用。`,
+        } satisfies ModelUsageConflict,
+      ]
       : [],
   );
 }
@@ -754,8 +759,8 @@ export function saveSource(draft: ProviderSourceDraft): ProviderSource {
 
   const nextSources = existing
     ? state.sources.map((source) =>
-        source.id === existing.id ? normalized : source,
-      )
+      source.id === existing.id ? normalized : source,
+    )
     : [...state.sources, normalized];
 
   writeProviderState({
@@ -1028,7 +1033,7 @@ export function resolveModelEntry(entryId: string): ResolvedModelEntry {
       capabilities: entry.capabilities,
       limits: entry.limits,
       providerOptions: entry.providerOptions,
-      apiKey,
+      apiKeyFingerprint: fingerprintKey(apiKey),
     }),
   };
 }

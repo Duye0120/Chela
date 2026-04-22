@@ -40,6 +40,25 @@ const REDACT_KEYS = [
   "credential",
 ];
 
+const INLINE_SECRET_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
+  {
+    pattern: /\bsk-(?:proj-|ant-)?[A-Za-z0-9_-]{12,}\b/g,
+    replacement: "[redacted-api-key]",
+  },
+  {
+    pattern: /\bAIza[0-9A-Za-z\-_]{20,}\b/g,
+    replacement: "[redacted-api-key]",
+  },
+  {
+    pattern: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9._-]{8,}\.[A-Za-z0-9._-]{8,}\b/g,
+    replacement: "[redacted-jwt]",
+  },
+  {
+    pattern: /\bBearer\s+[A-Za-z0-9._-]{16,}\b/gi,
+    replacement: "Bearer [redacted]",
+  },
+];
+
 let processLoggingRegistered = false;
 
 function ensureDir(dirPath: string): void {
@@ -149,6 +168,16 @@ function shouldRedact(key: string): boolean {
   return REDACT_KEYS.some((candidate) => normalized.includes(candidate));
 }
 
+function sanitizeStringForLog(value: string): string {
+  let next = value;
+
+  for (const { pattern, replacement } of INLINE_SECRET_PATTERNS) {
+    next = next.replace(pattern, replacement);
+  }
+
+  return next.length <= 500 ? next : next.slice(0, 500) + "…";
+}
+
 function sanitizeForLog(value: unknown, depth = 0): unknown {
   if (depth > 4) {
     return "[truncated]";
@@ -163,7 +192,7 @@ function sanitizeForLog(value: unknown, depth = 0): unknown {
   }
 
   if (typeof value === "string") {
-    return value.length <= 500 ? value : value.slice(0, 500) + "…";
+    return sanitizeStringForLog(value);
   }
 
   if (typeof value === "bigint") {
@@ -183,7 +212,7 @@ function sanitizeForLog(value: unknown, depth = 0): unknown {
   }
 
   if (!isPlainObject(value)) {
-    return String(value);
+    return sanitizeStringForLog(String(value));
   }
 
   const next: Record<string, unknown> = {};
@@ -199,8 +228,8 @@ function serializeError(error: unknown): SerializedError {
   if (error instanceof Error) {
     const serialized: SerializedError = {
       name: error.name,
-      message: error.message,
-      stack: error.stack,
+      message: sanitizeStringForLog(error.message),
+      stack: error.stack ? sanitizeStringForLog(error.stack) : undefined,
     };
 
     const withCause = error as Error & { cause?: unknown };
@@ -213,7 +242,10 @@ function serializeError(error: unknown): SerializedError {
 
   return {
     name: "NonError",
-    message: typeof error === "string" ? error : JSON.stringify(sanitizeForLog(error)),
+    message:
+      typeof error === "string"
+        ? sanitizeStringForLog(error)
+        : sanitizeStringForLog(JSON.stringify(sanitizeForLog(error))),
   };
 }
 
@@ -252,7 +284,8 @@ export const appLogger = {
 export function summarizeIpcArgs(args: unknown[]): unknown {
   return args.slice(0, 6).map((arg) => {
     if (typeof arg === "string") {
-      return arg.length <= 180 ? arg : arg.slice(0, 180) + "…";
+      const sanitized = sanitizeStringForLog(arg);
+      return sanitized.length <= 180 ? sanitized : sanitized.slice(0, 180) + "…";
     }
 
     if (Array.isArray(arg)) {
