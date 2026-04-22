@@ -11,6 +11,7 @@ import { appLogger } from "./logger.js";
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB 后轮转
 let auditPath = "";
 let initialized = false;
+let teardownBusAuditLog: (() => void) | null = null;
 
 function getAuditPath(): string {
   if (!auditPath) {
@@ -63,13 +64,23 @@ export function initBusAuditLog(): void {
   if (initialized) return;
   initialized = true;
 
-  bus.onAny((event, data) => {
+  const dispose = bus.onAny((event, data) => {
     writeAuditLine(event, data);
   });
+
+  teardownBusAuditLog = () => {
+    dispose();
+    teardownBusAuditLog = null;
+    initialized = false;
+  };
 
   appLogger.info({
     scope: "bus-audit",
     message: "Event Bus 审计日志已启用",
     data: { path: getAuditPath() },
   });
+}
+
+export function stopBusAuditLog(): void {
+  teardownBusAuditLog?.();
 }

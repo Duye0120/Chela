@@ -1,5 +1,5 @@
 import { scheduler } from "../scheduler.js";
-import { initBusAuditLog } from "../bus-audit.js";
+import { initBusAuditLog, stopBusAuditLog } from "../bus-audit.js";
 import { initSelfDiagnosis } from "../self-diagnosis/service.js";
 import { initMetrics, stopMetrics } from "../metrics.js";
 import { initActiveLearning, stopActiveLearning } from "../learning/engine.js";
@@ -28,5 +28,6 @@ export function stopBackgroundServices(): void {
   stopActiveLearning();
   stopEmotionalStateMachine();
   stopMetrics();
+  stopBusAuditLog();
   scheduler.stop();
 }
