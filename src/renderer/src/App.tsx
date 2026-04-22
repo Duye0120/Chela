@@ -364,6 +364,7 @@ export default function App() {
   const threadWorkspaceRef = useRef<HTMLDivElement | null>(null);
   const rightPanelStateRef = useRef(rightPanelState);
   const rightPanelToggleInFlightRef = useRef(false);
+  const sessionSelectionSerialRef = useRef(0);
   const summariesRef = useRef<ChatSessionSummary[]>([]);
   const archivedSummariesRef = useRef<ChatSessionSummary[]>([]);
   const groupsRef = useRef<SessionGroup[]>([]);
@@ -373,7 +374,11 @@ export default function App() {
   const appliedCustomThemeKeysRef = useRef<string[]>([]);
   const lastGitBranchRefreshRef = useRef(0);
   const gitBranchRequestRef = useRef<Promise<GitBranchSummary | null> | null>(null);
+  const gitBranchRequestWorkspaceRef = useRef<string | null>(null);
+  const gitBranchRequestSerialRef = useRef(0);
   const gitOverviewRequestRef = useRef<Promise<GitDiffOverview | null> | null>(null);
+  const gitOverviewRequestWorkspaceRef = useRef<string | null>(null);
+  const gitOverviewRequestSerialRef = useRef(0);
   const diffPanelAutoRefreshArmedRef = useRef(false);
   const rightPanelDragStateRef = useRef<{
     startX: number;
@@ -514,20 +519,33 @@ export default function App() {
       return null;
     }
 
-    if (gitBranchRequestRef.current) {
+    const workspace = settingsRef.current?.workspace ?? null;
+
+    if (
+      gitBranchRequestRef.current &&
+      gitBranchRequestWorkspaceRef.current === workspace
+    ) {
       return gitBranchRequestRef.current;
     }
 
     lastGitBranchRefreshRef.current = Date.now();
+    gitBranchRequestWorkspaceRef.current = workspace;
+    const requestSerial = ++gitBranchRequestSerialRef.current;
     const request = desktopApi.git
       .getSummary()
       .then((nextSummary) => {
-        setGitBranchSummary(nextSummary);
+        if (
+          gitBranchRequestSerialRef.current === requestSerial &&
+          settingsRef.current?.workspace === workspace
+        ) {
+          setGitBranchSummary(nextSummary);
+        }
         return nextSummary;
       })
       .finally(() => {
         if (gitBranchRequestRef.current === request) {
           gitBranchRequestRef.current = null;
+          gitBranchRequestWorkspaceRef.current = null;
         }
       });
 
@@ -542,22 +560,35 @@ export default function App() {
       return null;
     }
 
-    if (gitOverviewRequestRef.current) {
+    const workspace = settingsRef.current?.workspace ?? null;
+
+    if (
+      gitOverviewRequestRef.current &&
+      gitOverviewRequestWorkspaceRef.current === workspace
+    ) {
       return gitOverviewRequestRef.current;
     }
 
     setGitOverviewLoading(true);
+    gitOverviewRequestWorkspaceRef.current = workspace;
+    const requestSerial = ++gitOverviewRequestSerialRef.current;
 
     const request = desktopApi.git
       .getSnapshot()
       .then((nextOverview) => {
-        setGitOverview(nextOverview);
-        setGitBranchSummary(nextOverview.branch);
+        if (
+          gitOverviewRequestSerialRef.current === requestSerial &&
+          settingsRef.current?.workspace === workspace
+        ) {
+          setGitOverview(nextOverview);
+          setGitBranchSummary(nextOverview.branch);
+        }
         return nextOverview;
       })
       .finally(() => {
         if (gitOverviewRequestRef.current === request) {
           gitOverviewRequestRef.current = null;
+          gitOverviewRequestWorkspaceRef.current = null;
         }
         setGitOverviewLoading(false);
       });
@@ -1001,6 +1032,8 @@ export default function App() {
         return;
       }
 
+      const selectionSerial = ++sessionSelectionSerialRef.current;
+
       const summary =
         summariesRef.current.find((item) => item.id === sessionId) ??
         archivedSummariesRef.current.find((item) => item.id === sessionId);
@@ -1009,17 +1042,23 @@ export default function App() {
         : "";
       if (projectPath) {
         await switchWorkspacePath(projectPath);
+        if (sessionSelectionSerialRef.current !== selectionSerial) {
+          return;
+        }
       }
 
       const cachedSession = sessionCacheRef.current[sessionId];
       if (cachedSession) {
+        if (sessionSelectionSerialRef.current !== selectionSerial) {
+          return;
+        }
         hydrateSession(cachedSession);
         void refreshContextSummary(sessionId);
         return;
       }
 
       const session = await desktopApi.sessions.load(sessionId);
-      if (session) {
+      if (session && sessionSelectionSerialRef.current === selectionSerial) {
         hydrateSession(session);
         void refreshContextSummary(sessionId);
       }

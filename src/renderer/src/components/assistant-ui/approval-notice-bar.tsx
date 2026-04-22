@@ -22,19 +22,12 @@ const pendingApprovalKindLabels: Record<
   PendingApprovalNotice["approval"]["kind"],
   string
 > = {
-  shell: "Shell",
+  shell: "命令执行",
   file_write: "文件写入",
   mcp: "MCP",
 };
 
-const interruptedApprovalKindLabels: Record<
-  InterruptedApprovalNotice["approval"]["kind"],
-  string
-> = {
-  shell: "Shell",
-  file_write: "文件写入",
-  mcp: "MCP",
-};
+const interruptedApprovalKindLabels = pendingApprovalKindLabels;
 
 function formatApprovalTime(timestamp: number | null): string {
   if (!timestamp) {
@@ -50,17 +43,26 @@ function formatApprovalTime(timestamp: number | null): string {
 }
 
 function formatRunKind(
-  runKind: InterruptedApprovalNotice["runKind"],
+  runKind: InterruptedApprovalNotice["runKind"] | PendingApprovalNotice["runKind"],
 ): string {
-  if (!runKind) {
-    return "未知 run";
+  switch (runKind) {
+    case "chat":
+      return "聊天任务";
+    case "compact":
+      return "上下文整理";
+    case "memory_refresh":
+      return "记忆刷新";
+    case "system":
+      return "系统任务";
+    case "subagent":
+      return "子任务";
+    default:
+      return "当前任务";
   }
-
-  return runKind;
 }
 
-function formatShortId(value: string): string {
-  return value.length > 12 ? `${value.slice(0, 12)}…` : value;
+function formatModelMeta(modelEntryId: string | null): string {
+  return modelEntryId ? "已绑定模型" : "模型待确认";
 }
 
 const ApprovalDetailCard: FC<{
@@ -107,9 +109,8 @@ export const PendingApprovalNoticeBar: FC<PendingApprovalNoticeBarProps> = ({
         const requestId = latestApproval.approval.requestId;
         const isResolving = resolvingRequestId === requestId;
         const metaItems = [
-          `请求 ${formatShortId(requestId)}`,
-          latestApproval.runKind ?? "未知 run",
-          `模型 ${latestApproval.modelEntryId ? formatShortId(latestApproval.modelEntryId) : "未知"}`,
+          formatRunKind(latestApproval.runKind),
+          formatModelMeta(latestApproval.modelEntryId),
           `发起 ${formatApprovalTime(latestApproval.approval.createdAt)}`,
         ];
 
@@ -198,9 +199,8 @@ export const InterruptedApprovalNoticeBar: FC<InterruptedApprovalNoticeBarProps>
 
         const isResuming = resumingRunId === latestApproval.runId;
         const metaItems = [
-          `run ${formatShortId(latestApproval.runId)}`,
           formatRunKind(latestApproval.runKind),
-          `模型 ${latestApproval.modelEntryId ? formatShortId(latestApproval.modelEntryId) : "未知"}`,
+          formatModelMeta(latestApproval.modelEntryId),
           `中断 ${formatApprovalTime(latestApproval.interruptedAt)}`,
         ];
 
