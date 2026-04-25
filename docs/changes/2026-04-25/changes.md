@@ -551,6 +551,65 @@
 - renderer 会继续沿用现有 preload 注入路径。
 - `M9` 的 sandbox 加固进入后续专项，验收标准包含启动时 `window.desktopApi` 可用。
 
+## 侧栏最小宽度与新建按钮防换行
+
+时间：2026-04-25 22:24
+
+改了什么：
+- `App.tsx`：侧栏 ResizablePanel 最小尺寸改为 `220px`，侧栏内容容器同步加 `min-w-[220px]`。
+- `sidebar.tsx`：顶部「新建聊天」「新建项目」按钮文字加 `whitespace-nowrap`。
+
+为什么改：
+- 用户把左侧栏拖到接近 tree 宽度下限时，顶部按钮文字会被拆成两行，影响阅读和对齐。
+
+涉及文件：
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/components/assistant-ui/sidebar.tsx`
+- `docs/changes/2026-04-25/changes.md`
+
+结果：
+- 左侧栏保留 220px 最小可读宽度。
+- 顶部两个新建按钮在窄宽度下保持单行显示。
+
+## 侧栏拖拽折叠同步标题栏图标
+
+时间：2026-04-25 22:34
+
+改了什么：
+- `App.tsx`：给 `shell-sidebar` 面板接入 `onResize`，当拖拽把侧栏压到折叠态时同步 `sidebarCollapsed`。
+- `App.tsx`：侧栏宽度持久化改由 resize 回调记录有效展开宽度，避免折叠态覆盖上次展开宽度。
+
+为什么改：
+- 拖拽到最左侧会触发面板折叠，但标题栏左上角图标仍按展开态显示，第一次点击只同步状态，体验像按钮失效。
+
+涉及文件：
+- `src/renderer/src/App.tsx`
+- `docs/changes/2026-04-25/changes.md`
+
+结果：
+- 拖拽折叠后，左上角图标会切到展开态。
+- 点击左上角图标可以直接恢复到上次展开宽度。
+
+## Context compact 文案改为压缩
+
+时间：2026-04-25 22:45
+
+改了什么：
+- `context-summary-trigger.tsx`：context 浮层内的手动 compact 入口、状态、结果和自动 compact 提示统一从“整理”改为“压缩”。
+- `approval-notice-bar.tsx`：compact run 的用户可见任务类型改为“上下文压缩”。
+
+为什么改：
+- 用户反馈 context 卡片里的“整理”语义不够直观；该功能实际是在把旧上下文生成续接 snapshot 并参与后续 prompt 压缩。
+
+涉及文件：
+- `src/renderer/src/components/assistant-ui/context-summary-trigger.tsx`
+- `src/renderer/src/components/assistant-ui/approval-notice-bar.tsx`
+- `docs/changes/2026-04-25/changes.md`
+
+结果：
+- 用户可见的 compact 操作统一显示为“压缩”。
+- compact 后的结果展示会显示“已压缩 / 最近压缩”。
+
 ## 修复左下角分支初始读取卡住
 
 时间：2026-04-25 22:18

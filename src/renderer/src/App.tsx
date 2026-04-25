@@ -45,7 +45,7 @@ import {
 } from "@renderer/lib/context-usage";
 import { loadProviderDirectory } from "@renderer/lib/provider-directory";
 import { mergeAttachments, upsertSummary } from "@renderer/lib/session";
-import type { PanelImperativeHandle } from "react-resizable-panels";
+import type { PanelImperativeHandle, PanelSize } from "react-resizable-panels";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const ACTIVE_SESSION_STORAGE_KEY = "chela.active-session-id";
@@ -56,6 +56,7 @@ const SIDEBAR_COLLAPSED_STORAGE_KEY = "chela.sidebar-collapsed";
 const DEFAULT_SIDEBAR_SIZE = 18;
 const MIN_SIDEBAR_SIZE = 4;
 const MAX_SIDEBAR_SIZE = 85;
+const MIN_SIDEBAR_WIDTH = 220;
 const MIN_RIGHT_PANEL_WIDTH = 480;
 const MAX_RIGHT_PANEL_WIDTH = 920;
 const MIN_THREAD_CONTENT_WIDTH = 320;
@@ -1509,16 +1510,21 @@ export default function App() {
     ],
   );
 
-  const handleShellLayoutChanged = useCallback((layout: Record<string, number>) => {
-    const nextSidebarSize = layout["shell-sidebar"];
-    if (typeof nextSidebarSize === "number" && Number.isFinite(nextSidebarSize)) {
-      if (nextSidebarSize <= MIN_SIDEBAR_SIZE) {
-        return;
-      }
-      const resolvedSize = clampSidebarSize(nextSidebarSize);
-      lastExpandedSidebarSizeRef.current = resolvedSize;
-      setSidebarSize(resolvedSize);
+  const handleSidebarResize = useCallback((panelSize: PanelSize) => {
+    const isCollapsedByPanel =
+      panelSize.inPixels <= 1 || panelSize.asPercentage <= 0.1;
+
+    setSidebarCollapsed((current) =>
+      current === isCollapsedByPanel ? current : isCollapsedByPanel,
+    );
+
+    if (isCollapsedByPanel || panelSize.inPixels <= MIN_SIDEBAR_WIDTH + 1) {
+      return;
     }
+
+    const resolvedSize = clampSidebarSize(panelSize.asPercentage);
+    lastExpandedSidebarSizeRef.current = resolvedSize;
+    setSidebarSize(resolvedSize);
   }, []);
 
   const sidebarAnimatingTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -1952,7 +1958,6 @@ export default function App() {
         <ResizablePanelGroup
           orientation="horizontal"
           className="min-h-0 h-full overflow-hidden bg-transparent"
-          onLayoutChanged={handleShellLayoutChanged}
           resizeTargetMinimumSize={{ fine: 6, coarse: 24 }}
         >
           <ResizablePanel
@@ -1961,10 +1966,11 @@ export default function App() {
             collapsible
             collapsedSize="0%"
             defaultSize={toSidebarPercentageSize(sidebarSize)}
-            minSize={`${MIN_SIDEBAR_SIZE}%`}
+            minSize={`${MIN_SIDEBAR_WIDTH}px`}
             maxSize={`${MAX_SIDEBAR_SIZE}%`}
+            onResize={handleSidebarResize}
           >
-            <aside className="chela-sidebar-content relative h-full min-h-0 overflow-hidden bg-transparent" data-collapsed={sidebarCollapsed ? "true" : undefined}>
+            <aside className="chela-sidebar-content relative h-full min-h-0 min-w-[220px] overflow-hidden bg-transparent" data-collapsed={sidebarCollapsed ? "true" : undefined}>
               <Sidebar
                 groups={groups}
                 summaries={summaries}

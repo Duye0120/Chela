@@ -543,7 +543,7 @@ function SidebarImpl({
                 className="chela-list-item flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[var(--radius-shell)] px-3 py-2 text-left text-[12px] font-medium text-[color:var(--chela-text-secondary)] transition hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
               >
                 <SquarePen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
-                <span>新建聊天</span>
+                <span className="whitespace-nowrap">新建聊天</span>
               </button>
               <button
                 type="button"
@@ -551,7 +551,7 @@ function SidebarImpl({
                 className="chela-list-item flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[var(--radius-shell)] px-3 py-2 text-left text-[12px] font-medium text-[color:var(--chela-text-secondary)] transition hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
               >
                 <FolderIcon className="h-3.5 w-3.5 shrink-0" />
-                <span>新建项目</span>
+                <span className="whitespace-nowrap">新建项目</span>
               </button>
             </div>
 
