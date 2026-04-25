@@ -53,6 +53,7 @@ export const IPC_CHANNELS = {
   settingsOpenLogFolder: "settings:open-log-folder",
   memoryAdd: "memory:add",
   memorySearch: "memory:search",
+  memoryList: "memory:list",
   memoryGetStats: "memory:get-stats",
   memoryRebuild: "memory:rebuild",
   skillsListInstalled: "skills:list-installed",

@@ -163,6 +163,44 @@ export type SourceTestResult = {
 
 export type ThinkingLevel = "off" | "low" | "medium" | "high" | "xhigh";
 
+export type ThemeVariableKey =
+  | `--chela-${string}`
+  | `--color-${string}`
+  | `--terminal-ansi-${string}`
+  | `--radius-${string}`
+  | `--shadow-${string}`
+  | `--motion-${string}`
+  | "--background"
+  | "--foreground"
+  | "--card"
+  | "--card-foreground"
+  | "--popover"
+  | "--popover-foreground"
+  | "--primary"
+  | "--primary-foreground"
+  | "--secondary"
+  | "--secondary-foreground"
+  | "--muted"
+  | "--muted-foreground"
+  | "--accent"
+  | "--accent-foreground"
+  | "--destructive"
+  | "--destructive-foreground"
+  | "--border"
+  | "--input"
+  | "--ring";
+
+export type CustomTheme = Partial<Record<ThemeVariableKey, string>>;
+
+export type BuiltinTerminalShell =
+  | "default"
+  | "powershell"
+  | "cmd"
+  | "git-bash"
+  | "wsl";
+
+export type TerminalShellSetting = BuiltinTerminalShell | string;
+
 export type Settings = {
   modelRouting: ModelRoutingSettings;
   defaultModelId?: string;
@@ -170,9 +208,9 @@ export type Settings = {
   thinkingLevel: ThinkingLevel;
   timeZone: string;
   theme: "light" | "dark" | "custom";
-  customTheme: Record<string, string> | null;
+  customTheme: CustomTheme | null;
   terminal: {
-    shell: string;
+    shell: TerminalShellSetting;
     fontSize: number;
     fontFamily: string;
     scrollback: number;
@@ -204,12 +242,15 @@ export type Settings = {
   workspace: string;
 };
 
+export type MemoryMetadataPrimitive = string | number | boolean | null;
+export type MemoryMetadataValue = MemoryMetadataPrimitive | string[];
+
 export type MemoryMetadata = {
   source?: string;
   tags?: string[];
   sessionId?: string;
   messageId?: string;
-  [key: string]: unknown;
+  [key: string]: MemoryMetadataValue | undefined;
 };
 
 export type MemoryAddInput = {
@@ -222,14 +263,31 @@ export type MemoryRecord = {
   content: string;
   metadata: MemoryMetadata | null;
   createdAt: string;
+  matchCount: number;
+  feedbackScore: number;
+  lastMatchedAt: string | null;
 };
 
 export type MemorySearchResult = MemoryRecord & {
   score: number;
+  rankScore: number;
+};
+
+export type MemoryListSort =
+  | "created_desc"
+  | "last_matched_desc"
+  | "match_count_desc"
+  | "feedback_score_desc"
+  | "confidence_desc";
+
+export type MemoryListInput = {
+  sort?: MemoryListSort;
+  limit?: number;
 };
 
 export type MemoryStats = {
   totalMemories: number;
+  totalMatches: number;
   indexedModelId: string | null;
   selectedModelId: MemoryEmbeddingModelId;
   candidateLimit: number;
@@ -915,6 +973,7 @@ export type DesktopApi = {
   memory: {
     add: (input: MemoryAddInput) => Promise<MemoryRecord>;
     search: (query: string, limit?: number) => Promise<MemorySearchResult[]>;
+    list: (input?: MemoryListInput) => Promise<MemoryRecord[]>;
     getStats: () => Promise<MemoryStats>;
     rebuild: () => Promise<MemoryRebuildResult>;
   };
