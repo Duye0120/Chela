@@ -161,6 +161,12 @@ export type SourceTestResult = {
   models?: string[];
 };
 
+export type SourceModelsResult = {
+  success: boolean;
+  error?: string;
+  models: string[];
+};
+
 export type ThinkingLevel = "off" | "low" | "medium" | "high" | "xhigh";
 
 export type ThemeVariableKey =
@@ -238,6 +244,7 @@ export type Settings = {
     autoSummarize: boolean;
     toolModelId: string | null;
     embeddingModelId: MemoryEmbeddingModelId;
+    embeddingProviderId: string | null;
   };
   workspace: string;
 };
@@ -996,6 +1003,7 @@ export type DesktopApi = {
     saveSource: (draft: ProviderSourceDraft) => Promise<ProviderSource>;
     deleteSource: (sourceId: string) => Promise<void>;
     testSource: (draft: ProviderSourceDraft) => Promise<SourceTestResult>;
+    fetchModels: (draft: ProviderSourceDraft) => Promise<SourceModelsResult>;
     getCredentials: (sourceId: string) => Promise<SourceCredentials>;
     setCredentials: (sourceId: string, apiKey: string) => Promise<void>;
   };

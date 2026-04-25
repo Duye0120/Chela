@@ -12,6 +12,8 @@ import {
 } from "../shared/memory.js";
 import { DEFAULT_MODEL_ENTRY_ID } from "../shared/provider-directory.js";
 import { normalizeTimeZoneSetting, SYSTEM_TIME_ZONE } from "../shared/timezone.js";
+import { appLogger } from "./logger.js";
+import { applyGlobalNetworkSettings } from "./network/proxy.js";
 import { findExecutableOnPath } from "./shell.js";
 
 const SETTINGS_FILE = "settings.json";
@@ -114,6 +116,7 @@ function createDefaultMemorySettings(): Settings["memory"] {
     autoSummarize: true,
     toolModelId: null,
     embeddingModelId: DEFAULT_MEMORY_EMBEDDING_MODEL_ID,
+    embeddingProviderId: null,
   };
 }
 
@@ -296,7 +299,14 @@ function normalizeMemorySettings(
     autoSummarize: source?.autoSummarize !== false,
     toolModelId: normalizeOptionalModelId(source?.toolModelId),
     embeddingModelId:
-      source?.embeddingModelId ?? DEFAULT_SETTINGS.memory.embeddingModelId,
+      typeof source?.embeddingModelId === "string" && source.embeddingModelId.trim()
+        ? source.embeddingModelId.trim()
+        : DEFAULT_SETTINGS.memory.embeddingModelId,
+    embeddingProviderId:
+      typeof source?.embeddingProviderId === "string" &&
+      source.embeddingProviderId.trim()
+        ? source.embeddingProviderId.trim()
+        : null,
   };
 }
 
@@ -483,30 +493,23 @@ export function updateSettings(partial: Partial<Settings>): void {
   fs.writeFileSync(tmpPath, JSON.stringify(serialized, null, 2), "utf-8");
   fs.renameSync(tmpPath, filePath);
 
-  void import("./network/proxy.js")
-    .then(({ applyGlobalNetworkSettings }) => {
-      // 仅当网络相关字段实际变更时才重建全局 dispatcher，避免改字体之类的设置也重置连接池。
-      const nextNetwork = cachedSettings!.network;
-      const networkChanged =
-        previousNetwork.timeoutMs !== nextNetwork.timeoutMs ||
-        previousNetwork.proxy.enabled !== nextNetwork.proxy.enabled ||
-        previousNetwork.proxy.url !== nextNetwork.proxy.url ||
-        previousNetwork.proxy.noProxy !== nextNetwork.proxy.noProxy;
-      if (!networkChanged) {
-        return;
-      }
-      applyGlobalNetworkSettings(cachedSettings!);
-    })
-    .catch((error) => {
-      // 启动阶段尚未加载代理模块时的失败需要可观测，避免代理配置静默失效。
-      void import("./logger.js")
-        .then(({ appLogger }) => {
-          appLogger.warn({
-            scope: "settings.update",
-            message: "应用全局网络配置失败",
-            error,
-          });
-        })
-        .catch(() => undefined);
+  try {
+    // 仅当网络相关字段实际变更时才重建全局 dispatcher，避免改字体之类的设置也重置连接池。
+    const nextNetwork = cachedSettings.network;
+    const networkChanged =
+      previousNetwork.timeoutMs !== nextNetwork.timeoutMs ||
+      previousNetwork.proxy.enabled !== nextNetwork.proxy.enabled ||
+      previousNetwork.proxy.url !== nextNetwork.proxy.url ||
+      previousNetwork.proxy.noProxy !== nextNetwork.proxy.noProxy;
+    if (!networkChanged) {
+      return;
+    }
+    applyGlobalNetworkSettings(cachedSettings);
+  } catch (error) {
+    appLogger.warn({
+      scope: "settings.update",
+      message: "应用全局网络配置失败",
+      error,
     });
+  }
 }
