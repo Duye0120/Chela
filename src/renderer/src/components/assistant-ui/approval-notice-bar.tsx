@@ -49,7 +49,7 @@ function formatRunKind(
     case "chat":
       return "聊天任务";
     case "compact":
-      return "上下文整理";
+      return "上下文压缩";
     case "memory_refresh":
       return "记忆刷新";
     case "system":

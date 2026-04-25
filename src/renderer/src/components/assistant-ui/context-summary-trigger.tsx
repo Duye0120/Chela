@@ -61,18 +61,18 @@ function getUsageLine(summary: ContextUsageSummary) {
 
 function getCompactStatusCopy(summary: ContextUsageSummary) {
   if (summary.isCompacting) {
-    return "正在整理历史消息。";
+    return "正在压缩历史消息。";
   }
 
   if (summary.autoCompactBlocked) {
-    return "自动整理已暂停，可手动整理。";
+    return "自动压缩已暂停，可手动压缩。";
   }
 
   if (summary.canCompact) {
-    return "可手动整理旧上下文。";
+    return "可手动压缩旧上下文。";
   }
 
-  return "暂时不需要整理。";
+  return "暂时不需要压缩。";
 }
 
 function formatSnapshotTimestamp(value: string | null) {
@@ -103,27 +103,27 @@ function formatCompactedCount(summary: ContextUsageSummary) {
 
 function getSnapshotStatusCopy(summary: ContextUsageSummary) {
   if (summary.isCompacting) {
-    return "正在整理历史消息";
+    return "正在压缩历史消息";
   }
 
   if (summary.snapshotRevision > 0 && summary.canCompact) {
-    return `已整理 ${formatCompactedCount(summary)} 历史消息，还能继续整理`;
+    return `已压缩 ${formatCompactedCount(summary)} 历史消息，还能继续压缩`;
   }
 
   if (summary.snapshotRevision > 0) {
-    return `已整理 ${formatCompactedCount(summary)} 历史消息`;
+    return `已压缩 ${formatCompactedCount(summary)} 历史消息`;
   }
 
-  return "当前还没有整理历史消息";
+  return "当前还没有压缩历史消息";
 }
 
 function getHoverFootnote(summary: ContextUsageSummary) {
   if (summary.autoCompactBlocked) {
-    return "自动整理已暂停，手动执行一次后恢复。";
+    return "自动压缩已暂停，手动执行一次后恢复。";
   }
 
   if (summary.isCompacting) {
-    return "旧消息正在整理。";
+    return "旧消息正在压缩。";
   }
 
   if (summary.snapshotRevision > 0) {
@@ -131,7 +131,7 @@ function getHoverFootnote(summary: ContextUsageSummary) {
   }
 
   if (summary.canCompact) {
-    return "旧消息已堆积，可以手动整理一次。";
+    return "旧消息已堆积，可以手动压缩一次。";
   }
 
   return "当前窗口主要保留最近消息。";
@@ -147,14 +147,14 @@ function getHeadlineRows(summary: ContextUsageSummary) {
 function getSummaryRows(summary: ContextUsageSummary) {
   return [
     {
-      label: "已整理",
+      label: "已压缩",
       value:
         summary.snapshotRevision > 0
           ? `${formatCompactedCount(summary)} 历史消息`
           : "0 条",
     },
     {
-      label: "最近整理",
+      label: "最近压缩",
       value: formatSnapshotTimestamp(summary.snapshotUpdatedAt),
     },
   ];
@@ -286,7 +286,7 @@ function ContextExpandedSummary({
         </dl>
       </ContextSection>
 
-      <ContextSection label="整理结果">
+      <ContextSection label="压缩结果">
         <dl className="mt-3 flex flex-col gap-1.5 text-[12px]">
           {summaryRows.map((row) => (
             <div
@@ -303,9 +303,9 @@ function ContextExpandedSummary({
       </ContextSection>
 
       {summary.autoCompactBlocked ? (
-        <ContextSection label="自动整理">
+        <ContextSection label="自动压缩">
           <p className="mt-2 text-[12px] leading-5 text-[color:var(--color-text-secondary)]">
-            自动整理暂停，手动执行一次成功后会恢复。
+            自动压缩暂停，手动执行一次成功后会恢复。
           </p>
         </ContextSection>
       ) : null}
@@ -314,7 +314,7 @@ function ContextExpandedSummary({
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-medium text-[color:var(--color-text-muted)]">
-              整理
+              压缩
             </p>
             <p className="mt-1 text-[12px] leading-5 text-[color:var(--color-text-secondary)]">
               {getCompactStatusCopy(summary)}
@@ -332,7 +332,7 @@ function ContextExpandedSummary({
             disabled={!summary.canCompact || summary.isCompacting}
             className="h-8 shrink-0 rounded-[var(--radius-shell)] px-3 text-[12px]"
           >
-            {summary.isCompacting ? "整理中…" : "整理"}
+            {summary.isCompacting ? "压缩中…" : "压缩"}
           </Button>
         </div>
       </section>
