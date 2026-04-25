@@ -173,6 +173,24 @@ type CommandGroupEntry = {
   errorText?: string;
 };
 
+type ProcessGroupEntry =
+  | {
+      type: "reasoning";
+      id: string;
+      text: string;
+      status: AgentStep["status"];
+      startedAt?: number;
+      endedAt?: number;
+    }
+  | {
+      type: "commands";
+      id: string;
+      commands: CommandGroupEntry[];
+      status: AgentStep["status"];
+      startedAt?: number;
+      endedAt?: number;
+    };
+
 function toPartStatus(
   step: AgentStep,
 ): MessagePartStatus | ToolCallMessagePartStatus {
@@ -354,20 +372,8 @@ function formatToolCommand(step: AgentStep) {
   return toolName.replace(/_/g, " ");
 }
 
-function buildCommandGroupPart(
-  group: AgentStep[],
-): ActivityThreadAssistantMessagePart | null {
-  if (group.length === 0) {
-    return null;
-  }
-
-  const first = group[0];
-  const last = group[group.length - 1];
-  const runningStep = group.find((step) => step.status === "executing");
-  const errorStep = group.find((step) => step.status === "error");
-  const cancelledStep = group.find((step) => step.status === "cancelled");
-  const statusStep = runningStep ?? errorStep ?? cancelledStep ?? last;
-  const commands: CommandGroupEntry[] = group.map((step) => ({
+function buildCommandGroupEntries(group: AgentStep[]): CommandGroupEntry[] {
+  return group.map((step) => ({
     id: step.id,
     label: formatToolCommand(step),
     status: step.status,
@@ -378,39 +384,63 @@ function buildCommandGroupPart(
     detailText: getCommandDetailText(group[index], command.label) ?? undefined,
     errorText: stringifyCommandDetail(group[index].toolError) ?? undefined,
   }));
+}
 
-  return {
-    type: "tool-call",
-    toolCallId: `command-group-${first.id}-${group.length}`,
-    toolName: "command_group",
-    args: {},
-    argsText: "{}",
-    result: {
-      content: [
-        {
-          type: "text",
-          text: `Ran ${group.length} ${group.length === 1 ? "command" : "commands"}`,
-        },
-      ],
-      details: {
-        commands,
-      },
-    },
-    isError: group.some((step) => step.status === "error"),
-    status: toPartStatus(statusStep),
-    startedAt: first.startedAt,
-    endedAt: runningStep ? undefined : last.endedAt,
-  };
+function getStepGroupStatusStep(group: AgentStep[]) {
+  const last = group[group.length - 1];
+  const runningStep = group.find((step) => step.status === "executing");
+  const errorStep = group.find((step) => step.status === "error");
+  const cancelledStep = group.find((step) => step.status === "cancelled");
+  return runningStep ?? errorStep ?? cancelledStep ?? last;
 }
 
 function buildAssistantParts(steps: AgentStep[], finalText: string): ThreadAssistantMessagePart[] {
   const parts: ActivityThreadAssistantMessagePart[] = [];
   let toolGroup: AgentStep[] = [];
+  const processEntries: ProcessGroupEntry[] = [];
+  let processStartedAt: number | undefined;
+  let processEndedAt: number | undefined;
+  let processStatusStep: AgentStep | null = null;
+
+  const trackProcessStep = (step: AgentStep) => {
+    processStartedAt =
+      typeof processStartedAt === "number"
+        ? Math.min(processStartedAt, step.startedAt ?? processStartedAt)
+        : step.startedAt;
+    if (step.endedAt) {
+      processEndedAt =
+        typeof processEndedAt === "number"
+          ? Math.max(processEndedAt, step.endedAt)
+          : step.endedAt;
+    }
+    if (
+      !processStatusStep ||
+      step.status === "executing" ||
+      (step.status === "error" && processStatusStep.status !== "executing") ||
+      (step.status === "cancelled" &&
+        processStatusStep.status !== "executing" &&
+        processStatusStep.status !== "error")
+    ) {
+      processStatusStep = step;
+    }
+  };
 
   const flushToolGroup = () => {
-    const groupPart = buildCommandGroupPart(toolGroup);
-    if (groupPart) {
-      parts.push(groupPart);
+    if (toolGroup.length > 0) {
+      const first = toolGroup[0];
+      const last = toolGroup[toolGroup.length - 1];
+      const statusStep = getStepGroupStatusStep(toolGroup);
+      for (const step of toolGroup) {
+        trackProcessStep(step);
+      }
+      processEntries.push({
+        type: "commands",
+        id: `commands-${first.id}-${toolGroup.length}`,
+        commands: buildCommandGroupEntries(toolGroup),
+        status: statusStep.status,
+        startedAt: first.startedAt,
+        endedAt: statusStep.status === "executing" ? undefined : last.endedAt,
+      });
     }
     toolGroup = [];
   };
@@ -418,10 +448,12 @@ function buildAssistantParts(steps: AgentStep[], finalText: string): ThreadAssis
   for (const step of steps) {
     if (step.kind === "thinking" && step.thinkingText) {
       flushToolGroup();
-      parts.push({
+      trackProcessStep(step);
+      processEntries.push({
         type: "reasoning",
+        id: step.id,
         text: step.thinkingText,
-        status: toPartStatus(step),
+        status: step.status,
         startedAt: step.startedAt,
         endedAt: step.endedAt,
       });
@@ -433,6 +465,34 @@ function buildAssistantParts(steps: AgentStep[], finalText: string): ThreadAssis
     }
   }
   flushToolGroup();
+
+  if (processEntries.length > 0) {
+    const statusStep = processStatusStep ?? steps[steps.length - 1];
+    parts.push({
+      type: "tool-call",
+      toolCallId: `process-group-${processEntries[0].id}-${processEntries.length}`,
+      toolName: "process_group",
+      args: {},
+      argsText: "{}",
+      result: {
+        content: [
+          {
+            type: "text",
+            text: "已处理",
+          },
+        ],
+        details: {
+          entries: processEntries,
+          startedAt: processStartedAt,
+          endedAt: statusStep?.status === "executing" ? undefined : processEndedAt,
+        },
+      },
+      isError: processEntries.some((entry) => entry.status === "error"),
+      status: statusStep ? toPartStatus(statusStep) : { type: "complete" },
+      startedAt: processStartedAt,
+      endedAt: statusStep?.status === "executing" ? undefined : processEndedAt,
+    });
+  }
 
   if (finalText) {
     parts.push({

@@ -368,6 +368,24 @@ type CommandGroupItem = {
   errorText?: string;
 };
 
+type ProcessGroupEntry =
+  | {
+      type: "reasoning";
+      id: string;
+      text: string;
+      status: CommandGroupItem["status"];
+      startedAt?: number;
+      endedAt?: number;
+    }
+  | {
+      type: "commands";
+      id: string;
+      commands: CommandGroupItem[];
+      status: CommandGroupItem["status"];
+      startedAt?: number;
+      endedAt?: number;
+    };
+
 function getCommandGroupItems(result: unknown): CommandGroupItem[] {
   const details = getToolDetails(result);
   const commands = Array.isArray(details?.commands) ? details.commands : [];
@@ -404,6 +422,140 @@ function getCommandGroupItems(result: unknown): CommandGroupItem[] {
       errorText: typeof item.errorText === "string" ? item.errorText : undefined,
     }];
   });
+}
+
+function normalizeCommandGroupItem(entry: unknown, index: number): CommandGroupItem | null {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const item = entry as Partial<CommandGroupItem>;
+  const label = typeof item.label === "string" && item.label.trim()
+    ? item.label.trim()
+    : null;
+
+  if (!label) {
+    return null;
+  }
+
+  const status =
+    item.status === "executing" ||
+    item.status === "success" ||
+    item.status === "error" ||
+    item.status === "cancelled"
+      ? item.status
+      : "success";
+
+  return {
+    id: typeof item.id === "string" ? item.id : `command-${index}`,
+    label,
+    status,
+    toolName: typeof item.toolName === "string" ? item.toolName : "tool",
+    detailTitle: typeof item.detailTitle === "string" ? item.detailTitle : undefined,
+    detailText: typeof item.detailText === "string" ? item.detailText : undefined,
+    errorText: typeof item.errorText === "string" ? item.errorText : undefined,
+  };
+}
+
+function getProcessGroupEntries(result: unknown): ProcessGroupEntry[] {
+  const details = getToolDetails(result);
+  const entries = Array.isArray(details?.entries) ? details.entries : [];
+
+  return entries.flatMap((entry, entryIndex) => {
+    if (!entry || typeof entry !== "object") {
+      return [];
+    }
+
+    const item = entry as {
+      type?: unknown;
+      id?: unknown;
+      text?: unknown;
+      commands?: unknown;
+      status?: unknown;
+      startedAt?: unknown;
+      endedAt?: unknown;
+    };
+    const status =
+      item.status === "executing" ||
+      item.status === "success" ||
+      item.status === "error" ||
+      item.status === "cancelled"
+        ? item.status
+        : "success";
+    const startedAt =
+      typeof item.startedAt === "number" && Number.isFinite(item.startedAt)
+        ? item.startedAt
+        : undefined;
+    const endedAt =
+      typeof item.endedAt === "number" && Number.isFinite(item.endedAt)
+        ? item.endedAt
+        : undefined;
+
+    if (item.type === "reasoning") {
+      const text = typeof item.text === "string" ? item.text.trim() : "";
+      return text
+        ? [{
+            type: "reasoning" as const,
+            id: typeof item.id === "string" ? item.id : `reasoning-${entryIndex}`,
+            text,
+            status,
+            startedAt,
+            endedAt,
+          }]
+        : [];
+    }
+
+    if (item.type === "commands" && Array.isArray(item.commands)) {
+      const commands = item.commands
+        .map((command, commandIndex) =>
+          normalizeCommandGroupItem(command, commandIndex),
+        )
+        .filter((command): command is CommandGroupItem => !!command);
+
+      return commands.length > 0
+        ? [{
+            type: "commands" as const,
+            id: typeof item.id === "string" ? item.id : `commands-${entryIndex}`,
+            commands,
+            status,
+            startedAt,
+            endedAt,
+          }]
+        : [];
+    }
+
+    return [];
+  });
+}
+
+function getProcessGroupTiming(result: unknown) {
+  const details = getToolDetails(result);
+  const startedAt =
+    typeof details?.startedAt === "number" && Number.isFinite(details.startedAt)
+      ? details.startedAt
+      : null;
+  const endedAt =
+    typeof details?.endedAt === "number" && Number.isFinite(details.endedAt)
+      ? details.endedAt
+      : null;
+
+  return { startedAt, endedAt };
+}
+
+function formatProcessDuration(startedAt: number | null, endedAt: number | null) {
+  if (startedAt === null || endedAt === null || endedAt < startedAt) {
+    return null;
+  }
+
+  const totalSeconds = Math.max(1, Math.round((endedAt - startedAt) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+
+  return `${seconds}s`;
 }
 
 function getCommandStatusLabel(status: CommandGroupItem["status"]) {
@@ -595,6 +747,138 @@ function CommandGroupFallback({
   );
 }
 
+function ProcessReasoningBlock({ entry }: { entry: Extract<ProcessGroupEntry, { type: "reasoning" }> }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger
+        className="group/process-reasoning inline-flex max-w-full items-center gap-2 py-1 text-left transition-colors duration-200 select-none text-[color:var(--chela-text-secondary)] hover:text-[color:var(--chela-text-primary)]"
+        aria-label={open ? "收起思考内容" : "展开思考内容"}
+      >
+        <span className="shrink-0 font-mono text-[13px] font-medium leading-6 transition-colors">
+          think
+        </span>
+        <span className={cn("text-[11px] font-medium", getCommandStatusClass(entry.status))}>
+          {entry.status === "executing" ? "进行中" : "已完成"}
+        </span>
+        <ChevronDownIcon
+          className={cn(
+            "size-3.5 shrink-0 text-[color:var(--chela-text-tertiary)] transition-transform duration-200",
+            "group-data-[state=closed]/process-reasoning:-rotate-90",
+            "group-data-[state=open]/process-reasoning:rotate-0",
+          )}
+        />
+      </CollapsibleTrigger>
+
+      <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+        <div className="pr-2 pb-2 pt-1">
+          <pre className="max-h-[260px] overflow-auto whitespace-pre-wrap rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-2 text-[12px] leading-6 text-[color:var(--chela-text-secondary)]">
+            {entry.text}
+          </pre>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function ProcessCommandsBlock({ entry }: { entry: Extract<ProcessGroupEntry, { type: "commands" }> }) {
+  const [open, setOpen] = useState(false);
+  const commandLabel = entry.commands.length === 1 ? "command" : "commands";
+  const summaryText =
+    entry.status === "executing"
+      ? `Running ${entry.commands.length} ${commandLabel}`
+      : `Ran ${entry.commands.length} ${commandLabel}`;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger
+        className="group/process-commands inline-flex max-w-full items-center gap-2 py-1 text-left text-[13px] leading-6 text-[color:var(--chela-text-tertiary)] transition-colors hover:text-[color:var(--chela-text-primary)]"
+        aria-label={open ? "收起命令列表" : "展开命令列表"}
+      >
+        <span className="truncate font-medium">{summaryText}</span>
+        <ChevronDownIcon
+          className={cn(
+            "size-3.5 shrink-0 text-[color:var(--chela-text-tertiary)] transition-transform duration-200",
+            open && "rotate-180",
+          )}
+        />
+      </CollapsibleTrigger>
+
+      <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+        <div className="mt-1 flex flex-col gap-1">
+          {entry.commands.map((command) => (
+            <CommandGroupRow key={command.id} command={command} />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function ProcessGroupFallback({
+  result,
+  status,
+}: {
+  result?: unknown;
+  status?: ToolCallMessagePartStatus;
+}) {
+  const entries = getProcessGroupEntries(result);
+  const [open, setOpen] = useState(
+    status?.type === "running" || status?.type === "incomplete",
+  );
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const { startedAt, endedAt } = getProcessGroupTiming(result);
+  const isRunning = status?.type === "running";
+  const duration = formatProcessDuration(startedAt, endedAt);
+  const commandCount = entries.reduce(
+    (count, entry) => count + (entry.type === "commands" ? entry.commands.length : 0),
+    0,
+  );
+  const summaryText = isRunning
+    ? "处理中"
+    : ["已处理", duration, commandCount > 0 ? `${commandCount} 个命令` : null]
+        .filter(Boolean)
+        .join(" · ");
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="aui-process-group mb-3 w-full max-w-[760px]"
+    >
+      <CollapsibleTrigger
+        className="group/process-group inline-flex max-w-full items-center gap-2 py-1 text-left text-[13px] leading-6 text-[color:var(--chela-text-tertiary)] transition-colors hover:text-[color:var(--chela-text-primary)]"
+        aria-label={open ? "收起处理详情" : "展开处理详情"}
+      >
+        <span className="truncate font-medium">{summaryText}</span>
+        <ChevronDownIcon
+          className={cn(
+            "size-3.5 shrink-0 text-[color:var(--chela-text-tertiary)] transition-transform duration-200",
+            open && "rotate-180",
+          )}
+        />
+      </CollapsibleTrigger>
+
+      <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+        <div className="mt-2 flex flex-col gap-4">
+          {entries.map((entry) =>
+            entry.type === "reasoning" ? (
+              <ProcessReasoningBlock key={entry.id} entry={entry} />
+            ) : (
+              <ProcessCommandsBlock key={entry.id} entry={entry} />
+            ),
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 function ToolFallbackSummary({
   toolName,
   result,
@@ -727,6 +1011,10 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   result,
   status,
 }) => {
+  if (toolName === "process_group") {
+    return <ProcessGroupFallback result={result} status={status} />;
+  }
+
   if (toolName === "command_group") {
     return <CommandGroupFallback result={result} status={status} />;
   }
