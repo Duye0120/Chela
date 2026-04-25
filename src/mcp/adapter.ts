@@ -1,6 +1,7 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
 import type { McpConnection, McpConnectionManager } from "./client.js";
+import { normalizeMcpIdentifier } from "./config.js";
 
 /**
  * Convert MCP server tools into AgentTool instances.
@@ -23,7 +24,9 @@ function mcpToolToAgentTool(
   conn: McpConnection,
   tool: { name: string; description?: string; inputSchema?: any },
 ): AgentTool<any, any> {
-  const prefixedName = `mcp_${conn.name}_${tool.name}`;
+  const safeServerName = normalizeMcpIdentifier(conn.name, "server");
+  const safeToolName = normalizeMcpIdentifier(tool.name, "tool");
+  const prefixedName = `mcp_${safeServerName}_${safeToolName}`;
 
   // Convert MCP JSON Schema to TypeBox-compatible schema
   // For simplicity, we accept any object — the MCP server validates

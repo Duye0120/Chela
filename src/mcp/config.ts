@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { appLogger } from "../main/logger.js";
 
 export type McpServerConfig = {
   command: string;
@@ -15,6 +16,106 @@ export type McpConfig = {
 
 const MCP_CONFIG_FILE = "mcp.json";
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function warnMcpConfig(configPath: string, message: string, data?: unknown): void {
+  appLogger.warn({
+    scope: "mcp.config",
+    message,
+    data: {
+      configPath,
+      ...(data && typeof data === "object" ? (data as Record<string, unknown>) : {}),
+    },
+  });
+}
+
+export function normalizeMcpIdentifier(value: string, fallback: string): string {
+  const normalized = value
+    .trim()
+    .replace(/[^A-Za-z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return normalized || fallback;
+}
+
+function normalizeStringArray(
+  value: unknown,
+): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const result = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return result.length > 0 ? result : undefined;
+}
+
+function normalizeStringRecord(
+  value: unknown,
+): Record<string, string> | undefined {
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+
+  const result: Record<string, string> = {};
+
+  for (const [key, nested] of Object.entries(value)) {
+    if (typeof nested !== "string") {
+      continue;
+    }
+
+    const trimmed = nested.trim();
+    if (!trimmed) {
+      continue;
+    }
+    result[key] = trimmed;
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function normalizeServerConfig(
+  configPath: string,
+  serverName: string,
+  value: unknown,
+): McpServerConfig | null {
+  if (!isPlainObject(value)) {
+    warnMcpConfig(configPath, "MCP server 配置格式无效，已忽略。", {
+      serverName,
+    });
+    return null;
+  }
+
+  const command = typeof value.command === "string" ? value.command.trim() : "";
+  if (!command) {
+    warnMcpConfig(configPath, "MCP server 缺少有效 command，已忽略。", {
+      serverName,
+    });
+    return null;
+  }
+
+  const args = normalizeStringArray(value.args);
+  const env = normalizeStringRecord(value.env);
+  const cwd =
+    typeof value.cwd === "string" && value.cwd.trim()
+      ? value.cwd.trim()
+      : undefined;
+
+  return {
+    command,
+    args,
+    env,
+    cwd,
+    disabled: value.disabled === true,
+  };
+}
+
 /**
  * Read and parse the mcp.json config from workspace.
  */
@@ -27,10 +128,57 @@ export function loadMcpConfig(workspacePath: string): McpConfig {
   try {
     const raw = readFileSync(configPath, "utf-8");
     const parsed = JSON.parse(raw) as Partial<McpConfig>;
+    if (!isPlainObject(parsed)) {
+      warnMcpConfig(configPath, "MCP 配置根对象无效，已回退为空配置。");
+      return { mcpServers: {} };
+    }
+
+    const rawServers = parsed.mcpServers;
+    if (!isPlainObject(rawServers)) {
+      if (rawServers != null) {
+        warnMcpConfig(configPath, "mcpServers 字段无效，已回退为空配置。");
+      }
+      return { mcpServers: {} };
+    }
+
+    const normalizedServers: Record<string, McpServerConfig> = {};
+    const seenIdentifiers = new Map<string, string>();
+
+    for (const [serverName, serverConfig] of Object.entries(rawServers)) {
+      const normalized = normalizeServerConfig(configPath, serverName, serverConfig);
+      if (!normalized) {
+        continue;
+      }
+
+      const normalizedIdentifier = normalizeMcpIdentifier(serverName, "server");
+      const existingOwner = seenIdentifiers.get(normalizedIdentifier);
+      if (existingOwner && existingOwner !== serverName) {
+        warnMcpConfig(
+          configPath,
+          "MCP server 名称归一化后发生冲突，后续冲突项已忽略。",
+          {
+            serverName,
+            conflictingWith: existingOwner,
+            normalizedIdentifier,
+          },
+        );
+        continue;
+      }
+
+      seenIdentifiers.set(normalizedIdentifier, serverName);
+      normalizedServers[serverName] = normalized;
+    }
+
     return {
-      mcpServers: parsed.mcpServers ?? {},
+      mcpServers: normalizedServers,
     };
-  } catch {
+  } catch (err) {
+    appLogger.warn({
+      scope: "mcp.config",
+      message: "解析 MCP 配置失败，已回退为空配置。",
+      data: { configPath },
+      error: err,
+    });
     return { mcpServers: {} };
   }
 }
