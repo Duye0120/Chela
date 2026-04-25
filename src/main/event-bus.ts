@@ -60,15 +60,42 @@ export type EventMap = {
   "reflection:completed": { date: string; sessionCount: number; insightCount: number };
 };
 
+export const BUS_EVENTS = {
+  RUN_STARTED: "run:started",
+  RUN_COMPLETED: "run:completed",
+  MESSAGE_USER: "message:user",
+  MESSAGE_ASSISTANT: "message:assistant",
+  TOOL_EXECUTING: "tool:executing",
+  TOOL_COMPLETED: "tool:completed",
+  TOOL_FAILED: "tool:failed",
+  APPROVAL_REQUESTED: "approval:requested",
+  APPROVAL_RESOLVED: "approval:resolved",
+  NOTIFICATION_SENT: "notification:sent",
+  NOTIFICATION_EXTERNAL: "notification:external",
+  DIAGNOSIS_HEALTHY: "diagnosis:healthy",
+  DIAGNOSIS_ALERT: "diagnosis:alert",
+  DIAGNOSIS_REPAIRED: "diagnosis:repaired",
+  PLUGIN_LOADED: "plugin:loaded",
+  PLUGIN_UNLOADED: "plugin:unloaded",
+  SCHEDULE_TRIGGERED: "schedule:triggered",
+  WEBHOOK_RECEIVED: "webhook:received",
+  LEARNING_INSIGHT: "learning:insight",
+  LEARNING_APPLIED: "learning:applied",
+  EMOTION_CHANGED: "emotion:changed",
+  REFLECTION_COMPLETED: "reflection:completed",
+} as const satisfies Record<string, keyof EventMap>;
+
+export type BusEventName = (typeof BUS_EVENTS)[keyof typeof BUS_EVENTS];
+
 // ---------------------------------------------------------------------------
 // EventBus 实现
 // ---------------------------------------------------------------------------
 
 type Handler<T = unknown> = (data: T) => void;
-type WildcardHandler = (event: string, data: unknown) => void;
+type WildcardHandler = (event: BusEventName, data: unknown) => void;
 
 class EventBus {
-  private readonly listeners = new Map<string, Set<Handler>>();
+  private readonly listeners = new Map<keyof EventMap, Set<Handler>>();
   private readonly wildcardListeners = new Set<WildcardHandler>();
 
   /**
@@ -132,8 +159,13 @@ class EventBus {
     for (const handler of this.wildcardListeners) {
       try {
         handler(event, data);
-      } catch {
-        // 通配符 handler 出错不阻塞
+      } catch (err) {
+        // M19: 通配符 handler 抛错不阻塞其他 handler，但需写日志，不能静默吞掉。
+        appLogger.warn({
+          scope: "event-bus",
+          message: `wildcard handler error on "${event}"`,
+          error: err instanceof Error ? err : new Error(String(err)),
+        });
       }
     }
   }

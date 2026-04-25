@@ -85,6 +85,7 @@ export function evaluateToolPolicy({
 
   if (toolName === "shell_exec") {
     const command = typeof args.command === "string" ? args.command : "";
+    const cwd = typeof args.cwd === "string" ? args.cwd.trim() : "";
     if (!command.trim()) {
       return {
         toolName,
@@ -112,11 +113,45 @@ export function evaluateToolPolicy({
       };
     }
 
+    if (cwd) {
+      const resolvedCwd = resolveWorkspacePath(workspacePath, cwd);
+      if (!isPathAllowed(resolvedCwd, workspacePath)) {
+        return {
+          toolName,
+          riskLevel,
+          decision: { type: "deny", reason: "工作目录超出 workspace 范围。" },
+          normalizedArgs: { ...args, command, cwd },
+          metadata: { resolvedCwd },
+        };
+      }
+
+      try {
+        const stats = fs.statSync(resolvedCwd);
+        if (!stats.isDirectory()) {
+          return {
+            toolName,
+            riskLevel,
+            decision: { type: "deny", reason: "工作目录必须是目录。" },
+            normalizedArgs: { ...args, command, cwd },
+            metadata: { resolvedCwd },
+          };
+        }
+      } catch {
+        return {
+          toolName,
+          riskLevel,
+          decision: { type: "deny", reason: "工作目录不存在。" },
+          normalizedArgs: { ...args, command, cwd },
+          metadata: { resolvedCwd },
+        };
+      }
+    }
+
     return {
       toolName,
       riskLevel,
       decision: { type: "allow" },
-      normalizedArgs: { ...args, command },
+      normalizedArgs: cwd ? { ...args, command, cwd } : { ...args, command },
     };
   }
 

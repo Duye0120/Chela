@@ -8,7 +8,7 @@ import {
 } from "./approvals-store.js";
 import { appendHarnessAuditEvent } from "./audit.js";
 import { loadPersistedHarnessRuns, savePersistedHarnessRuns } from "./store.js";
-import { bus } from "../event-bus.js";
+import { BUS_EVENTS, bus } from "../event-bus.js";
 import type {
   HarnessApprovalResolution,
   HarnessApprovalSource,
@@ -279,7 +279,7 @@ export class HarnessRuntime {
       },
     });
 
-    bus.emit("run:started", {
+    bus.emit(BUS_EVENTS.RUN_STARTED, {
       sessionId: run.sessionId,
       runId: run.runId,
       modelEntryId: run.modelEntryId,
@@ -472,7 +472,7 @@ export class HarnessRuntime {
     }
     this.persistActiveRuns();
 
-    bus.emit("run:completed", {
+    bus.emit(BUS_EVENTS.RUN_COMPLETED, {
       sessionId: run.sessionId,
       runId: run.runId,
       finalState,

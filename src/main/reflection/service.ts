@@ -9,7 +9,7 @@
 import { app } from "electron";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { bus } from "../event-bus.js";
+import { BUS_EVENTS, bus } from "../event-bus.js";
 import { appLogger } from "../logger.js";
 import { scheduler } from "../scheduler.js";
 import { listSessions, loadSession } from "../session/facade.js";
@@ -218,7 +218,7 @@ export async function runDailyReflection(): Promise<ReflectionReport> {
     processPersonalityDrift(report.personalityDrift, report.date);
   }
 
-  bus.emit("reflection:completed", {
+  bus.emit(BUS_EVENTS.REFLECTION_COMPLETED, {
     date: report.date,
     sessionCount: sessions.length,
     insightCount: report.actionableInsights.length,
@@ -238,6 +238,8 @@ export async function runDailyReflection(): Promise<ReflectionReport> {
 
 export { buildPersonalityDriftPromptText };
 
+const DAILY_REFLECTION_JOB_ID = "daily-reflection";
+
 // ---------------------------------------------------------------------------
 // External API
 // ---------------------------------------------------------------------------
@@ -255,7 +257,7 @@ export function getLatestReflection(): ReflectionReport | null {
 export function initReflectionService(): void {
   scheduler.register(
     {
-      id: "daily-reflection",
+      id: DAILY_REFLECTION_JOB_ID,
       name: "每日反思",
       type: "daily",
       time: DAILY_REFLECTION_TIME,
@@ -278,4 +280,8 @@ export function initReflectionService(): void {
     scope: "reflection",
     message: `反思服务已启动 — 每日 ${DAILY_REFLECTION_TIME} 自动执行`,
   });
+}
+
+export function stopReflectionService(): void {
+  scheduler.unregister(DAILY_REFLECTION_JOB_ID);
 }

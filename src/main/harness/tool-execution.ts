@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { ElectronAdapter } from "../adapter.js";
-import { bus } from "../event-bus.js";
+import { BUS_EVENTS, bus } from "../event-bus.js";
 import { parallelManager, SIDE_EFFECT_FREE_TOOLS } from "../parallel-tools.js";
 import { evaluateToolPolicy } from "./policy.js";
 import { HarnessRunCancelledError, type HarnessRuntime } from "./runtime.js";
@@ -172,7 +172,7 @@ async function executeWithHarness(
       runScope,
       pendingApproval,
     );
-    bus.emit("approval:requested", {
+    bus.emit(BUS_EVENTS.APPROVAL_REQUESTED, {
       sessionId: runScope.sessionId,
       runId: runScope.runId,
       requestId: pendingApproval.requestId,
@@ -236,7 +236,7 @@ async function executeWithHarness(
     const approvalResolution = await pendingResponse;
     adapter.recordConfirmationResolution(approvalResolution);
     const allowed = approvalResolution.allowed;
-    bus.emit("approval:resolved", {
+    bus.emit(BUS_EVENTS.APPROVAL_RESOLVED, {
       sessionId: runScope.sessionId,
       runId: runScope.runId,
       requestId: pendingApproval.requestId,
@@ -298,7 +298,7 @@ async function executeWithHarness(
   if (executingRun) {
     emitRunStateChanged(executingRun.state, "Harness 已批准工具执行。");
   }
-  bus.emit("tool:executing", {
+  bus.emit(BUS_EVENTS.TOOL_EXECUTING, {
     sessionId: runScope.sessionId,
     runId: runScope.runId,
     toolName: tool.name,
@@ -332,7 +332,7 @@ async function executeWithHarness(
       emitRunStateChanged(resumedRun.state, "工具执行完成，继续回到 agent loop。");
     }
 
-    bus.emit("tool:completed", {
+    bus.emit(BUS_EVENTS.TOOL_COMPLETED, {
       sessionId: runScope.sessionId,
       runId: runScope.runId,
       toolName: tool.name,
@@ -356,7 +356,7 @@ async function executeWithHarness(
         error instanceof Error ? error.message : "工具执行失败",
       );
     }
-    bus.emit("tool:failed", {
+    bus.emit(BUS_EVENTS.TOOL_FAILED, {
       sessionId: runScope.sessionId,
       runId: runScope.runId,
       toolName: tool.name,

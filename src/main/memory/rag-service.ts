@@ -2,12 +2,14 @@ import { app } from "electron";
 import { join } from "node:path";
 import type {
   MemoryAddInput,
+  MemoryListInput,
   MemoryRebuildResult,
   MemorySearchResult,
   MemoryStats,
 } from "../../shared/contracts.js";
 import { MemoryWorkerClient } from "./embedding.js";
 import { getSettings } from "../settings.js";
+import { normalizeMemoryMetadata } from "./metadata.js";
 
 function getMemoryDbPath(): string {
   return join(app.getPath("userData"), "chela-memory.db");
@@ -27,7 +29,10 @@ class ChelaMemoryService {
   async add(input: MemoryAddInput) {
     const settings = getSettings();
     return this.workerClient.add({
-      input,
+      input: {
+        ...input,
+        metadata: normalizeMemoryMetadata(input.metadata),
+      },
       modelId: settings.memory.embeddingModelId,
     });
   }
@@ -39,6 +44,7 @@ class ChelaMemoryService {
       query,
       limit: normalizedLimit,
       candidateLimit: settings.memory.searchCandidateLimit,
+      minScore: Math.max(0, Math.min(1, settings.memory.similarityThreshold / 100)),
       modelId: settings.memory.embeddingModelId,
     });
   }
@@ -54,6 +60,10 @@ class ChelaMemoryService {
       ...stats,
       workerState: this.workerClient.getState(),
     };
+  }
+
+  async list(input?: MemoryListInput) {
+    return this.workerClient.list(input);
   }
 
   async rebuild(): Promise<MemoryRebuildResult> {

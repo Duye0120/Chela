@@ -7,6 +7,7 @@ import {
 } from "node:worker_threads";
 import type {
   MemoryAddInput,
+  MemoryListInput,
   MemoryRebuildResult,
   MemoryRecord,
   MemorySearchResult,
@@ -41,6 +42,7 @@ type SearchRequest = {
     query: string;
     limit: number;
     candidateLimit: number;
+    minScore: number;
     modelId: MemoryEmbeddingModelId;
   };
 };
@@ -51,6 +53,14 @@ type StatsRequest = {
   payload: {
     selectedModelId: MemoryEmbeddingModelId;
     candidateLimit: number;
+  };
+};
+
+type ListRequest = {
+  id: string;
+  type: "list";
+  payload: {
+    input?: MemoryListInput;
   };
 };
 
@@ -66,6 +76,7 @@ type MemoryWorkerRequest =
   | AddRequest
   | SearchRequest
   | StatsRequest
+  | ListRequest
   | RebuildRequest;
 
 type ReadyMessage = {
@@ -82,6 +93,11 @@ type SuccessResponse =
       id: string;
       ok: true;
       result: MemorySearchResult[];
+    }
+  | {
+      id: string;
+      ok: true;
+      result: MemoryRecord[];
     }
   | {
       id: string;
@@ -259,7 +275,8 @@ async function startMemoryWorker(data: MemoryWorkerInitData): Promise<void> {
           queryVector,
           candidates,
           request.payload.limit,
-        );
+        ).filter((result) => result.score >= request.payload.minScore);
+        store.recordMatches(results.map((result) => result.id));
 
         return { id: request.id, ok: true, result: results };
       }
@@ -276,6 +293,22 @@ async function startMemoryWorker(data: MemoryWorkerInitData): Promise<void> {
             modelLoaded: embeddingRuntime.isModelLoaded(),
             candidateLimit: request.payload.candidateLimit,
           },
+        };
+      }
+
+      case "list": {
+        const limit = Math.min(
+          200,
+          Math.max(1, Math.round(request.payload.input?.limit ?? 80)),
+        );
+        const sort = request.payload.input?.sort ?? "confidence_desc";
+        return {
+          id: request.id,
+          ok: true,
+          result: store.listMemories({
+            sort,
+            limit,
+          }),
         };
       }
 
@@ -298,14 +331,14 @@ async function startMemoryWorker(data: MemoryWorkerInitData): Promise<void> {
           updates,
           request.payload.modelId,
         );
-        const rebuiltAt = new Date().toISOString();
+        const completedAt = new Date().toISOString();
         return {
           id: request.id,
           ok: true,
           result: {
-            updatedCount,
+            rebuiltCount: updatedCount,
             modelId: request.payload.modelId,
-            rebuiltAt,
+            completedAt,
           },
         };
       }
@@ -381,6 +414,7 @@ export class MemoryWorkerClient {
     query: string;
     limit: number;
     candidateLimit: number;
+    minScore: number;
     modelId: MemoryEmbeddingModelId;
   }): Promise<MemorySearchResult[]> {
     return this.call<MemorySearchResult[]>({
@@ -398,6 +432,14 @@ export class MemoryWorkerClient {
       id: randomUUID(),
       type: "stats",
       payload: input,
+    });
+  }
+
+  async list(input?: MemoryListInput): Promise<MemoryRecord[]> {
+    return this.call<MemoryRecord[]>({
+      id: randomUUID(),
+      type: "list",
+      payload: { input },
     });
   }
 

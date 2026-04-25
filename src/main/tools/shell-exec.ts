@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
-import { checkShellCommand } from "../security.js";
+import { checkShellCommand, isPathAllowed } from "../security.js";
 import { getSettings } from "../settings.js";
 import { buildShellExecSpawn, resolveShell } from "../shell.js";
 import { recordShellCommand } from "./command-history.js";
@@ -27,6 +28,58 @@ const ANSI_ESCAPE_REGEX = /\u001B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
 function sanitizeShellOutput(text: string): string {
   return text.replace(ANSI_ESCAPE_REGEX, "");
+}
+
+function createShellErrorResult(
+  command: string,
+  cwd: string,
+  message: string,
+) {
+  return {
+    content: [{ type: "text" as const, text: message }],
+    details: {
+      command,
+      cwd,
+      exitCode: -1,
+      stdout: "",
+      stderr: message,
+      durationMs: 0,
+    },
+  };
+}
+
+async function resolveShellCwd(
+  workspacePath: string,
+  requestedCwd: string | undefined,
+): Promise<{ cwd: string; error?: string }> {
+  const trimmed = requestedCwd?.trim();
+  const cwd = trimmed
+    ? (path.isAbsolute(trimmed) ? trimmed : path.resolve(workspacePath, trimmed))
+    : workspacePath;
+
+  if (!isPathAllowed(cwd, workspacePath)) {
+    return {
+      cwd: workspacePath,
+      error: `工作目录超出 workspace 范围: ${trimmed ?? requestedCwd ?? cwd}`,
+    };
+  }
+
+  try {
+    const entry = await stat(cwd);
+    if (!entry.isDirectory()) {
+      return {
+        cwd,
+        error: `工作目录不是目录: ${trimmed ?? cwd}`,
+      };
+    }
+  } catch {
+    return {
+      cwd,
+      error: `工作目录不存在: ${trimmed ?? cwd}`,
+    };
+  }
+
+  return { cwd };
 }
 
 export function createShellExecTool(
@@ -68,9 +121,24 @@ export function createShellExecTool(
       // TODO: Phase 4 will implement in-app confirmation for needsConfirmation commands.
       // For now, auto-approve all non-blacklisted commands.
 
-      const cwd = params.cwd
-        ? path.resolve(workspacePath, params.cwd)
-        : workspacePath;
+      const resolvedCwd = await resolveShellCwd(workspacePath, params.cwd);
+      if (resolvedCwd.error) {
+        recordShellCommand({
+          sessionId,
+          command: params.command,
+          cwd: resolvedCwd.cwd,
+          exitCode: -1,
+          durationMs: 0,
+        });
+
+        return createShellErrorResult(
+          params.command,
+          resolvedCwd.cwd,
+          resolvedCwd.error,
+        );
+      }
+
+      const cwd = resolvedCwd.cwd;
       const timeoutSec = Math.min(params.timeout ?? 30, 300);
       const startTime = Date.now();
       const shell = resolveShell(getSettings().terminal.shell);

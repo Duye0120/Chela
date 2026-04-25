@@ -6,7 +6,7 @@
 // 学习结果在下次 prompt 注入时自动携带，改变 Agent 行为。
 // ---------------------------------------------------------------------------
 
-import { bus } from "../event-bus.js";
+import { BUS_EVENTS, bus } from "../event-bus.js";
 import { getMemdirStore } from "../memory/service.js";
 import { appLogger } from "../logger.js";
 import { scheduler } from "../scheduler.js";
@@ -165,7 +165,7 @@ async function processSignal(signal: LearningSignal): Promise<void> {
 
     producedLearnings.add(learningKey);
 
-    bus.emit("learning:applied", {
+    bus.emit(BUS_EVENTS.LEARNING_APPLIED, {
       type: signal.type,
       target: signal.toolName,
       message: summary,
@@ -223,9 +223,9 @@ export function initActiveLearning(): void {
 
   initialized = true;
   // 订阅工具失败事件
-  const disposeToolFailed = bus.on("tool:failed", onToolFailed);
+  const disposeToolFailed = bus.on(BUS_EVENTS.TOOL_FAILED, onToolFailed);
   // 订阅审批拒绝事件
-  const disposeApprovalResolved = bus.on("approval:resolved", onApprovalResolved);
+  const disposeApprovalResolved = bus.on(BUS_EVENTS.APPROVAL_RESOLVED, onApprovalResolved);
 
   // 注册定期信号衰减任务
   scheduler.register(

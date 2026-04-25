@@ -4,6 +4,7 @@ import { getGitDiffSnapshot } from "../git.js";
 import { HarnessRunCancelledError } from "../harness/runtime.js";
 import { harnessRuntime } from "../harness/singleton.js";
 import { appLogger } from "../logger.js";
+import { scheduleAutoMemorySummarize } from "../memory/service.js";
 import {
   appendAssistantMessageEvent,
   appendRunFinishedEvent,
@@ -12,7 +13,7 @@ import {
   renamePersistedSession,
 } from "../session/service.js";
 import { indexSessionSearchDocument } from "../session/search.js";
-import { bus } from "../event-bus.js";
+import { BUS_EVENTS, bus } from "../event-bus.js";
 import { WorkerService } from "../worker-service.js";
 import { buildRunChangeSummary } from "./run-change-summary.js";
 import type { ChatRunContext } from "./types.js";
@@ -99,7 +100,7 @@ export async function finalizeCompletedChatRun(
       runId: context.input.runId,
       message: assistantMessage,
     });
-    bus.emit("message:assistant", {
+    bus.emit(BUS_EVENTS.MESSAGE_ASSISTANT, {
       sessionId: context.input.sessionId,
       runId: context.input.runId,
     });
@@ -118,6 +119,10 @@ export async function finalizeCompletedChatRun(
       },
     });
   harnessRuntime.finishRun(context.runScope, "completed");
+  scheduleAutoMemorySummarize({
+    sessionId: context.input.sessionId,
+    sourceRunId: context.input.runId,
+  });
   indexSessionSearchDocument(context.input.sessionId);
   if (assistantMessage?.content) {
     await maybeAutoRenameSessionTitle(

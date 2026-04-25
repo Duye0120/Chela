@@ -8,7 +8,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { completeSimple, type TextContent } from "@mariozechner/pi-ai";
+import type { MemoryAddInput } from "../../shared/contracts.js";
+import { executeBackgroundRun } from "../background-run.js";
 import { appLogger } from "../logger.js";
+import { resolveModelEntry } from "../providers.js";
+import { loadTranscriptEvents } from "../session/service.js";
+import { getSettings } from "../settings.js";
+import { getChelaMemoryService } from "./rag-service.js";
 
 // ---------------------------------------------------------------------------
 // Hard limits — aligned with Claude Code memdir philosophy
@@ -24,6 +31,8 @@ const MAX_TOPIC_FILE_BYTES = 50_000;
 const MAX_PROMPT_SECTION_CHARS = 6_000;
 /** 搜索最大返回条目数 */
 const MAX_SEARCH_RESULTS = 8;
+/** 记忆提取输入最大字符数 */
+const MAX_MEMORY_EXTRACTION_CHARS = 8_000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,6 +63,16 @@ export type MemdirSearchResult = {
   topic: string;
   score: number;
   detail?: string;
+};
+
+type MemoryToolModelResult = {
+  text: string;
+  modelEntryId: string;
+};
+
+type AutoMemoryExtractionInput = {
+  sessionId: string;
+  sourceRunId: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -218,6 +237,270 @@ function computeScore(text: string, queryTokens: string[]): number {
     if (haystack.includes(token)) matched++;
   }
   return matched / queryTokens.length;
+}
+
+function extractText(content: Array<{ type: string }>): string {
+  return content
+    .filter((block): block is TextContent => block.type === "text")
+    .map((block) => block.text)
+    .join("\n")
+    .trim();
+}
+
+function stripCodeFence(value: string): string {
+  return value
+    .trim()
+    .replace(/^```[a-zA-Z0-9_-]*\s*/u, "")
+    .replace(/\s*```$/u, "")
+    .trim();
+}
+
+function extractJsonCandidate(value: string): string {
+  const normalized = stripCodeFence(value);
+  if (normalized.startsWith("{") || normalized.startsWith("[")) {
+    return normalized;
+  }
+
+  const objectStart = normalized.indexOf("{");
+  const arrayStart = normalized.indexOf("[");
+  const starts = [objectStart, arrayStart].filter((index) => index >= 0);
+  if (starts.length === 0) {
+    return normalized;
+  }
+
+  const start = Math.min(...starts);
+  const end = Math.max(normalized.lastIndexOf("}"), normalized.lastIndexOf("]"));
+  return end > start ? normalized.slice(start, end + 1) : normalized;
+}
+
+function clampText(value: string, maxLength: number): string {
+  const normalized = value.trim();
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength).trimEnd()}\n[...已截断]`
+    : normalized;
+}
+
+function resolveMemoryToolModelEntryId(): string {
+  const settings = getSettings();
+  return (
+    settings.memory.toolModelId ??
+    settings.modelRouting.utility.modelId ??
+    settings.modelRouting.chat.modelId
+  );
+}
+
+async function completeWithMemoryToolModel(input: {
+  systemPrompt: string;
+  userPrompt: string;
+  maxTokens?: number;
+}): Promise<MemoryToolModelResult | null> {
+  const modelEntryId = resolveMemoryToolModelEntryId();
+  const resolved = resolveModelEntry(modelEntryId);
+  const response = await completeSimple(
+    resolved.model,
+    {
+      systemPrompt: input.systemPrompt,
+      messages: [
+        {
+          role: "user",
+          content: input.userPrompt,
+          timestamp: Date.now(),
+        },
+      ],
+    },
+    {
+      apiKey: resolved.apiKey,
+      maxTokens: input.maxTokens,
+    },
+  );
+  const text = extractText(response.content);
+  return text ? { text, modelEntryId } : null;
+}
+
+async function rewriteMemoryQuery(query: string): Promise<string> {
+  const settings = getSettings();
+  const normalizedQuery = query.trim();
+  if (!settings.memory.enabled || !settings.memory.queryRewrite || !normalizedQuery) {
+    return normalizedQuery;
+  }
+
+  try {
+    const result = await completeWithMemoryToolModel({
+      systemPrompt: [
+        "你是 Chela 的记忆检索查询改写器。",
+        "把用户当前消息改写成适合语义向量检索的短查询。",
+        "只输出一行查询文本。",
+        "保留关键实体、项目名、文件名、偏好和任务目标。",
+        "控制在 80 个中文字符以内。",
+      ].join("\n"),
+      userPrompt: normalizedQuery,
+      maxTokens: 120,
+    });
+    const rewritten = result?.text
+      .replace(/\s+/g, " ")
+      .replace(/^["'`]+|["'`]+$/gu, "")
+      .trim();
+    return rewritten || normalizedQuery;
+  } catch (error) {
+    appLogger.warn({
+      scope: "memory.query-rewrite",
+      message: "记忆查询重写失败，使用原始查询。",
+      error,
+    });
+    return normalizedQuery;
+  }
+}
+
+async function searchVectorMemories(query: string): Promise<string[]> {
+  const settings = getSettings();
+  if (!settings.memory.enabled || !settings.memory.autoRetrieve || !query.trim()) {
+    return [];
+  }
+
+  try {
+    const rewrittenQuery = await rewriteMemoryQuery(query);
+    const limit = Math.min(20, Math.max(1, settings.memory.searchCandidateLimit));
+    const threshold = Math.max(0, Math.min(1, settings.memory.similarityThreshold / 100));
+    const results = await getChelaMemoryService().search(rewrittenQuery, limit);
+
+    return results
+      .filter((result) => result.score >= threshold)
+      .map((result) => {
+        const tags = Array.isArray(result.metadata?.tags)
+          ? ` tags=${result.metadata.tags.join(",")}`
+          : "";
+        return `- ${result.content} (score=${result.score.toFixed(3)}, matches=${result.matchCount}${tags})`;
+      });
+  } catch (error) {
+    appLogger.warn({
+      scope: "memory.vector-search",
+      message: "向量记忆检索失败，本轮跳过向量结果注入。",
+      error,
+    });
+    return [];
+  }
+}
+
+function parseExtractedMemories(rawText: string): MemoryAddInput[] {
+  try {
+    const parsed = JSON.parse(extractJsonCandidate(rawText)) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    const memories: MemoryAddInput[] = [];
+    const seen = new Set<string>();
+
+    for (const item of parsed) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        continue;
+      }
+
+      const record = item as Record<string, unknown>;
+      const content = typeof record.content === "string"
+        ? record.content.trim()
+        : typeof record.summary === "string"
+          ? record.summary.trim()
+          : "";
+      if (!content || content.length > 800) {
+        continue;
+      }
+
+      const key = content.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+
+      const tags = Array.isArray(record.tags)
+        ? record.tags.filter((tag): tag is string => typeof tag === "string")
+        : [];
+      memories.push({
+        content,
+        metadata: {
+          source: "auto-summary",
+          tags,
+        },
+      });
+      seen.add(key);
+
+      if (memories.length >= 5) {
+        break;
+      }
+    }
+
+    return memories;
+  } catch {
+    return [];
+  }
+}
+
+function getLatestTurnText(input: AutoMemoryExtractionInput): {
+  userText: string;
+  assistantText: string;
+} | null {
+  const events = loadTranscriptEvents(input.sessionId);
+  const assistantIndex = events.findIndex(
+    (event) =>
+      event.type === "assistant_message" && event.runId === input.sourceRunId,
+  );
+  if (assistantIndex < 0) {
+    return null;
+  }
+
+  const assistantEvent = events[assistantIndex];
+  const assistantText =
+    assistantEvent?.type === "assistant_message"
+      ? assistantEvent.message.content.trim()
+      : "";
+  let userText = "";
+
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type === "user_message") {
+      userText = event.message.content.trim();
+      break;
+    }
+  }
+
+  if (!userText && !assistantText) {
+    return null;
+  }
+
+  return { userText, assistantText };
+}
+
+async function extractMemoriesFromLatestTurn(
+  input: AutoMemoryExtractionInput,
+): Promise<MemoryAddInput[]> {
+  const turn = getLatestTurnText(input);
+  if (!turn) {
+    return [];
+  }
+
+  const result = await completeWithMemoryToolModel({
+    systemPrompt: [
+      "你是 Chela 的长期记忆提取器。",
+      "从最新一轮对话中提取跨会话有价值的信息。",
+      "只输出 JSON 数组，不要 Markdown。",
+      "数组元素格式为 {\"content\":\"\",\"tags\":[\"\"]}。",
+      "只保存用户偏好、项目约定、架构决定、稳定事实、反复出现的工作方式。",
+      "临时任务、一次性计划、普通回复内容输出空数组。",
+      "最多输出 5 条。",
+    ].join("\n"),
+    userPrompt: clampText(
+      [
+        "[用户消息]",
+        turn.userText || "无",
+        "",
+        "[助手回复]",
+        turn.assistantText || "无",
+      ].join("\n"),
+      MAX_MEMORY_EXTRACTION_CHARS,
+    ),
+    maxTokens: 800,
+  });
+
+  return result ? parseExtractedMemories(result.text) : [];
 }
 
 // ---------------------------------------------------------------------------
@@ -463,6 +746,11 @@ export async function getSemanticMemoryPromptSection(input: {
   sessionId: string;
   query: string | null;
 }): Promise<string> {
+  const settings = getSettings();
+  if (!settings.memory.enabled) {
+    return "";
+  }
+
   const query = input.query?.trim();
 
   // 冷启动（无 query）也注入记忆使用纪律 + 索引概览
@@ -485,7 +773,10 @@ export async function getSemanticMemoryPromptSection(input: {
 
   // 有 query 时：加载索引 + 搜索命中
   const indexContent = memdirStore.getIndexContent().trim();
-  const results = memdirStore.search(query);
+  const [vectorResultLines, results] = await Promise.all([
+    searchVectorMemories(query),
+    Promise.resolve(settings.memory.autoRetrieve ? memdirStore.search(query) : []),
+  ]);
 
   const parts: string[] = [];
 
@@ -528,6 +819,12 @@ export async function getSemanticMemoryPromptSection(input: {
     }
   }
 
+  if (vectorResultLines.length > 0) {
+    parts.push("");
+    parts.push("## 向量记忆检索结果");
+    parts.push(...vectorResultLines);
+  }
+
   return parts.join("\n");
 }
 
@@ -537,3 +834,63 @@ export function getMemdirStore(): MemdirStore {
 
 // 向后兼容的别名
 export { memdirStore as t1MemoryStore };
+
+export function scheduleAutoMemorySummarize(
+  input: AutoMemoryExtractionInput,
+): void {
+  const settings = getSettings();
+  if (!settings.memory.enabled || !settings.memory.autoSummarize) {
+    return;
+  }
+
+  const modelEntryId = resolveMemoryToolModelEntryId();
+
+  void executeBackgroundRun({
+    sessionId: input.sessionId,
+    runKind: "memory_refresh",
+    modelEntryId,
+    thinkingLevel: "off",
+    metadata: {
+      sourceRunId: input.sourceRunId,
+      purpose: "auto-memory-summarize",
+    },
+    execute: async () => {
+      const memories = await extractMemoriesFromLatestTurn(input);
+      let savedCount = 0;
+
+      for (const memory of memories) {
+        await getChelaMemoryService().add({
+          ...memory,
+          metadata: {
+            ...memory.metadata,
+            sessionId: input.sessionId,
+            sourceRunId: input.sourceRunId,
+          },
+        });
+        savedCount += 1;
+      }
+
+      appLogger.info({
+        scope: "memory.auto-summary",
+        message: "自动记忆提取完成",
+        data: {
+          sessionId: input.sessionId,
+          sourceRunId: input.sourceRunId,
+          savedCount,
+        },
+      });
+
+      return { savedCount };
+    },
+  }).catch((error) => {
+    appLogger.warn({
+      scope: "memory.auto-summary",
+      message: "自动记忆提取失败，本轮跳过写入。",
+      data: {
+        sessionId: input.sessionId,
+        sourceRunId: input.sourceRunId,
+      },
+      error,
+    });
+  });
+}

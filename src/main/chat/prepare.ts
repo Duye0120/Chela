@@ -12,7 +12,7 @@ import {
 } from "../session/service.js";
 import { loadSession } from "../session/facade.js";
 import { requireMainWindow } from "../window.js";
-import { bus } from "../event-bus.js";
+import { BUS_EVENTS, bus } from "../event-bus.js";
 import type { ChatRunContext } from "./types.js";
 import type { SendMessageInput } from "../../shared/contracts.js";
 
@@ -97,7 +97,7 @@ export async function prepareChatRun(context: ChatRunContext): Promise<void> {
       modelEntryId: resolvedModel.entry.id,
       thinkingLevel: settings.thinkingLevel,
     });
-    bus.emit("message:user", {
+    bus.emit(BUS_EVENTS.MESSAGE_USER, {
       sessionId: input.sessionId,
       text: input.text,
     });

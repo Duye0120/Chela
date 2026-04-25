@@ -119,8 +119,15 @@ export function setMainWindowBounds(bounds: {
   const display = screen.getDisplayMatching(window.getBounds());
   const workArea = display.workArea;
   const [minWidth, minHeight] = window.getMinimumSize();
-  const nextX = bounds.x;
-  const nextY = bounds.y;
+  // M20: 把 x/y 钳制到 workArea 内，避免传入负值或离屏坐标导致后续 maxWidth/maxHeight 异常或窗口被推到屏幕外。
+  const nextX = Math.min(
+    Math.max(workArea.x, Math.round(bounds.x)),
+    workArea.x + workArea.width - minWidth,
+  );
+  const nextY = Math.min(
+    Math.max(workArea.y, Math.round(bounds.y)),
+    workArea.y + workArea.height - minHeight,
+  );
   const maxWidth = Math.max(minWidth, workArea.x + workArea.width - nextX);
   const maxHeight = Math.max(minHeight, workArea.y + workArea.height - nextY);
 

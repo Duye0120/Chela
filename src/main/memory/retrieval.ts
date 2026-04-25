@@ -9,7 +9,11 @@ type RankedCandidate = {
   content: string;
   metadata: MemoryMetadata | null;
   createdAt: string;
+  matchCount: number;
+  feedbackScore: number;
+  lastMatchedAt: string | null;
   score: number;
+  rankScore: number;
 };
 
 function parseVector(value: string): number[] {
@@ -63,24 +67,35 @@ export function rankMemories(
     if (!Number.isFinite(score) || score <= 0) {
       continue;
     }
+    const confidenceScore = candidate.matchCount + candidate.feedbackScore;
+    const confidenceBoost = Math.max(-0.08, Math.min(0.08, confidenceScore * 0.01));
+    const rankScore = score + confidenceBoost;
 
     ranked.push({
       id: candidate.id,
       content: candidate.content,
       metadata: candidate.metadata,
       createdAt: candidate.createdAt,
+      matchCount: candidate.matchCount,
+      feedbackScore: candidate.feedbackScore,
+      lastMatchedAt: candidate.lastMatchedAt,
       score,
+      rankScore,
     });
   }
 
-  ranked.sort((left, right) => right.score - left.score);
+  ranked.sort((left, right) => right.rankScore - left.rankScore);
 
   return ranked.slice(0, limit).map((item) => ({
     id: item.id,
     content: item.content,
     metadata: item.metadata,
     createdAt: item.createdAt,
+    matchCount: item.matchCount,
+    feedbackScore: item.feedbackScore,
+    lastMatchedAt: item.lastMatchedAt,
     score: item.score,
+    rankScore: item.rankScore,
   }));
 }
 

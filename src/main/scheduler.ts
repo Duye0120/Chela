@@ -12,10 +12,14 @@
 import { app } from "electron";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { bus } from "./event-bus.js";
+import { BUS_EVENTS, bus } from "./event-bus.js";
 import { appLogger } from "./logger.js";
 import { getSettings } from "./settings.js";
-import { getClockTimeInTimeZone, resolveConfiguredTimeZone } from "../shared/timezone.js";
+import {
+  getClockTimeInTimeZone,
+  getDateKeyInTimeZone,
+  resolveConfiguredTimeZone,
+} from "../shared/timezone.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,6 +40,7 @@ type RunningJob = {
   def: ScheduleJobDef;
   callback: ScheduleJobCallback;
   timerId: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout> | null;
+  lastDailyTriggerDate: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -52,11 +57,19 @@ class Scheduler {
       this.unregister(def.id);
     }
 
-    const job: RunningJob = { def, callback, timerId: null };
+    const job: RunningJob = {
+      def,
+      callback,
+      timerId: null,
+      lastDailyTriggerDate: null,
+    };
     this.jobs.set(def.id, job);
 
     if (this.started && def.enabled) {
       this.startJob(job);
+      if (def.type === "daily") {
+        this.checkDailyJobs();
+      }
     }
 
     appLogger.info({
@@ -85,6 +98,7 @@ class Scheduler {
 
     // 每分钟检查 daily jobs
     this.dailyCheckTimer = setInterval(() => this.checkDailyJobs(), 60_000);
+    this.checkDailyJobs();
 
     appLogger.info({
       scope: "scheduler",
@@ -119,6 +133,9 @@ class Scheduler {
     if (this.started) {
       if (enabled) {
         this.startJob(job);
+        if (job.def.type === "daily") {
+          this.checkDailyJobs();
+        }
       } else {
         this.stopJob(job);
       }
@@ -150,9 +167,16 @@ class Scheduler {
     const now = new Date();
     const timeZone = resolveConfiguredTimeZone(getSettings().timeZone);
     const hhmm = getClockTimeInTimeZone(now, timeZone);
+    const dateKey = getDateKeyInTimeZone(now, timeZone);
 
     for (const job of this.jobs.values()) {
-      if (job.def.type === "daily" && job.def.enabled && job.def.time === hhmm) {
+      if (
+        job.def.type === "daily" &&
+        job.def.enabled &&
+        job.def.time === hhmm &&
+        job.lastDailyTriggerDate !== dateKey
+      ) {
+        job.lastDailyTriggerDate = dateKey;
         this.executeJob(job);
       }
     }
@@ -164,7 +188,7 @@ class Scheduler {
         ? `every ${job.def.intervalMs}ms`
         : `daily@${job.def.time}`;
 
-    bus.emit("schedule:triggered", {
+    bus.emit(BUS_EVENTS.SCHEDULE_TRIGGERED, {
       jobId: job.def.id,
       cronExpr,
     });

@@ -1,7 +1,7 @@
 import { Notification } from "electron";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
-import { bus } from "../event-bus.js";
+import { BUS_EVENTS, bus } from "../event-bus.js";
 
 const parameters = Type.Object({
   title: Type.String({ description: "通知标题" }),
@@ -27,7 +27,7 @@ export const notifyUserTool: AgentTool<typeof parameters, NotifyDetails> = {
       notification.show();
     }
 
-    bus.emit("notification:sent", { title, body });
+    bus.emit(BUS_EVENTS.NOTIFICATION_SENT, { title, body });
 
     return {
       content: [

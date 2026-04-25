@@ -3,9 +3,11 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type {
   MemoryAddInput,
+  MemoryListSort,
   MemoryMetadata,
   MemoryRecord,
 } from "../../shared/contracts.js";
+import { normalizeMemoryMetadata } from "./metadata.js";
 
 type MemoryRow = {
   id: number;
@@ -13,6 +15,9 @@ type MemoryRow = {
   embedding: string;
   metadata: string | null;
   created_at: string;
+  match_count: number | null;
+  feedback_score: number | null;
+  last_matched_at: string | null;
 };
 
 type MemoryMetaRow = {
@@ -21,6 +26,7 @@ type MemoryMetaRow = {
 
 export type MemoryStoreStats = {
   totalMemories: number;
+  totalMatches: number;
   indexedModelId: string | null;
   lastIndexedAt: string | null;
   lastRebuiltAt: string | null;
@@ -32,11 +38,24 @@ export type StoredMemoryCandidate = {
   embedding: string;
   metadata: MemoryMetadata | null;
   createdAt: string;
+  matchCount: number;
+  feedbackScore: number;
+  lastMatchedAt: string | null;
 };
 
 export type StoredMemoryEmbeddingUpdate = {
   id: number;
   embedding: number[];
+};
+
+const MEMORY_LIST_ORDER_BY: Record<MemoryListSort, string> = {
+  created_desc: "created_at DESC, id DESC",
+  last_matched_desc:
+    "last_matched_at IS NULL ASC, last_matched_at DESC, created_at DESC, id DESC",
+  match_count_desc: "match_count DESC, created_at DESC, id DESC",
+  feedback_score_desc: "feedback_score DESC, created_at DESC, id DESC",
+  confidence_desc:
+    "(match_count + feedback_score) DESC, match_count DESC, created_at DESC, id DESC",
 };
 
 function ensureParentDir(filePath: string): void {
@@ -49,10 +68,7 @@ function parseMetadata(value: string | null): MemoryMetadata | null {
   }
 
   try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object"
-      ? (parsed as MemoryMetadata)
-      : null;
+    return normalizeMemoryMetadata(JSON.parse(value) as unknown);
   } catch {
     return null;
   }
@@ -64,6 +80,9 @@ function normalizeRecord(row: MemoryRow): MemoryRecord {
     content: row.content,
     metadata: parseMetadata(row.metadata),
     createdAt: row.created_at,
+    matchCount: row.match_count ?? 0,
+    feedbackScore: row.feedback_score ?? 0,
+    lastMatchedAt: row.last_matched_at ?? null,
   };
 }
 
@@ -81,6 +100,9 @@ export class MemoryStore {
         content TEXT NOT NULL,
         embedding TEXT NOT NULL,
         metadata TEXT,
+        match_count INTEGER NOT NULL DEFAULT 0,
+        feedback_score INTEGER NOT NULL DEFAULT 0,
+        last_matched_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -93,6 +115,9 @@ export class MemoryStore {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    this.ensureColumn("memories", "match_count", "INTEGER NOT NULL DEFAULT 0");
+    this.ensureColumn("memories", "feedback_score", "INTEGER NOT NULL DEFAULT 0");
+    this.ensureColumn("memories", "last_matched_at", "DATETIME");
   }
 
   getPath(): string {
@@ -104,8 +129,9 @@ export class MemoryStore {
     embedding: number[],
     modelId: string,
   ): MemoryRecord {
-    const metadataJson = input.metadata
-      ? JSON.stringify(input.metadata)
+    const normalizedMetadata = normalizeMemoryMetadata(input.metadata);
+    const metadataJson = normalizedMetadata
+      ? JSON.stringify(normalizedMetadata)
       : null;
     const embeddingJson = JSON.stringify(embedding);
     const insert = this.db.prepare(`
@@ -119,6 +145,7 @@ export class MemoryStore {
     const row = this.db
       .prepare(`
         SELECT id, content, embedding, metadata, created_at
+          , match_count, feedback_score, last_matched_at
         FROM memories
         WHERE id = ?
       `)
@@ -151,10 +178,11 @@ export class MemoryStore {
         }>,
       ) => {
         for (const entry of batch) {
+          const normalizedMetadata = normalizeMemoryMetadata(entry.input.metadata);
           insert.run(
             entry.input.content,
             JSON.stringify(entry.embedding),
-            entry.input.metadata ? JSON.stringify(entry.input.metadata) : null,
+            normalizedMetadata ? JSON.stringify(normalizedMetadata) : null,
           );
         }
       },
@@ -171,6 +199,7 @@ export class MemoryStore {
     const rows = this.db
       .prepare(`
         SELECT id, content, embedding, metadata, created_at
+          , match_count, feedback_score, last_matched_at
         FROM memories
         ORDER BY created_at DESC
         LIMIT ?
@@ -183,6 +212,9 @@ export class MemoryStore {
       embedding: row.embedding,
       metadata: parseMetadata(row.metadata),
       createdAt: row.created_at,
+      matchCount: row.match_count ?? 0,
+      feedbackScore: row.feedback_score ?? 0,
+      lastMatchedAt: row.last_matched_at ?? null,
     }));
   }
 
@@ -190,6 +222,7 @@ export class MemoryStore {
     const rows = this.db
       .prepare(`
         SELECT id, content, embedding, metadata, created_at
+          , match_count, feedback_score, last_matched_at
         FROM memories
         ORDER BY id ASC
       `)
@@ -201,7 +234,67 @@ export class MemoryStore {
       embedding: row.embedding,
       metadata: parseMetadata(row.metadata),
       createdAt: row.created_at,
+      matchCount: row.match_count ?? 0,
+      feedbackScore: row.feedback_score ?? 0,
+      lastMatchedAt: row.last_matched_at ?? null,
     }));
+  }
+
+  listMemories(input: {
+    sort: MemoryListSort;
+    limit: number;
+  }): MemoryRecord[] {
+    const orderBy = MEMORY_LIST_ORDER_BY[input.sort];
+    const rows = this.db
+      .prepare(`
+        SELECT id, content, embedding, metadata, created_at
+          , match_count, feedback_score, last_matched_at
+        FROM memories
+        ORDER BY ${orderBy}
+        LIMIT ?
+      `)
+      .all(input.limit) as MemoryRow[];
+
+    return rows.map(normalizeRecord);
+  }
+
+  recordMatches(memoryIds: number[]): void {
+    const uniqueIds = Array.from(
+      new Set(memoryIds.filter((id) => Number.isInteger(id) && id > 0)),
+    );
+    if (uniqueIds.length === 0) {
+      return;
+    }
+
+    const update = this.db.prepare(`
+      UPDATE memories
+      SET
+        match_count = match_count + 1,
+        last_matched_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    const transaction = this.db.transaction((ids: number[]) => {
+      for (const id of ids) {
+        update.run(id);
+      }
+    });
+
+    transaction(uniqueIds);
+  }
+
+  adjustFeedback(memoryId: number, delta: number): boolean {
+    if (!Number.isInteger(memoryId) || memoryId <= 0 || !Number.isFinite(delta)) {
+      return false;
+    }
+
+    const result = this.db
+      .prepare(`
+        UPDATE memories
+        SET feedback_score = feedback_score + ?
+        WHERE id = ?
+      `)
+      .run(Math.trunc(delta), memoryId);
+    return result.changes > 0;
   }
 
   rebuildEmbeddings(
@@ -238,11 +331,17 @@ export class MemoryStore {
 
   getStats(): MemoryStoreStats {
     const row = this.db
-      .prepare(`SELECT COUNT(*) as total FROM memories`)
-      .get() as { total: number };
+      .prepare(`
+        SELECT
+          COUNT(*) as total,
+          COALESCE(SUM(match_count), 0) as totalMatches
+        FROM memories
+      `)
+      .get() as { total: number; totalMatches: number };
 
     return {
       totalMemories: row.total,
+      totalMatches: row.totalMatches,
       indexedModelId: this.getMeta("indexed_model_id"),
       lastIndexedAt: this.getMeta("last_indexed_at"),
       lastRebuiltAt: this.getMeta("last_rebuilt_at"),
@@ -259,6 +358,17 @@ export class MemoryStore {
       .get(key) as MemoryMetaRow | undefined;
 
     return row?.value ?? null;
+  }
+
+  private ensureColumn(tableName: string, columnName: string, ddl: string): void {
+    const columns = this.db
+      .prepare(`PRAGMA table_info(${tableName})`)
+      .all() as Array<{ name: string }>;
+    if (columns.some((column) => column.name === columnName)) {
+      return;
+    }
+
+    this.db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${ddl}`);
   }
 
   private setMeta(key: string, value: string): void {

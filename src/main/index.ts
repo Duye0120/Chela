@@ -70,7 +70,7 @@ function registerIpcHandlers() {
 registerProcessLogging();
 
 app.whenReady()
-  .then(() => {
+  .then(async () => {
     migrateLegacyUserData();
     applyGlobalNetworkSettings();
     appLogger.info({
@@ -80,7 +80,7 @@ app.whenReady()
 
     const recoveredRuns = harnessRuntime.hydrateFromDisk();
     recoverInterruptedRuns(recoveredRuns);
-    startBackgroundServices();
+    await startBackgroundServices();
     registerIpcHandlers();
     const window = createMainWindow();
     setTerminalWindow(window);

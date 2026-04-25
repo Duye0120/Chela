@@ -11,6 +11,9 @@ export function registerMemoryIpc(): void {
   handleIpc(IPC_CHANNELS.memorySearch, async (_event, query: string, limit?: number) =>
     memoryService.search(query, limit),
   );
+  handleIpc(IPC_CHANNELS.memoryList, async (_event, input) =>
+    memoryService.list(input),
+  );
   handleIpc(IPC_CHANNELS.memoryGetStats, async () =>
     memoryService.getStats(),
   );

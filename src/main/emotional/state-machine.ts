@@ -9,7 +9,7 @@
 import { app } from "electron";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { bus } from "../event-bus.js";
+import { BUS_EVENTS, bus } from "../event-bus.js";
 import { appLogger } from "../logger.js";
 
 // ---------------------------------------------------------------------------
@@ -237,7 +237,7 @@ export function evaluateAndTransition(): EmotionalState {
       locked: false,
     };
 
-    bus.emit("emotion:changed", {
+    bus.emit(BUS_EVENTS.EMOTION_CHANGED, {
       from,
       to: next.mode,
       trigger: signals.map((s) => s.type).join(", "),
@@ -333,9 +333,9 @@ export function initEmotionalStateMachine(): void {
   state = loadState();
 
   const disposers = [
-    bus.on("message:user", onUserMessage),
-    bus.on("tool:failed", onToolFailed),
-    bus.on("run:completed", onRunCompleted),
+    bus.on(BUS_EVENTS.MESSAGE_USER, onUserMessage),
+    bus.on(BUS_EVENTS.TOOL_FAILED, onToolFailed),
+    bus.on(BUS_EVENTS.RUN_COMPLETED, onRunCompleted),
   ];
 
   teardownEmotionalStateMachine = () => {

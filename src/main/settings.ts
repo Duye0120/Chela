@@ -12,8 +12,47 @@ import {
 } from "../shared/memory.js";
 import { DEFAULT_MODEL_ENTRY_ID } from "../shared/provider-directory.js";
 import { normalizeTimeZoneSetting, SYSTEM_TIME_ZONE } from "../shared/timezone.js";
+import { findExecutableOnPath } from "./shell.js";
 
 const SETTINGS_FILE = "settings.json";
+const BUILTIN_TERMINAL_SHELLS = new Set([
+  "default",
+  "powershell",
+  "cmd",
+  "git-bash",
+  "wsl",
+]);
+const ALLOWED_CUSTOM_THEME_KEYS = new Set([
+  "--background",
+  "--foreground",
+  "--card",
+  "--card-foreground",
+  "--popover",
+  "--popover-foreground",
+  "--primary",
+  "--primary-foreground",
+  "--secondary",
+  "--secondary-foreground",
+  "--muted",
+  "--muted-foreground",
+  "--accent",
+  "--accent-foreground",
+  "--destructive",
+  "--destructive-foreground",
+  "--border",
+  "--input",
+  "--ring",
+]);
+const ALLOWED_CUSTOM_THEME_PREFIXES = [
+  "--chela-",
+  "--color-",
+  "--terminal-ansi-",
+  "--radius-",
+  "--shadow-",
+  "--motion-",
+] as const;
+const MAX_CUSTOM_THEME_ENTRIES = 160;
+const MAX_CUSTOM_THEME_VALUE_LENGTH = 256;
 
 function getDefaultWorkspacePath(): string {
   try {
@@ -261,6 +300,80 @@ function normalizeMemorySettings(
   };
 }
 
+function isAllowedCustomThemeKey(key: string): boolean {
+  return (
+    ALLOWED_CUSTOM_THEME_KEYS.has(key) ||
+    ALLOWED_CUSTOM_THEME_PREFIXES.some((prefix) => key.startsWith(prefix))
+  );
+}
+
+function normalizeCustomTheme(
+  source: unknown,
+): Settings["customTheme"] {
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return null;
+  }
+
+  const nextTheme: Record<string, string> = {};
+  let acceptedCount = 0;
+
+  for (const [rawKey, rawValue] of Object.entries(source)) {
+    if (acceptedCount >= MAX_CUSTOM_THEME_ENTRIES) {
+      break;
+    }
+
+    if (typeof rawValue !== "string") {
+      continue;
+    }
+
+    const key = rawKey.startsWith("--") ? rawKey : `--${rawKey}`;
+    if (!isAllowedCustomThemeKey(key)) {
+      continue;
+    }
+
+    const value = rawValue.trim();
+    if (
+      !value ||
+      value.length > MAX_CUSTOM_THEME_VALUE_LENGTH ||
+      /[\0\r\n]/.test(value)
+    ) {
+      continue;
+    }
+
+    nextTheme[key] = value;
+    acceptedCount += 1;
+  }
+
+  return Object.keys(nextTheme).length > 0
+    ? (nextTheme as Settings["customTheme"])
+    : null;
+}
+
+function normalizeTerminalShell(value: unknown): Settings["terminal"]["shell"] {
+  if (typeof value !== "string") {
+    return DEFAULT_SETTINGS.terminal.shell;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || /[\0\r\n]/.test(trimmed)) {
+    return DEFAULT_SETTINGS.terminal.shell;
+  }
+
+  if (BUILTIN_TERMINAL_SHELLS.has(trimmed)) {
+    return trimmed;
+  }
+
+  if (path.isAbsolute(trimmed)) {
+    return fs.existsSync(trimmed) ? trimmed : DEFAULT_SETTINGS.terminal.shell;
+  }
+
+  if (trimmed.includes("/") || trimmed.includes("\\") || /\s/.test(trimmed)) {
+    return DEFAULT_SETTINGS.terminal.shell;
+  }
+
+  return findExecutableOnPath([trimmed]) ?? DEFAULT_SETTINGS.terminal.shell;
+}
+
 function mergeSettings(source?: Partial<Settings> | null): Settings {
   const sourceWithLegacy = (source ?? {}) as Partial<Settings> & {
     defaultModel?: unknown;
@@ -292,9 +405,11 @@ function mergeSettings(source?: Partial<Settings> | null): Settings {
     workerModelId: modelRouting.utility.modelId,
     thinkingLevel: normalizeThinkingLevel(sourceWithLegacy.thinkingLevel),
     timeZone: normalizeTimeZoneSetting(sourceWithLegacy.timeZone),
+    customTheme: normalizeCustomTheme(sourceWithLegacy.customTheme),
     terminal: {
       ...DEFAULT_SETTINGS.terminal,
       ...source?.terminal,
+      shell: normalizeTerminalShell(source?.terminal?.shell),
     },
     ui: {
       ...DEFAULT_SETTINGS.ui,

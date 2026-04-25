@@ -7,10 +7,19 @@
 // ---------------------------------------------------------------------------
 
 import { app } from "electron";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
-import { bus } from "./event-bus.js";
+import { BUS_EVENTS, bus } from "./event-bus.js";
 import { appLogger } from "./logger.js";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // M29: 10 MB 后轮转
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,6 +72,13 @@ function appendMetric(metric: RunMetrics): void {
   const filePath = getMetricsPath();
   ensureDir(filePath);
   try {
+    if (existsSync(filePath) && statSync(filePath).size > MAX_FILE_SIZE) {
+      try {
+        renameSync(filePath, filePath.replace(/\.jsonl$/, `.${Date.now()}.jsonl`));
+      } catch {
+        // 轮转失败不阻塞写入
+      }
+    }
     appendFileSync(filePath, JSON.stringify(metric) + "\n", "utf-8");
   } catch (err) {
     appLogger.warn({
@@ -130,7 +146,7 @@ export function initMetrics(): void {
   initialized = true;
 
   const disposers = [
-    bus.on("run:started", ({ runId, sessionId, modelEntryId }) => {
+    bus.on(BUS_EVENTS.RUN_STARTED, ({ runId, sessionId, modelEntryId }) => {
       activeRuns.set(runId, {
         sessionId,
         modelEntryId,
@@ -140,12 +156,12 @@ export function initMetrics(): void {
       });
     }),
 
-    bus.on("tool:completed", ({ runId }) => {
+    bus.on(BUS_EVENTS.TOOL_COMPLETED, ({ runId }) => {
       const tracker = activeRuns.get(runId);
       if (tracker) tracker.toolCalls++;
     }),
 
-    bus.on("tool:failed", ({ runId }) => {
+    bus.on(BUS_EVENTS.TOOL_FAILED, ({ runId }) => {
       const tracker = activeRuns.get(runId);
       if (tracker) {
         tracker.toolCalls++;
@@ -153,7 +169,7 @@ export function initMetrics(): void {
       }
     }),
 
-    bus.on("run:completed", ({ runId, finalState }) => {
+    bus.on(BUS_EVENTS.RUN_COMPLETED, ({ runId, finalState }) => {
       const tracker = activeRuns.get(runId);
       if (!tracker) return;
 

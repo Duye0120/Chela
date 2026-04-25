@@ -9,7 +9,7 @@
 import { app } from "electron";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { bus } from "../event-bus.js";
+import { BUS_EVENTS, bus } from "../event-bus.js";
 import { scheduler, type ScheduleJobCallback } from "../scheduler.js";
 import { appLogger } from "../logger.js";
 
@@ -205,7 +205,7 @@ async function runAllChecks(): Promise<DiagnosisReport> {
         try {
           repaired = await check.repair();
           if (repaired) {
-            bus.emit("diagnosis:repaired", {
+            bus.emit(BUS_EVENTS.DIAGNOSIS_REPAIRED, {
               checkId: check.id,
               message: `${check.name} 已自动修复`,
             });
@@ -216,9 +216,9 @@ async function runAllChecks(): Promise<DiagnosisReport> {
       }
 
       if (status.healthy) {
-        bus.emit("diagnosis:healthy", { checkId: check.id });
+        bus.emit(BUS_EVENTS.DIAGNOSIS_HEALTHY, { checkId: check.id });
       } else {
-        bus.emit("diagnosis:alert", {
+        bus.emit(BUS_EVENTS.DIAGNOSIS_ALERT, {
           checkId: check.id,
           message: status.message,
           severity: status.severity,
@@ -278,10 +278,12 @@ const diagnosisCallback: ScheduleJobCallback = async () => {
   }
 };
 
+const SELF_DIAGNOSIS_JOB_ID = "self-diagnosis";
+
 export function initSelfDiagnosis(): void {
   scheduler.register(
     {
-      id: "self-diagnosis",
+      id: SELF_DIAGNOSIS_JOB_ID,
       name: "系统自我诊断",
       enabled: true,
       type: "interval",
@@ -292,4 +294,8 @@ export function initSelfDiagnosis(): void {
 
   // 启动后立即跑一次
   void runAllChecks();
+}
+
+export function stopSelfDiagnosis(): void {
+  scheduler.unregister(SELF_DIAGNOSIS_JOB_ID);
 }
