@@ -199,7 +199,7 @@ type DeepPartialSettings = {
 function applyCustomThemeVariables(
   root: HTMLElement,
   previousKeys: string[],
-  nextTheme: Record<string, string> | null,
+  nextTheme: Settings["customTheme"],
 ) {
   previousKeys.forEach((key) => root.style.removeProperty(key));
 

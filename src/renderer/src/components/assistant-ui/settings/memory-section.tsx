@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { MemoryStats, Settings } from "@shared/contracts";
+import type {
+  MemoryListSort,
+  MemoryRecord,
+  MemoryStats,
+  Settings,
+} from "@shared/contracts";
 import type { MemoryEmbeddingModelId } from "@shared/memory";
 import { MEMORY_EMBEDDING_MODELS } from "@shared/memory";
 import { formatDateTimeInTimeZone } from "@shared/timezone";
@@ -55,6 +60,24 @@ function MetaItem({
   );
 }
 
+const MEMORY_SORT_OPTIONS: Array<{ value: MemoryListSort; label: string }> = [
+  { value: "confidence_desc", label: "综合分最高" },
+  { value: "match_count_desc", label: "命中次数最高" },
+  { value: "feedback_score_desc", label: "反馈分最高" },
+  { value: "last_matched_desc", label: "最近命中" },
+  { value: "created_desc", label: "最近创建" },
+];
+
+function getMemoryTags(memory: MemoryRecord): string[] {
+  return Array.isArray(memory.metadata?.tags) ? memory.metadata.tags : [];
+}
+
+function getMemorySource(memory: MemoryRecord): string {
+  return typeof memory.metadata?.source === "string"
+    ? memory.metadata.source
+    : "memory";
+}
+
 export function MemorySection({
   settings,
   timeZone,
@@ -68,7 +91,11 @@ export function MemorySection({
 }) {
   const desktopApi = window.desktopApi;
   const [stats, setStats] = useState<MemoryStats | null>(null);
+  const [memories, setMemories] = useState<MemoryRecord[]>([]);
+  const [memorySort, setMemorySort] =
+    useState<MemoryListSort>("confidence_desc");
   const [loading, setLoading] = useState(false);
+  const [memoriesLoading, setMemoriesLoading] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +120,31 @@ export function MemorySection({
   useEffect(() => {
     void loadStats();
   }, [loadStats, settings.memory.embeddingModelId]);
+
+  const loadMemories = useCallback(async () => {
+    if (!desktopApi) {
+      return;
+    }
+
+    setMemoriesLoading(true);
+    setError(null);
+
+    try {
+      const nextMemories = await desktopApi.memory.list({
+        sort: memorySort,
+        limit: 80,
+      });
+      setMemories(nextMemories);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "读取 Memory 列表失败");
+    } finally {
+      setMemoriesLoading(false);
+    }
+  }, [desktopApi, memorySort]);
+
+  useEffect(() => {
+    void loadMemories();
+  }, [loadMemories]);
 
   const selectedModel = useMemo(
     () =>
@@ -125,13 +177,13 @@ export function MemorySection({
     setError(null);
     try {
       await desktopApi.memory.rebuild();
-      await loadStats();
+      await Promise.all([loadStats(), loadMemories()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "重建 Memory 失败");
     } finally {
       setRebuilding(false);
     }
-  }, [desktopApi, loadStats]);
+  }, [desktopApi, loadMemories, loadStats]);
 
   const handleMemorySettingChange = useCallback(
     (key: keyof Settings["memory"], value: any) => {
@@ -285,10 +337,14 @@ export function MemorySection({
       <SettingsCard>
         <SettingsBlock label="操作与统计">
           <div className="space-y-4">
-            <div className="grid gap-2 sm:grid-cols-4">
+            <div className="grid gap-2 sm:grid-cols-5">
               <MetaItem
                 label="记忆总数"
                 value={loading && !stats ? "加载中…" : String(stats?.totalMemories ?? 0)}
+              />
+              <MetaItem
+                label="累计命中"
+                value={loading && !stats ? "加载中…" : String(stats?.totalMatches ?? 0)}
               />
               <MetaItem
                 label="Worker 状态"
@@ -309,10 +365,10 @@ export function MemorySection({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => void loadStats()}
-                disabled={loading || rebuilding}
+                onClick={() => void Promise.all([loadStats(), loadMemories()])}
+                disabled={loading || memoriesLoading || rebuilding}
               >
-                {loading ? "刷新中…" : "刷新状态"}
+                {loading || memoriesLoading ? "刷新中…" : "刷新状态"}
               </Button>
               <Button
                 type="button"
@@ -332,6 +388,90 @@ export function MemorySection({
                 {error}
               </p>
             ) : null}
+          </div>
+        </SettingsBlock>
+      </SettingsCard>
+
+      <SettingsCard>
+        <SettingsBlock
+          label="记忆列表"
+          hint="查看本地向量记忆与命中强化信号。"
+        >
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="sm:w-[220px]">
+                <FieldSelect
+                  value={memorySort}
+                  onChange={(value) => setMemorySort(value as MemoryListSort)}
+                  options={MEMORY_SORT_OPTIONS}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void loadMemories()}
+                disabled={memoriesLoading}
+              >
+                {memoriesLoading ? "刷新中…" : "刷新列表"}
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {memoriesLoading && memories.length === 0 ? (
+                <div className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-4 py-5 text-[12px] text-muted-foreground">
+                  正在读取记忆…
+                </div>
+              ) : memories.length === 0 ? (
+                <div className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-4 py-5 text-[12px] text-muted-foreground">
+                  当前没有已保存的向量记忆。
+                </div>
+              ) : (
+                memories.map((memory) => {
+                  const tags = getMemoryTags(memory);
+                  const confidenceScore = memory.matchCount + memory.feedbackScore;
+
+                  return (
+                    <div
+                      key={memory.id}
+                      className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-4 py-3"
+                    >
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <p className="text-[13px] leading-5 text-foreground">
+                          {memory.content}
+                        </p>
+                        <div className="shrink-0 text-[12px] text-muted-foreground">
+                          综合 {confidenceScore}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                        <span>命中 {memory.matchCount}</span>
+                        <span>反馈 {memory.feedbackScore}</span>
+                        <span>来源 {getMemorySource(memory)}</span>
+                        <span>
+                          创建 {formatTimestamp(memory.createdAt, timeZone)}
+                        </span>
+                        <span>
+                          最近命中 {formatTimestamp(memory.lastMatchedAt, timeZone)}
+                        </span>
+                      </div>
+                      {tags.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {tags.map((tag) => (
+                            <span
+                              key={`${memory.id}:${tag}`}
+                              className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg-active)] px-2 py-0.5 text-[11px] text-muted-foreground"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </SettingsBlock>
       </SettingsCard>

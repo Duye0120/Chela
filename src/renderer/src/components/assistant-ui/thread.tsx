@@ -1402,9 +1402,9 @@ const runChangeLabels: Record<
   RunChangeSummary["files"][number]["changeKind"],
   string
 > = {
-  added: "新增",
-  updated: "调整",
-  reverted: "恢复",
+  added: "已新增",
+  updated: "已编辑",
+  reverted: "已恢复",
 };
 
 const runChangeStatusLabels: Record<
@@ -1416,25 +1416,16 @@ const runChangeStatusLabels: Record<
   untracked: "新增",
 };
 
+const numberFormatter = new Intl.NumberFormat("zh-CN");
+
 function formatSignedCount(value: number, sign: "+" | "-") {
-  return `${sign}${new Intl.NumberFormat("zh-CN").format(value)}`;
+  return `${sign}${numberFormatter.format(value)}`;
 }
 
-const RunChangeStatusPill: FC<{
-  status: RunChangeSummary["files"][number]["status"];
-}> = ({ status }) => {
-  const variant = {
-    modified: "warning",
-    deleted: "destructive",
-    untracked: "success",
-  } as const;
-
-  return (
-    <Badge variant={variant[status]} className="justify-center px-2.5">
-      {runChangeStatusLabels[status]}
-    </Badge>
-  );
-};
+function getFileName(filePath: string) {
+  const normalized = filePath.replace(/\\/g, "/");
+  return normalized.split("/").pop() || normalized;
+}
 
 const AssistantMessageRunChangeSummary: FC = () => {
   const summary = useAuiState((s) => {
@@ -1451,84 +1442,82 @@ const AssistantMessageRunChangeSummary: FC = () => {
     return null;
   }
 
+  const primaryFile = summary.files[0];
+  const summaryTarget =
+    summary.fileCount === 1 ? getFileName(primaryFile.path) : `${summary.fileCount} 个文件`;
+  const summaryLabel =
+    summary.fileCount === 1 ? runChangeLabels[primaryFile.changeKind] : "已编辑";
+
   return (
-    <div className="mt-4 rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)]/92 p-3 shadow-[0_8px_20px_rgba(15,23,42,0.05)]">
+    <div className="mt-3 max-w-full">
       <button
         type="button"
         onClick={() => setExpanded((current) => !current)}
-        className="flex w-full items-start justify-between gap-3 rounded-[calc(var(--radius-shell)-4px)] px-1 py-1 text-left transition hover:bg-[color:var(--color-control-bg-hover)]/75"
+        className="inline-flex max-w-full items-center gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-1.5 text-left shadow-[var(--color-control-shadow)] transition hover:bg-[color:var(--color-control-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--color-control-focus-ring)]"
+        aria-expanded={expanded}
       >
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[14px] font-semibold text-[color:var(--chela-text-primary)]">
-              {summary.fileCount} 个文件已更改
-            </p>
-            <Badge variant="secondary" className="px-2 py-0.5 text-[10px]">
-              本轮增量
-            </Badge>
-          </div>
-          <p className="mt-1 text-[12px] leading-5 text-[color:var(--chela-text-tertiary)]">
-            这张卡片展示当前回复带来的代码改动，位置固定在消息正文底部。
-          </p>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <div className="rounded-[calc(var(--radius-shell)-2px)] bg-[color:var(--color-control-bg)] px-3 py-2">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-text-secondary)]">
-                文件
-              </p>
-              <p className="mt-2 text-base font-semibold text-foreground">
-                {summary.fileCount}
-              </p>
-            </div>
-            <div className="rounded-[calc(var(--radius-shell)-2px)] bg-[color:var(--color-control-bg)] px-3 py-2">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-text-secondary)]">
-                新增
-              </p>
-              <p className="mt-2 text-base font-semibold text-[color:var(--color-diff-add-text)]">
-                {formatSignedCount(summary.additions, "+")}
-              </p>
-            </div>
-            <div className="rounded-[calc(var(--radius-shell)-2px)] bg-[color:var(--color-control-bg)] px-3 py-2">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-text-secondary)]">
-                删除
-              </p>
-              <p className="mt-2 text-base font-semibold text-[color:var(--color-diff-del-text)]">
-                {formatSignedCount(summary.deletions, "-")}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <span className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-control-bg)] text-[color:var(--chela-text-tertiary)]">
-          {expanded ? (
-            <ChevronUpIcon className="size-4" />
-          ) : (
-            <ChevronDownIcon className="size-4" />
-          )}
+        <span className="shrink-0 text-[13px] font-medium text-[color:var(--chela-text-secondary)]">
+          {summaryLabel}
         </span>
+        <code className="min-w-0 truncate font-mono text-[13px] font-medium text-[color:var(--chela-text-primary)]">
+          {summaryTarget}
+        </code>
+        <span className="shrink-0 font-mono text-[12px] font-semibold text-[color:var(--color-diff-add-text)]">
+          {formatSignedCount(summary.additions, "+")}
+        </span>
+        <span className="shrink-0 font-mono text-[12px] font-semibold text-[color:var(--color-diff-del-text)]">
+          {formatSignedCount(summary.deletions, "-")}
+        </span>
+        <ChevronDownIcon
+          className={cn(
+            "size-3.5 shrink-0 text-[color:var(--chela-text-tertiary)] transition-transform duration-200",
+            expanded && "rotate-180",
+          )}
+        />
       </button>
 
       {expanded ? (
-        <div className="mt-3 space-y-2">
-          {summary.files.map((file) => (
-            <div
-              key={`${file.changeKind}:${file.path}`}
-              className="flex flex-wrap items-center gap-2 rounded-[calc(var(--radius-shell)-2px)] bg-[color:var(--color-control-bg)] px-3 py-2"
-            >
-              <Badge variant="secondary" className="px-2 py-0.5 text-[10px]">
-                {runChangeLabels[file.changeKind]}
-              </Badge>
-              <RunChangeStatusPill status={file.status} />
-              <code className="min-w-0 flex-1 truncate text-[12px] leading-5 text-foreground">
-                {file.path}
-              </code>
-              <span className="text-[12px] font-medium text-[color:var(--color-diff-add-text)]">
-                {formatSignedCount(file.additions, "+")}
-              </span>
-              <span className="text-[12px] font-medium text-[color:var(--color-diff-del-text)]">
-                {formatSignedCount(file.deletions, "-")}
-              </span>
-            </div>
-          ))}
+        <div className="mt-2 overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] shadow-[var(--color-control-shadow)]">
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="flex w-full items-center gap-2 bg-[color:var(--color-control-bg)] px-3 py-2 text-left transition hover:bg-[color:var(--color-control-bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--color-control-focus-ring)]"
+          >
+            <span className="text-[13px] font-medium text-[color:var(--chela-text-secondary)]">
+              已编辑的文件
+            </span>
+            <span className="rounded-full bg-[color:var(--color-control-panel-bg)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--chela-text-tertiary)]">
+              {summary.fileCount}
+            </span>
+            <ChevronUpIcon className="ml-auto size-3.5 text-[color:var(--chela-text-tertiary)]" />
+          </button>
+
+          <div className="max-h-[260px] overflow-y-auto py-1">
+            {summary.files.map((file) => (
+              <div
+                key={`${file.changeKind}:${file.path}`}
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2 text-[12px] leading-5 transition hover:bg-[color:var(--color-control-bg)]"
+              >
+                <span className="shrink-0 rounded-full bg-[color:var(--color-control-bg)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--chela-text-secondary)]">
+                  {runChangeLabels[file.changeKind]}
+                </span>
+                <div className="min-w-0">
+                  <code className="block truncate font-mono text-[12px] font-medium text-[color:var(--chela-text-primary)]">
+                    {file.path}
+                  </code>
+                  <span className="text-[11px] text-[color:var(--chela-text-tertiary)]">
+                    {runChangeStatusLabels[file.status]}
+                  </span>
+                </div>
+                <span className="font-mono text-[12px] font-semibold text-[color:var(--color-diff-add-text)]">
+                  {formatSignedCount(file.additions, "+")}
+                </span>
+                <span className="font-mono text-[12px] font-semibold text-[color:var(--color-diff-del-text)]">
+                  {formatSignedCount(file.deletions, "-")}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>

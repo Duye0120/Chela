@@ -4,6 +4,7 @@ import {
   memo,
   useState,
   useEffect,
+  useMemo,
   createContext,
   useContext,
   type ComponentPropsWithoutRef,
@@ -113,8 +114,10 @@ function ModelSelectorTrigger({
 
 function ModelSelectorValue() {
   const { models, value } = useModelSelectorContext();
-  const selectedModel =
-    value != null ? models.find((model) => model.id === value) : undefined;
+  const selectedModel = useMemo(
+    () => (value != null ? models.find((model) => model.id === value) : undefined),
+    [models, value],
+  );
 
   if (!selectedModel) {
     return <span className="text-muted-foreground truncate font-medium text-[12px]">选择模型...</span>;
@@ -146,24 +149,27 @@ function ModelSelectorContent({
   ...props
 }: ModelSelectorContentProps) {
   const { models } = useModelSelectorContext();
-  const groupedModels = models.reduce<
-    Array<{ id: string; label: string; models: ModelOption[] }>
-  >((groups, model) => {
-    const groupId = model.groupId ?? "__default__";
-    const existingGroup = groups.find((group) => group.id === groupId);
+  const groupedModels = useMemo(() => {
+    const groups = new Map<string, { id: string; label: string; models: ModelOption[] }>();
 
-    if (existingGroup) {
-      existingGroup.models.push(model);
-      return groups;
+    for (const model of models) {
+      const groupId = model.groupId ?? "__default__";
+      const existingGroup = groups.get(groupId);
+
+      if (existingGroup) {
+        existingGroup.models.push(model);
+        continue;
+      }
+
+      groups.set(groupId, {
+        id: groupId,
+        label: model.groupLabel ?? "",
+        models: [model],
+      });
     }
 
-    groups.push({
-      id: groupId,
-      label: model.groupLabel ?? "",
-      models: [model],
-    });
-    return groups;
-  }, []);
+    return [...groups.values()];
+  }, [models]);
 
   return (
     <SelectContent

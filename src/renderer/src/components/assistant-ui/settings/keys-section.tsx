@@ -75,12 +75,62 @@ type SourceWorkspace = {
   baseline: string;
 };
 
+type LocalProviderPreset = {
+  id: "ollama" | "lm-studio";
+  label: string;
+  sourceName: string;
+  baseUrl: string;
+  apiKey: string;
+  model: {
+    name: string;
+    modelId: string;
+  };
+};
+
 const PROVIDER_TYPE_OPTIONS = [
   { value: "anthropic", label: "Anthropic" },
   { value: "openai", label: "OpenAI" },
   { value: "google", label: "Google" },
   { value: "openai-compatible", label: "OpenAI Compatible" },
 ] as const;
+
+const LOCAL_PROVIDER_PRESETS: LocalProviderPreset[] = [
+  {
+    id: "ollama",
+    label: "Ollama",
+    sourceName: "Ollama",
+    baseUrl: "http://localhost:11434/v1",
+    apiKey: "ollama",
+    model: {
+      name: "Ollama qwen2.5 7B",
+      modelId: "qwen2.5:7b",
+    },
+  },
+  {
+    id: "lm-studio",
+    label: "LM Studio",
+    sourceName: "LM Studio",
+    baseUrl: "http://localhost:1234/v1",
+    apiKey: "lm-studio",
+    model: {
+      name: "LM Studio Local Model",
+      modelId: "local-model",
+    },
+  },
+];
+
+const LOCAL_OPENAI_COMPAT_PROVIDER_OPTIONS = JSON.stringify(
+  {
+    compat: {
+      supportsStore: false,
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: false,
+      maxTokensField: "max_tokens",
+    },
+  },
+  null,
+  2,
+);
 
 const CAPABILITY_FIELDS = [
   { key: "vision", label: "视觉" },
@@ -343,6 +393,53 @@ function createNewCustomWorkspace(): SourceWorkspace {
   };
 
   workspace.baseline = serializeWorkspace(workspace);
+  return workspace;
+}
+
+function createLocalProviderWorkspace(preset: LocalProviderPreset): SourceWorkspace {
+  const sourceId = `draft-source:${preset.id}:${crypto.randomUUID()}`;
+  const modelMetadata = getDetectedMetadata(preset.model.modelId);
+  const workspace: SourceWorkspace = {
+    sourceId,
+    kind: "custom",
+    sourceDraft: {
+      name: preset.sourceName,
+      providerType: "openai-compatible",
+      mode: "custom",
+      enabled: true,
+      baseUrl: preset.baseUrl,
+    },
+    hasStoredCredential: false,
+    credentialMasked: "",
+    apiKeyInput: preset.apiKey,
+    entries: [
+      {
+        id: `draft-entry:${crypto.randomUUID()}`,
+        sourceId,
+        name: preset.model.name,
+        modelId: preset.model.modelId,
+        enabled: true,
+        builtin: false,
+        capabilities: {
+          vision: null,
+          imageOutput: null,
+          toolCalling: null,
+          reasoning: null,
+          embedding: null,
+        },
+        limits: {
+          contextWindow: null,
+          maxOutputTokens: null,
+        },
+        detectedCapabilities: modelMetadata.detectedCapabilities,
+        detectedLimits: modelMetadata.detectedLimits,
+        providerOptionsText: LOCAL_OPENAI_COMPAT_PROVIDER_OPTIONS,
+      },
+    ],
+    deletedEntryIds: [],
+    baseline: "",
+  };
+
   return workspace;
 }
 
@@ -615,6 +712,17 @@ export function KeysSection({
     setError(null);
   }, []);
 
+  const handleAddLocalProvider = useCallback((preset: LocalProviderPreset) => {
+    const workspace = createLocalProviderWorkspace(preset);
+    setWorkspaces((current) => ({
+      ...current,
+      [workspace.sourceId]: workspace,
+    }));
+    setSelectedSourceId(workspace.sourceId);
+    setTestResult(null);
+    setError(null);
+  }, []);
+
   const handleDeleteSource = useCallback(async () => {
     if (!desktopApi || !currentWorkspace) return;
 
@@ -765,6 +873,19 @@ export function KeysSection({
           >
             添加自定义提供商
           </Button>
+          <div className="grid grid-cols-2 gap-2">
+            {LOCAL_PROVIDER_PRESETS.map((preset) => (
+              <Button
+                key={preset.id}
+                type="button"
+                variant="outline"
+                onClick={() => handleAddLocalProvider(preset)}
+                className="h-8 rounded-[var(--radius-shell)] px-2 text-[12px]"
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">

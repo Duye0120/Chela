@@ -430,7 +430,8 @@ function buildRuntimeStatus(response: RuntimeResponse): MessageStatus {
     return {
       type: "incomplete",
       reason: "error",
-      error: response.errorMessage || "Agent 执行失败",
+      // R31: UI 只展示产品级中文文案，避免直接 dump 内部 error 字符串。
+      error: response.errorMessage || "执行遇到问题，请稍后重试。",
     };
   }
 

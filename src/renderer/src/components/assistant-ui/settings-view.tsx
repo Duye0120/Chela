@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BotIcon } from "lucide-react";
 import type { ModelEntry, ProviderSource, SoulFilesStatus } from "@shared/contracts";
 import { resolveConfiguredTimeZone } from "@shared/timezone";
@@ -52,15 +52,15 @@ function SettingsViewImpl({
   const [sources, setSources] = useState<ProviderSource[]>([]);
   const [entries, setEntries] = useState<ModelEntry[]>([]);
   const [soulStatus, setSoulStatus] = useState<SoulFilesStatus | null>(null);
-  const [directoryLoaded, setDirectoryLoaded] = useState(false);
+  const directoryLoadedRef = useRef(false);
 
   const loadDirectory = useCallback(async (force = false) => {
-    if (!desktopApi || (directoryLoaded && !force)) return;
+    if (!desktopApi || (directoryLoadedRef.current && !force)) return;
     const nextDirectory = await loadProviderDirectory(desktopApi, { force });
     setSources(nextDirectory.sources);
     setEntries(nextDirectory.entries);
-    setDirectoryLoaded(true);
-  }, [desktopApi, directoryLoaded]);
+    directoryLoadedRef.current = true;
+  }, [desktopApi]);
 
   const loadSoulStatus = useCallback(async () => {
     if (!desktopApi) return;
