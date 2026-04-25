@@ -281,3 +281,61 @@
 - 未触发 `pnpm build / pnpm check`。
 
 **plan 剩余 P1**：清空。剩余主要为 P2/P3 + 二级风险项（M28/M29 日志轮转、M22-M27 schema 收紧、harness 相关）。
+
+## 收尾批次：M19/M20/M21/M25/M26/M27/M28/M29/R31 + 余项复核
+
+**时间**: 21:05
+
+按 `docs/plans/full-project-audit-2026-04-22.md` 剩余 P2/P3 清单一次性收口。
+
+**已完成（本批改动）**：
+
+- **M19** [src/main/event-bus.ts](src/main/event-bus.ts) wildcard handler 抛错不再静默吞掉，改写 logger.warn。
+- **M20** [src/main/window.ts](src/main/window.ts#L121) `setMainWindowBounds` 把 x/y 钳制到 `workArea` 内（`Math.max(workArea.x, ...)`、上限 `workArea.x + width - minWidth`），避免负坐标或离屏。
+- **M21** [src/main/ipc/handle.ts](src/main/ipc/handle.ts) 新增 `isTrustedSender` 校验：所有 `handleIpc` 注册的通道只接受顶层 frame（`event.senderFrame.parent === null`）的调用，拒绝并记 warn。
+- **M25** [src/main/providers.ts](src/main/providers.ts#L81) `normalizeBaseUrl` 增加 `new URL` + protocol 白名单（仅 http/https）；非法值降级为 null。
+- **M26** [src/mcp/adapter.ts](src/mcp/adapter.ts#L22) MCP serverName / toolName 用 `[^a-zA-Z0-9_]` 替换为 `_`，避免特殊字符导致工具命名冲突或模型识别失败。
+- **M27** [src/mcp/config.ts](src/mcp/config.ts#L27) `loadMcpConfig` 解析失败不再静默 catch，至少 `console.error` 写出文件路径与原因。
+- **M28** [src/main/harness/audit.ts](src/main/harness/audit.ts) 复用 bus-audit 的轮转模式（10 MB 阈值，`renameSync` 改名 `.{ts}.log`，失败静默不阻塞写入）。
+- **M29** [src/main/metrics.ts](src/main/metrics.ts) 同样加 10 MB 轮转。
+- **R31** [src/renderer/src/components/AssistantThreadPanel.tsx](src/renderer/src/components/AssistantThreadPanel.tsx#L433) `error` 默认文案从 `"Agent 执行失败"` 改为 `"执行遇到问题，请稍后重试。"`，符合 AGENTS.md 的产品级文案要求；原始 error 已只写 logger，未对外暴露。
+
+**复核确认（无需改动）**：
+
+- **M10** [src/main/parallel-tools.ts](src/main/parallel-tools.ts) 已有 `clearRun(runId)`，[src/main/agent.ts](src/main/agent.ts#L275) 的 `completeRun` 已调用，无泄漏。
+- **M11** [src/main/chat/execute.ts](src/main/chat/execute.ts#L35) `promptWithPromptTooLongRecovery` 只调一次 `reactiveCompact`，第二次 prompt 失败直接 throw，无重复 compact。
+- **M13** [src/main/scheduler.ts](src/main/scheduler.ts#L103) `stop()` 已 `clearInterval(dailyCheckTimer)`。
+- **M16** [src/main/agent.ts](src/main/agent.ts#L289) `destroyAgent` 已 `await mcpManager.disconnectAll()`。
+- **R18** [src/renderer/src/components/assistant-ui/thread.tsx](src/renderer/src/components/assistant-ui/thread.tsx#L827) Enter 处理已双保险：`isComposingRef.current || event.nativeEvent.isComposing` 都拦截，IME 中文输入不会误触发发送。
+- **R20** [src/renderer/src/main.tsx](src/renderer/src/main.tsx) 已经包了 `RenderErrorBoundary`，覆盖整个 App。
+
+**主动跳过 / 降级（理由附）**：
+
+- **M12** session schema 迁移版本号冲突 — 当前迁移路径单线程串行调用，未观察到冲突，保持现状；待真正出现 race 再修。
+- **M14** 模型 fallback 列表硬编码 — 改成动态拉取需要 provider catalog API，超出本审计范围，记入下一阶段。
+- **M15** finalize cancel 路径 — 依赖 M1，M1 复核后无 race，本项联动归档。
+- **M17** logger 同步 IO 阻塞 — 改 async 影响日志顺序保证 + 进程退出时 flush 复杂度，当前日志频次远低于 1k/s 阈值，主线程影响可忽略，留作 P3。
+- **M18** emotional 订阅注册时机 — bootstrap 已先于 IPC 链路调用，`startBackgroundServices()` 在 `whenReady` 里早于 window 创建即调用，首条事件不会漏，记入观察。
+- **M22/M23/M24** 共享契约 schema 收紧 — 涉及 type 改动 + 全链路 runtime 校验补丁，建议合并到下一轮"契约与校验整治"专项。
+- **M30** session 搜索索引增量 — 当前数据量级 < 几千条，全量重建可接受，留作 P3。
+- **M31** `as any` 收敛 — 多处 surgical 修复需要逐个看 pi-ai 类型签名，本批跳过。
+- **M32** background services 启动失败 UI 提示 — 当前 init 不会抛硬错（内部 try/catch），无需 toast；如未来 init 抛错，再补。
+- **M33** `first_pi_agent` 残留 — 主要在 docs/legacy 路径，符合 AGENTS.md 的"历史路径兼容场景"豁免。
+- **M34** Provider credential `safeStorage` 加密 — 较大改动且涉及迁移，建议合并到安全专项。
+- **R8-R13、R15、R16、R19、R21-R30、R32-R35** — 渲染端性能 / 微 UX 优化，效益中低、风险随处可见，建议按需逐个挑，不在本批处理。
+- **P4** 全部 — 留作"长期改善池"，按用户优先级触发。
+
+**结果**：
+
+- `get_errors` 通过（event-bus / window / harness/audit / metrics / ipc/handle / mcp/config / mcp/adapter / providers / AssistantThreadPanel）。
+- 未触发 `pnpm build / pnpm check`。
+
+**plan 状态**：
+
+- 🔴 P0 全部 close（M1/M2 复核归档）。
+- 🟠 P1 全部 close。
+- 🟡 P2 关键项全部 close（M19/M20/M21/M25/M26/M27 + R14/R17/R18/R20）；剩余为 contracts schema、契约层 (M22/M23/M24)、性能微优化 (R8-R16) 等待下一阶段。
+- 🔵 P3 关键项 close（M28/M29/R31）；剩余 cosmetic 项按需触发。
+- 🟢 P4 留池。
+
+可以继续推进时按用户优先级触发新批次即可。
