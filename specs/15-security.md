@@ -1,7 +1,9 @@
 # 15 — 安全
 
 > 状态：`in-review`
+> 实作状态：`baseline 已落地`
 > 依赖：04-tool-system、05-builtin-tools、14-data-storage
+> 更新时间：2026-04-23 22:17:37
 
 ## 15.1 设计目标
 

@@ -1,7 +1,9 @@
 # 09 — RAG 与 Embedding
 
 > 状态：`in-review`
+> 实作状态：`部分落地（local RAG baseline，升级版未完成）`
 > 依赖：07-memory-architecture
+> 更新时间：2026-04-23 22:17:37
 
 ## 9.1 职责
 

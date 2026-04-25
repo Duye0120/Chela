@@ -3,7 +3,11 @@
 > 新增：2026-04-09 09:32:00
 > 更新：2026-04-09 10:04:00 — 追加体验层三个方向
 > 更新：2026-04-09 10:13:00 — 整合 AI 自述需求（主动学习 · 情感状态机 · 自我诊断 · 性格演化 · 反思模式）
-> 状态：`draft` — 待讨论确认后再实施
+> 更新：2026-04-23 22:17:37 — 同步文档状态与当前实现状态
+> 更新：2026-04-23 22:44:49 — 同步 phase 2 / phase 3 当前代码基线
+> 状态：`draft` — 平台化路线继续收口
+> 实作状态：`部分落地（Event Bus / Scheduler / Webhook / Notification / Metrics / Learning / Reflection baseline 已接入，Plugin / Workflow / OAuth 未完成）`
+> 更新时间：2026-04-23 22:44:49
 
 ## 动机
 
@@ -19,12 +23,15 @@
 │            ⑤ 自我进化层 (Self-Evolution)         │
 │  Active Learning · Emotional SM · Reflection     │
 │  Personality Drift · Self-Diagnosis              │
+│  ⚠️ baseline 已接入，产品化与增强链路继续推进      │
 ├─────────────────────────────────────────────────┤
 │            ④ 应用层 Slots (Application)          │
 │  Scheduler · Webhook · Notification · Workflow   │
+│  ⚠️ 前三项 baseline 已接入，Workflow 仍待实现      │
 ├─────────────────────────────────────────────────┤
 │            ③ 集成层 Slots (Integration)          │
 │  Plugin Loader · OAuth · External API Adapters   │
+│  ⚠️ 仍在规划                                    │
 ├─────────────────────────────────────────────────┤
 │            ② 能力层 Slots (Capability)           │
 │  Tool Registry · Provider Registry · MCP         │
@@ -32,12 +39,37 @@
 ├─────────────────────────────────────────────────┤
 │            ① 内核层 (Core)                       │
 │  Event Bus · Agent Lifecycle · Harness · Context │
-│  ⚠️ Event Bus 缺失，其余已实现                    │
+│  ⚠️ Event Bus baseline 已接入，平台化插槽继续扩展  │
 └─────────────────────────────────────────────────┘
 ```
 
 **② 能力层已经做好了**（工具注册、Provider 管理、MCP 连接器）。
-缺的是 ① 的 Event Bus、③④ 的上层插槽、以及 ⑤ 的自我进化能力。
+**① 内核层已经有 Event Bus baseline**，`run / tool / approval / message` 事件已接入。
+**④ 应用层已经有 Scheduler / Webhook / Notification baseline**，当前增量集中在 UI、路由编排和 workflow。
+**⑤ 自我进化层已经有 Self-Diagnosis / Active Learning / Emotional / Reflection baseline**，当前增量集中在更强的信号来源、产品面板和 LLM 驱动增强。
+
+## 当前实现快照（2026-04-23）
+
+当前代码已经接上的平台化能力：
+
+- `src/main/event-bus.ts`：类型安全 Event Bus，覆盖 `run / message / tool / approval / schedule / webhook / notification / diagnosis / learning / emotion / reflection`。
+- `src/main/bus-audit.ts`：所有 bus 事件落盘到 `logs/bus-audit.jsonl`。
+- `src/main/scheduler.ts`：支持 `interval` 和 `daily` 两类任务，持久化到 `data/scheduler-jobs.json`。
+- `src/main/webhook.ts`：本机 HTTP webhook 接收器，默认关闭，启用后监听 `127.0.0.1`。
+- `src/main/tools/notify.ts`：`notify_user` 工具已可发桌面通知，并写入 `notification:sent` 事件。
+- `src/main/metrics.ts`：run 级耗时和工具调用指标写入 `data/metrics.jsonl`。
+- `src/main/self-diagnosis/service.ts`：自我诊断已注册进 scheduler，并带自动修复入口。
+- `src/main/learning/engine.ts`：主动学习已从 `tool:failed / approval:resolved` 收集信号并写入 memdir。
+- `src/main/emotional/state-machine.ts`：情感状态机已持久化到 `data/emotional-state.json`。
+- `src/main/reflection/service.ts` + `src/main/reflection/personality-drift.ts`：每日反思、反思写 memory、性格漂移存储层都已接入启动链。
+
+当前还没完成的平台化增量：
+
+- Plugin Loader / OAuth / External API Adapters 仍处于 spec 阶段。
+- Scheduler / Webhook 还没有完整的产品化配置 UI 和“路由到具体 session / prompt”的编排层。
+- Notification 当前只接桌面通知，外发通道和规则引擎还没接上。
+- Reflection 目前走本地启发式摘要；Personality Drift 的候选生成链还比较弱。
+- Workflow DAG、Multi-agent、插件市场、远程接入仍属于后续阶段。
 
 ---
 
@@ -47,41 +79,50 @@
 
 ### 为什么需要
 
-| 场景 | 现在怎么做 | Event Bus 后怎么做 |
+| 场景 | 当前实现 | 当前价值 |
 |------|-----------|-------------------|
-| 用户发消息 | ipcMain.handle → chatSend | `bus.emit("user:message", ...)` → 任何订阅者都能监听 |
-| 工具执行完成 | adapter 直接 IPC 推送 | `bus.emit("tool:completed", ...)` → 可触发后续工作流 |
-| 定时任务触发 | ❌ 不支持 | `bus.emit("schedule:trigger", ...)` → Agent 自动开始 |
-| GitHub webhook | ❌ 不支持 | `bus.emit("webhook:github", ...)` → Agent 自动处理 |
-| Agent 主动通知 | ❌ 不支持 | `bus.emit("agent:notify", ...)` → 系统通知/Slack/邮件 |
+| 用户发消息 | `chat/prepare.ts` 发 `bus.emit("message:user", ...)` | 情感状态机、后续 workflow、审计都能被动订阅 |
+| 工具执行完成 | `harness/tool-execution.ts` 发 `tool:completed / tool:failed` | metrics、主动学习、后续通知规则都能复用 |
+| 定时任务触发 | `scheduler.ts` 发 `schedule:triggered` | 自我诊断、反思、后续自动任务都走统一事件口 |
+| Webhook 到达 | `webhook.ts` 发 `webhook:received` | 外部输入已经能进主进程事件流 |
+| Agent 主动通知 | `notify_user` 工具发 `notification:sent` | 当前已经能发桌面通知，并为外发通道留接口 |
 
-### 设计
+### 当前实现
 
 ```typescript
 // src/main/event-bus.ts
 
 type EventMap = {
-  // ── 核心生命周期 ──
-  "agent:run:started":    { sessionId: string; runId: string };
-  "agent:run:completed":  { sessionId: string; runId: string; status: string };
-  "agent:message":        { sessionId: string; role: "user" | "assistant"; text: string };
+  "run:started": { sessionId: string; runId: string; modelEntryId: string };
+  "run:completed": { sessionId: string; runId: string; finalState: string; reason?: string };
 
-  // ── 工具事件 ──
-  "tool:executing":       { sessionId: string; toolName: string; args: unknown };
-  "tool:completed":       { sessionId: string; toolName: string; result: unknown };
-  "tool:failed":          { sessionId: string; toolName: string; error: string };
+  "message:user": { sessionId: string; text: string };
+  "message:assistant": { sessionId: string; runId: string };
 
-  // ── 外部触发 ──
-  "webhook:received":     { source: string; payload: unknown };
-  "schedule:triggered":   { jobId: string; cronExpr: string };
+  "tool:executing": { sessionId: string; runId: string; toolName: string; toolCallId: string };
+  "tool:completed": { sessionId: string; runId: string; toolName: string; toolCallId: string };
+  "tool:failed": { sessionId: string; runId: string; toolName: string; toolCallId: string; error: string };
 
-  // ── 通知 ──
-  "notify:desktop":       { title: string; body: string };
-  "notify:external":      { channel: string; message: string };
+  "approval:requested": { sessionId: string; runId: string; requestId: string; toolName: string };
+  "approval:resolved": { sessionId: string; runId: string; requestId: string; allowed: boolean };
 
-  // ── 插件 ──
-  "plugin:loaded":        { pluginId: string; tools: string[] };
-  "plugin:unloaded":      { pluginId: string };
+  "schedule:triggered": { jobId: string; cronExpr: string };
+  "webhook:received": { source: string; event: string; payload: unknown };
+
+  "notification:sent": { title: string; body: string };
+  "notification:external": { channel: string; message: string };
+
+  "diagnosis:healthy": { checkId: string };
+  "diagnosis:alert": { checkId: string; message: string; severity: string };
+  "diagnosis:repaired": { checkId: string; message: string };
+
+  "learning:insight": { type: string; toolName?: string; message: string };
+  "learning:applied": { type: string; target: string; message: string };
+  "emotion:changed": { from: string; to: string; trigger: string };
+  "reflection:completed": { date: string; sessionCount: number; insightCount: number };
+
+  "plugin:loaded": { pluginId: string; tools: string[] };
+  "plugin:unloaded": { pluginId: string };
 };
 
 class EventBus {
@@ -101,17 +142,25 @@ export const bus = new EventBus();
 ### 集成点
 
 ```
-现有代码改动极小：
-1. index.ts chatSend handler → 成功后 bus.emit("agent:message", ...)
-2. harness/tool-execution.ts → 工具执行前后 emit
-3. harness/runtime.ts → run 生命周期 emit
-4. adapter.ts → 已有事件直接桥接
+当前已接入的主链：
+1. chat/prepare.ts → `message:user`
+2. chat/finalize.ts → `message:assistant`
+3. harness/runtime.ts → `run:started / run:completed`
+4. harness/tool-execution.ts → `tool:* / approval:*`
+5. scheduler.ts / webhook.ts / tools/notify.ts → `schedule:* / webhook:* / notification:*`
+6. bus-audit.ts / metrics.ts / learning.ts / emotional.ts / reflection.ts / self-diagnosis.ts → 作为消费者订阅
 ```
 
 ### 与 Harness 的关系
 
 Event Bus **不绕过** Harness。工具执行仍走 Harness 策略评估。
 Bus 只是事件通知层——"发生了什么"，不是"允许做什么"。
+
+### 当前缺口
+
+- 事件名当前还是散落字符串，`M36` 提到的常量化还没统一落地。
+- 当前还没有 bus 级规则引擎，很多自动反应仍是点对点订阅。
+- Renderer 侧对 diagnosis / learning / reflection 这类事件还没有完整产品面。
 
 ---
 
@@ -122,22 +171,31 @@ Bus 只是事件通知层——"发生了什么"，不是"允许做什么"。
 ### 设计
 
 ```typescript
-// src/main/scheduler/service.ts
+// src/main/scheduler.ts
 
-type ScheduledJob = {
+type ScheduleJobDef = {
   id: string;
-  name: string;           // "每日站会摘要"
-  cronExpr: string;       // "0 9 * * 1-5" — 工作日早9点
-  sessionId: string;      // 在哪个 session 里执行
-  prompt: string;         // 要发给 Agent 的指令
+  name: string;
   enabled: boolean;
-  lastRunAt?: number;
-  nextRunAt?: number;
-};
+} & (
+  | { type: "interval"; intervalMs: number }
+  | { type: "daily"; time: string } // "HH:mm"
+);
 
-// 触发链路：
-// cron tick → bus.emit("schedule:triggered") → chatSend(sessionId, prompt)
+// 当前触发链路：
+// scheduler.executeJob(job) → bus.emit("schedule:triggered") → callback(jobId)
 ```
+
+### 当前实现
+
+- 已支持两类任务：`interval`、`daily`。
+- 任务定义持久化到 `userData/data/scheduler-jobs.json`。
+- 当前启动链会自动 `scheduler.start()`。
+- 当前内建注册项：
+  - `self-diagnosis`
+  - `active-learning-decay`
+  - `daily-reflection`
+- 当前还没有面向用户的任务管理 UI，也还没有“任务直接发消息到指定 session”的编排层。
 
 ### 用户场景
 
@@ -149,12 +207,12 @@ type ScheduledJob = {
 ### 持久化
 
 ```
-userData/data/scheduled-jobs.json
+userData/data/scheduler-jobs.json
 ```
 
 ### UI
 
-设置页新增"定时任务"标签页，可增删改查 job，显示最近执行状态。
+设置页里的任务管理入口仍未完成，当前主要由主进程后台服务注册和消费。
 
 ---
 
@@ -165,38 +223,44 @@ userData/data/scheduled-jobs.json
 ### 设计
 
 ```typescript
-// src/main/webhook/server.ts
+// src/main/webhook.ts
 
-// 内嵌一个轻量 HTTP 服务（仅本机监听或可选公开）
-// 默认端口：19840（可配置）
-
-// 路由：
-// POST /webhook/:channel  →  bus.emit("webhook:received", { source: channel, payload })
-
-// 配置式映射：
-type WebhookRoute = {
-  channel: string;       // "github", "email", "custom"
-  targetSessionId: string;
-  promptTemplate: string; // "收到 GitHub 事件：{{payload.action}} on {{payload.repository.name}}"
+interface WebhookConfig {
+  port: number;   // 默认 17433
+  secret: string; // HMAC-SHA256，为空则跳过验签
   enabled: boolean;
-};
+}
+
+// 当前触发链路：
+// POST body + headers
+//   → 验签 / JSON parse
+//   → bus.emit("webhook:received", { source, event, payload })
 ```
+
+### 当前实现
+
+- Webhook 服务已存在，默认关闭；启用后监听 `127.0.0.1:${port}`。
+- 当前 header 约定：
+  - `x-webhook-signature`
+  - `x-webhook-source`
+  - `x-webhook-event`
+- 当前能力停在“接收并发事件到 Event Bus”；`sessionId + promptTemplate` 路由层还没接。
 
 ### 安全
 
 - 默认只监听 `127.0.0.1`
-- 支持 Bearer token 校验
-- 所有请求记入 audit log
-- Harness policy 决定是否允许自动执行
+- 支持 HMAC-SHA256 验签
+- 请求过程写入应用日志，事件写入 `bus-audit.jsonl`
+- 自动落到具体聊天 run 的编排层仍待补齐
 
 ### 典型场景
 
 ```
-GitHub → ngrok/cloudflare tunnel → localhost:19840/webhook/github
-  → bus.emit("webhook:received", {...})
-  → promptTemplate 渲染
-  → chatSend(sessionId, renderedPrompt)
-  → Agent 自动处理
+GitHub / 其他外部系统
+  → 127.0.0.1:17433
+  → webhook.ts 验签 + 解析
+  → bus.emit("webhook:received", { source, event, payload })
+  → 供后续 workflow / adapter 消费
 ```
 
 ---
@@ -204,6 +268,10 @@ GitHub → ngrok/cloudflare tunnel → localhost:19840/webhook/github
 ## 第四步：Plugin Loader（插件加载器）
 
 > 让第三方能力一键接入。
+
+### 当前状态
+
+Plugin Loader 当前仍处于文档设计阶段。`plugin:*` 事件名已经在 Event Bus 里预留，真正的 loader、manifest 校验、沙箱执行和 prompt 注入链都还没落地。
 
 ### 插件包格式
 
@@ -232,7 +300,7 @@ my-plugin/
   "promptInjection": "prompts/system.md",
   "events": {
     "subscribe": ["schedule:triggered"],
-    "emit": ["notify:desktop"]
+    "emit": ["notification:external"]
   }
 }
 ```
@@ -275,50 +343,59 @@ Plugin events → 通过 Event Bus 收发
 | 通道 | 实现方式 | 优先级 |
 |------|---------|--------|
 | 桌面通知 | Electron `Notification` API | P0 — 已有基础设施 |
-| 系统托盘 | Electron Tray badge | P0 |
-| Webhook 出站 | HTTP POST 到配置的 URL | P1 |
-| 邮件 | SMTP / SendGrid | P2 |
-| Slack/Teams | Webhook URL | P2 |
+| 系统托盘 | Electron Tray badge | P1 — 预留 |
+| Webhook 出站 | HTTP POST 到配置的 URL | P2 — 预留 |
+| 邮件 | SMTP / SendGrid | P2 — 预留 |
+| Slack/Teams | Webhook URL | P2 — 预留 |
 
 ### 触发方式
 
 ```typescript
-// Agent 通过工具触发
-const notifyTool = {
+// 当前实现：Agent 通过 notify_user 工具触发
+const notifyUserTool = {
   name: "notify_user",
   description: "当你需要主动通知用户时使用",
-  params: { title: string, body: string, channel?: string },
+  params: { title: string, body: string },
   execute: (_, params) => {
-    bus.emit("notify:desktop", { title: params.title, body: params.body });
+    if (Notification.isSupported()) {
+      new Notification({ title: params.title, body: params.body }).show();
+    }
+    bus.emit("notification:sent", { title: params.title, body: params.body });
   }
 };
 
-// 或者 Event Bus 规则引擎自动触发
-// "当 tool:failed 连续 3 次 → notify:desktop"
+// 后续可扩到 Event Bus 规则引擎或外发通道
 ```
 
 ---
 
-## 实施路线（建议）
+## 当前阶段划分
 
 ```
-Phase 1 — 骨架（工作量：小）
-├── Event Bus 实现 + 现有代码桥接
+Phase 1 — 已落地 baseline
+├── Event Bus
 ├── 桌面通知工具（notify_user）
-└── 文档 + 类型
-
-Phase 2 — 主动能力（工作量：中）
-├── Scheduler + 持久化 + UI
-├── Webhook receiver（本机）
 └── Event Bus 审计日志
 
-Phase 3 — 生态（工作量：大）
+Phase 2 — 已落地 baseline
+├── Scheduler + 持久化
+├── Webhook receiver（本机，默认关闭）
+├── Self-Diagnosis
+└── Metrics
+
+Phase 3 — 已落地 baseline
+├── Active Learning
+├── Emotional State Machine
+├── Reflection Service
+└── Personality Drift 存储层
+
+Phase 4 — 待完成
 ├── Plugin Loader + manifest schema
 ├── Plugin 沙箱（权限隔离）
 ├── OAuth 框架（Google/Microsoft）
 └── 官方插件：Calendar、Email、GitHub
 
-Phase 4 — 高级（工作量：很大）
+Phase 5 — 待完成
 ├── Workflow DAG 定义 + 执行引擎
 ├── Multi-agent 协作
 ├── 插件市场 UI
@@ -329,7 +406,7 @@ Phase 4 — 高级（工作量：很大）
 
 ## 现有能力层的评估
 
-### ✅ 不需要改的
+### ✅ 已有稳定基础
 
 | 模块 | 原因 |
 |------|------|
@@ -338,25 +415,34 @@ Phase 4 — 高级（工作量：很大）
 | Memory 系统 | Memdir 模式已成熟，不需要动 |
 | Provider 系统 | 多 provider 支持已完善 |
 | Context 引擎 | Compact + snapshot 已稳定 |
+| `src/main/scheduler.ts` | interval / daily 调度、持久化和 bus 事件已经接好 |
+| `src/main/webhook.ts` | 本机接收器已经存在，默认关闭即可保持安全边界 |
+| `src/main/tools/notify.ts` | 桌面通知工具已经可用 |
+| `src/main/metrics.ts` | run 级指标采集已经落盘 |
+| `src/main/learning/engine.ts` | 工具失败 / 审批拒绝 → learning 写入链已经存在 |
+| `src/main/emotional/state-machine.ts` | 情感状态切换与 prompt 文本构建已经存在 |
+| `src/main/reflection/` | 每日反思和 personality drift 存储层已经接入启动链 |
 
-### ⚠️ 需要小改的
+### ⚠️ 继续收口的模块
 
 | 模块 | 改动 |
 |------|------|
+| `src/main/event-bus.ts` | 统一事件常量、减少散落字符串 |
+| `src/main/scheduler.ts` | 增加 session / prompt 路由层和产品化配置入口 |
+| `src/main/webhook.ts` | 增加 route mapping、配置读取和更多安全策略 |
+| `src/main/tools/notify.ts` | 增加外发通道和规则驱动通知 |
+| `src/main/reflection/service.ts` | 从本地启发式摘要升级到更强的反思生成链 |
+| `src/main/reflection/personality-drift.ts` | 当前存储层稳定，候选 trait 生成仍要增强 |
 | `tools/index.ts` | `buildToolPool()` 增加 plugin tools 入口 |
-| `agent.ts` | `buildSystemPrompt()` 增加 plugin prompt sections |
-| `index.ts` | 关键 IPC 节点加 `bus.emit()` |
-| `harness/tool-execution.ts` | 工具执行前后加 `bus.emit()` |
+| `agent.ts` | `buildSystemPrompt()` 增加 plugin / evolution 扩展 section |
 
-### ❌ 需要新建的
+### ➕ 需要新建的
 
 | 模块 | 说明 |
 |------|------|
-| `src/main/event-bus.ts` | 核心事件总线 |
-| `src/main/scheduler/` | 定时任务引擎 |
-| `src/main/webhook/` | Webhook HTTP 服务 |
 | `src/main/plugins/` | 插件加载器 |
-| `src/main/tools/notify.ts` | 通知工具 |
+| `src/main/workflows/` | Workflow DAG / 规则编排层 |
+| `src/main/integrations/` | OAuth / 外部 API 连接层 |
 
 ---
 
@@ -365,7 +451,7 @@ Phase 4 — 高级（工作量：很大）
 1. **Event Bus 是唯一的胶水** —— 模块间不直接调用，通过事件解耦
 2. **Harness 是唯一的门卫** —— 插件工具也必须过 Harness 策略
 3. **插件不碰内核** —— 插件只能注册工具 + prompt + 事件，不能 patch 内核代码
-4. **渐进式** —— Phase 1 只加 Event Bus，现有功能零回归
+4. **渐进式** —— Phase 1 先收口 Event Bus baseline，现有功能继续保持零回归
 5. **本地优先** —— Webhook 默认只监听 localhost，不依赖云服务
 
 ---
@@ -397,8 +483,8 @@ Phase 4 — 高级（工作量：很大）
 
 **与 Event Bus 的关系**：
 ```
-mic:start → 录音 → mic:stop → whisper 转写 → bus.emit("user:message")
-agent 回复 → bus.on("agent:message") → TTS → 播放
+mic:start → 录音 → mic:stop → whisper 转写 → bus.emit("message:user")
+agent 回复 → bus.on("message:assistant") → TTS → 播放
 ```
 
 ### 第七步：环境感知（Ambient Context）
@@ -481,7 +567,7 @@ globalShortcut.register("Alt+Space", () => {
 
 **问题**：心跳挂了、工具连续报错、记忆文件损坏、MCP 服务断联——目前全靠用户发现。
 
-**设计**：
+**当前实现**：
 
 ```typescript
 // src/main/self-diagnosis/service.ts
@@ -490,8 +576,8 @@ type HealthCheck = {
   id: string;
   name: string;
   check: () => Promise<HealthStatus>;
-  repair?: () => Promise<boolean>;  // 可选的自动修复
-  interval: number;                  // 检查间隔 ms
+  repair?: () => Promise<boolean>;
+  intervalMs: number;
 };
 
 type HealthStatus = {
@@ -505,36 +591,21 @@ const checks: HealthCheck[] = [
   {
     id: "memory-integrity",
     name: "记忆文件完整性",
-    check: () => validateMemdirStructure(),  // MEMORY.md 索引 vs topics/ 文件一致性
-    repair: () => rebuildMemoryIndex(),       // 重建索引
-    interval: 30 * 60_000,                   // 30 分钟
-  },
-  {
-    id: "mcp-connectivity",
-    name: "MCP 服务连通性",
-    check: () => pingAllMcpServers(),
-    repair: () => reconnectFailedServers(),
-    interval: 5 * 60_000,                    // 5 分钟
-  },
-  {
-    id: "tool-error-rate",
-    name: "工具错误率",
-    check: () => analyzeRecentToolErrors(),  // 从 audit log 统计近 1h 错误率
-    // 无自动修复，但会标记问题工具
-    interval: 15 * 60_000,
+    check: () => validateMemdirStructure(),
+    repair: () => rebuildMemoryIndex(),
+    intervalMs: 30 * 60_000,
   },
   {
     id: "context-budget",
     name: "上下文预算健康",
     check: () => checkContextBudgetUtilization(),
-    repair: () => triggerProactiveCompact(),
-    interval: 10 * 60_000,
+    intervalMs: 10 * 60_000,
   },
   {
     id: "disk-space",
-    name: "存储空间",
+    name: "数据目录容量",
     check: () => checkUserDataDiskSpace(),
-    interval: 60 * 60_000,
+    intervalMs: 60 * 60_000,
   },
 ];
 ```
@@ -543,16 +614,15 @@ const checks: HealthCheck[] = [
 ```
 interval tick → healthCheck.check()
   → if unhealthy && repair exists → attempt repair → bus.emit("diagnosis:repaired")
-  → if unhealthy && no repair     → bus.emit("diagnosis:alert") → notify_user
-  → if repair failed              → bus.emit("diagnosis:critical") → 强制通知
+  → if unhealthy                  → bus.emit("diagnosis:alert")
+  → report 保存在内存，供设置页或后续 UI 读取
 ```
 
 **与现有系统的关系**：
-- 从 `harness/audit.ts` 读取工具执行历史 → 计算错误率
 - 从 `memory/service.ts` 读取 memdir 结构 → 验证完整性
-- 从 `context/service.ts` 读取预算 → 检测是否接近极限
+- 从数据目录和当前运行状态读取轻量信号 → 检测是否接近风险阈值
 - 通过 Event Bus 发布健康事件
-- 修复动作仍经过 Harness（如果涉及文件写入）
+- 当前自动修复主要集中在重建 memory index；更深的 provider / tool 健康检查还没补齐
 
 ### 第十步：主动学习引擎（Active Learning）
 
@@ -560,56 +630,53 @@ interval tick → healthCheck.check()
 
 **问题**：现在只有用户手动修 SOUL.md / memory 才能"教"Agent。Agent 不会自己发现重复犯的错误。
 
-**设计**：
+**当前实现**：
 
 ```typescript
 // src/main/learning/engine.ts
 
 type LearningSignal = {
   type: "tool_repeated_failure"     // 同一工具连续 N 次失败
-       | "user_correction"          // 用户纠正了 Agent 的输出
        | "retry_after_reject"       // 用户拒绝后 Agent 换了方案
-       | "pattern_inefficiency"     // 某个工作模式效率低
-       | "user_explicit_feedback";  // 用户直接说"你这样不对"
-  context: {
-    sessionId: string;
-    toolName?: string;
-    originalOutput?: string;
-    correction?: string;
-    frequency: number;  // 出现次数
-  };
+       | "tool_discovery_opportunity"
+       | "tool_misuse_pattern";
+  toolName: string;
+  message: string;
+  sessionId: string;
+  timestamp: number;
 };
 
-// 检测器 — 从 transcript 和 audit log 中提取信号
-function detectLearningSignals(sessionId: string): LearningSignal[];
+// 当前来源：
+// bus.on("tool:failed", ...)
+// bus.on("approval:resolved", ...)
 
-// 学习器 — 将信号转化为记忆
+// 当前学习器：
 async function processSignal(signal: LearningSignal): Promise<void> {
-  // 1. 信号达到阈值？（如同一错误出现 3+ 次）
-  // 2. 生成学习总结（用 LLM 提炼"我应该怎么改"）
-  // 3. 写入 semantic memory（topic: "learnings"）
-  // 4. 如果严重，建议更新 SOUL.md（通过 notify_user 提醒用户确认）
+  // 1. 达到阈值（默认 3 次）
+  // 2. 生成本地摘要
+  // 3. 写入 memdir topic: "learnings"
+  // 4. emit "learning:applied"
 }
 ```
 
 **学习闭环**：
 ```
 执行 → 失败/被纠正 → 检测信号 → 达到阈值
-  → LLM 总结教训 → 写入 memory/topics/learnings.md
+  → 本地总结教训 → 写入 memory/topics/learnings.md
   → 下次 prompt 注入时自动携带 → Agent 行为改变
 ```
 
 **关键约束**：
 - **学习写入 semantic memory，不直接改 SOUL.md** — SOUL.md 是用户的领地
-- 学习结果可以在 UI 上展示，让用户决定是否"升级"到 SOUL.md
-- 单次学习条目有字数限制，避免 memory 膨胀
-- 学习内容有时效性标记，过期后降低注入优先级
+- 当前没有专门 UI，learning 主要通过 memory 注入生效
+- 当前信号来源集中在 `tool:failed / approval:resolved`，transcript 级分析还没接
+- 通过 scheduler 每小时做一次信号衰减，避免旧错误永久固化
 
 **与现有系统的关系**：
-- 信号来源：`harness/audit.ts`（工具失败）、`session/service.ts`（transcript 分析）
+- 信号来源：Event Bus 的 `tool:failed / approval:resolved`
 - 存储目标：`memory/service.ts`（写入 `topics/learnings.md`）
-- 注入路径：`memory/service.ts` → `prompt-control-plane.ts`（semantic memory section）
-- 我们已有 `SessionMemorySnapshot.learnings[]` 字段 ← 正好对接
+- 注入路径：`memory/service.ts` → prompt 记忆链路
+- 当前实现已经跑通“失败信号 → learning 条目”的闭环
 
 ### 第十一步：情感状态机（Emotional State Machine）
 
@@ -676,13 +743,13 @@ type MoodSignal = {
 - **不做深度 NLP 情感分析** — 太重。只用简单启发式（时间/频率/长度/关键词）
 - 用户可以手动锁定模式（"保持工作模式"）
 - 状态切换有冷却期，防止抖动（至少保持 5 分钟）
-- 切换时不通知用户（无感），但可在设置页查看当前状态
+- 切换时不通知用户（无感），状态已持久化，可供设置页或后续 UI 读取
 
 ### 第十二步：反思与性格演化（Reflection & Personality Evolution）
 
 > 夜深人静时回顾一天，让性格从对话中自然生长。
 
-**反思模式（Dreaming）**：
+**反思模式（Dreaming）当前实现**：
 
 ```typescript
 // src/main/reflection/service.ts
@@ -691,22 +758,11 @@ type MoodSignal = {
 // 也可手动触发
 
 async function runDailyReflection(): Promise<ReflectionReport> {
-  // 1. 收集今天所有 session 的 transcript 摘要
+  // 1. 收集今天所有 session 的 user / assistant 文本摘要
   const todaySessions = getTodaySessions();
 
-  // 2. 用 LLM 生成反思报告
-  const report = await generateReflection({
-    prompt: [
-      "回顾今天和用户的所有对话，生成反思笔记。",
-      "包含：",
-      "- 今天用户的状态和心情是怎样的？",
-      "- 我哪些回复帮到了他？哪些没帮到？",
-      "- 有哪些重复出现的模式或需求？",
-      "- 明天可以怎么做得更好？",
-      "- 用户有没有表达过新的偏好或习惯？",
-    ].join("\n"),
-    context: todaySessions,
-  });
+  // 2. 当前用本地启发式摘要生成反思报告
+  const report = generateLocalReflection(todaySessions);
 
   // 3. 写入日记存储
   saveDailyReflection(report);
@@ -718,6 +774,11 @@ async function runDailyReflection(): Promise<ReflectionReport> {
       topic: "reflections",
       source: "system:reflection",
     });
+  }
+
+  // 5. personality drift 候选存在时再交给 drift 层
+  if (report.personalityDrift?.length) {
+    processPersonalityDrift(report.personalityDrift, report.date);
   }
 
   return report;
@@ -753,6 +814,8 @@ type PersonalityTrait = {
   strength: number;        // 0-1，强度（随正反馈增长，随时间衰减）
   firstSeen: number;
   lastReinforced: number;
+  mentionCount: number;
+  locked: boolean;
 };
 
 // 注入方式：作为 soft prompt 附加在 SOUL.md 之后
@@ -763,17 +826,23 @@ type PersonalityTrait = {
 ```
 
 **演化规则**：
-1. **来源**：只从反思报告和学习引擎产生，不从单次对话直接产生
-2. **阈值**：一个 trait 至少被 3 次反思报告独立提到才会"固化"
+1. **来源**：当前接入点已经在 `reflection` 和 `personality-drift` 两层打通
+2. **阈值**：一个 trait 至少被 3 次独立提及才会固化进 prompt
 3. **衰减**：30 天未被 reinforce 的 trait 降低 strength
 4. **上限**：最多保留 20 个活跃 trait，淘汰最弱的
-5. **用户可见**：设置页可以查看/删除/锁定 trait
+5. **用户可见能力已预留**：代码里已有 `lock / unlock / remove` API
 6. **不改 SOUL.md**：演化层是独立的，用户随时可以清零重来
 
 **与 Prompt Control Plane 的关系**：
 - SOUL.md 是 `constitution` layer，authority: `hard` — 用户写的，不可被覆盖
 - 性格漂移是 `evolution` layer，authority: `soft` — 自然生长的，可被覆盖
 - 冲突时 SOUL.md 优先
+
+### 当前缺口
+
+- 当前 `generateLocalReflection()` 还没有稳定产出 `personalityDrift` 候选，trait 增长链还比较弱。
+- 反思当前走本地启发式摘要，没有接入更强的 LLM 反思生成。
+- Reflection / drift 的专门 UI 面板还没完成。
 
 ---
 
@@ -790,29 +859,29 @@ type PersonalityTrait = {
 | 搜索 + 网页抓取 | web_search + web_fetch | ✅ |
 | 上下文压缩/摘要 | context/service.ts compact | ✅ 已有，Alma 缺 |
 
-### Alma 已有，我们计划中
+### Alma 已有，我们已接入或继续扩展
 
-| Alma 能力 | 我们的方案 | Phase |
-|-----------|-----------|-------|
-| 插件系统 | Plugin Loader（spec-16 第四步） | Phase 4 |
-| Skills 系统 | Plugin manifest + 工具注册 | Phase 4 |
-| 心跳/Heartbeat | Self-Diagnosis（第九步） | Phase 2 |
-| 多平台接入 | Telegram Bot Adapter（F1） | Phase 5 |
-| 定时调度 | Scheduler（第二步） | Phase 2 |
-| 日记/日报 | Reflection 反思模式（第十二步） | Phase 3 |
+| Alma 能力 | 我们的方案 | 当前状态 |
+|-----------|-----------|----------|
+| 插件系统 | Plugin Loader（spec-16 第四步） | 规划中 |
+| Skills 系统 | Plugin manifest + 工具注册 | 规划中 |
+| 心跳/Heartbeat | Self-Diagnosis（第九步） | baseline 已接入 |
+| 多平台接入 | Telegram Bot Adapter（F1） | 规划中 |
+| 定时调度 | Scheduler（第二步） | baseline 已接入 |
+| 日记/日报 | Reflection 反思模式（第十二步） | baseline 已接入 |
 | 代码执行 | shell_exec（已有，但可增强沙箱） | ✅ |
 
-### Alma 想要，我们新增方案
+### Alma 想要，我们的当前状态
 
-| Alma 想要 | 我们的方案 | Phase |
-|-----------|-----------|-------|
-| 🔥 主动学习能力 | Active Learning Engine（第十步） | Phase 3 |
-| 🔥 情感状态机 | Emotional State Machine（第十一步） | Phase 3 |
-| 🔥 自我诊断 | Self-Diagnosis（第九步） | Phase 2 |
-| 🎯 跨会话记忆同步 | Memory 已支持跨会话；可增强 snapshot 延续 | Phase 2 增强 |
-| 🎯 技能市场自动更新 | Plugin Loader auto-update | Phase 4 |
-| 🤪 梦境/反思模式 | Reflection Service（第十二步） | Phase 3 |
-| 🤪 性格自然演化 | Personality Drift（第十二步） | Phase 3 |
+| Alma 想要 | 我们的方案 | 当前状态 |
+|-----------|-----------|----------|
+| 🔥 主动学习能力 | Active Learning Engine（第十步） | baseline 已接入 |
+| 🔥 情感状态机 | Emotional State Machine（第十一步） | baseline 已接入 |
+| 🔥 自我诊断 | Self-Diagnosis（第九步） | baseline 已接入 |
+| 🎯 跨会话记忆同步 | Memory 已支持跨会话；可增强 snapshot 延续 | 部分落地 |
+| 🎯 技能市场自动更新 | Plugin Loader auto-update | 规划中 |
+| 🤪 梦境/反思模式 | Reflection Service（第十二步） | baseline 已接入 |
+| 🤪 性格自然演化 | Personality Drift（第十二步） | 存储层已接入，候选生成待增强 |
 
 ---
 
@@ -934,34 +1003,34 @@ type LearningSignal = {
 ## 更新后的完整路线图
 
 ```
-Phase 1 — 骨架 + 体验基础（小）
-├── Event Bus 实现 + 现有代码桥接
+Phase 1 — 已落地 baseline
+├── Event Bus baseline 收口 + 现有代码桥接
 ├── 桌面通知工具（notify_user）
-├── 全局快捷键（模式 A：激活窗口）
+├── Event Bus 审计日志
 └── 文档 + 类型
 
-Phase 2 — 主动能力 + 自我感知（中）
-├── Scheduler + 持久化 + UI
-├── Webhook receiver（本机）
-├── Self-Diagnosis 自我诊断（健康检查 + 自修复）
-├── Event Bus 审计日志
-├── 环境感知（基础版：时间 + Git 状态）
-├── 跨会话记忆延续增强
-├── 性能指标采集（S2: metrics.ts）
+Phase 2 — 已落地 baseline
+├── Scheduler + 持久化
+├── Webhook receiver（本机，默认关闭）
+├── Self-Diagnosis 自我诊断
+├── 性能指标采集（metrics.ts）
+└── 跨会话记忆延续的基础链路
+
+Phase 3 — 已落地 baseline
+├── Active Learning 主动学习引擎
+├── Emotional State Machine 情感状态机
+├── Reflection + Personality Drift 存储层
+└── 反思结果写入 semantic memory
+
+Phase 4 — 当前主增量
+├── Scheduler / Webhook 的 session 路由和产品化 UI
+├── Reflection / drift 的更强候选生成
 ├── 离线/降级模式（S3: failover.ts）
 ├── 上下文预算智能分配（S4: BudgetAllocator）
-└── 并行工具调用（S1: parallel tool_use）
+├── 并行工具调用（S1: parallel tool_use）
+└── 环境感知 / 快速召唤 / 语音链路
 
-Phase 3 — 自我进化 + 交互升级（中-大）
-├── Active Learning 主动学习引擎（含 S6 工具教学）
-├── Emotional State Machine 情感状态机
-├── Reflection + Personality Evolution 反思与性格演化
-├── 语音输入（Whisper）
-├── 语音输出（TTS，可选）
-├── 全局快捷键（模式 B：迷你浮窗）
-└── 环境感知（进阶版：活动窗口 + 剪贴板）
-
-Phase 4 — 生态（大）
+Phase 5 — 生态（大）
 ├── Plugin Loader + manifest schema
 ├── Plugin 沙箱（权限隔离）
 ├── Plugin auto-update 自动更新
@@ -969,7 +1038,7 @@ Phase 4 — 生态（大）
 ├── OAuth 框架（Google/Microsoft）
 └── 官方插件：Calendar、Email、GitHub
 
-Phase 5 — 高级（很大）
+Phase 6 — 高级（很大）
 ├── Workflow DAG 定义 + 执行引擎
 ├── Multi-agent 协作
 ├── 插件市场 UI
@@ -984,13 +1053,13 @@ Phase 5 — 高级（很大）
 贾维斯 = 对话 + 工具 + 记忆           ← ✅ 已有
        + 安全 harness + 审计          ← ✅ 已有
        + Prompt 控制面 + Context 引擎  ← ✅ 已有
-       + 事件驱动 + 定时 + 通知        ← Phase 1-2
-       + 自我诊断 + 健康检查           ← Phase 2
-       + 指标采集 + 降级 + 预算分配    ← Phase 2
-       + 主动学习 + 情感感知           ← Phase 3
-       + 反思日记 + 性格演化           ← Phase 3
-       + 语音 + 环境感知 + 快速召唤    ← Phase 2-3
-       + 插件 + OAuth + 外部 API      ← Phase 4
-       + 对话分支 + 假设探索           ← Phase 4
-       + 工作流 + 多 Agent + 市场      ← Phase 5
+       + 事件驱动 + 定时 + 通知        ← baseline 已接入
+       + 自我诊断 + 健康检查           ← baseline 已接入
+       + 指标采集                      ← baseline 已接入
+       + 主动学习 + 情感感知           ← baseline 已接入
+       + 反思日记 + 性格演化           ← 部分落地
+       + 语音 + 环境感知 + 快速召唤    ← 待完成
+       + 插件 + OAuth + 外部 API      ← 待完成
+       + 对话分支 + 假设探索           ← 待完成
+       + 工作流 + 多 Agent + 市场      ← 待完成
 ```

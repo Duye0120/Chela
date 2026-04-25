@@ -1,8 +1,9 @@
 # 14 — 数据存储
 
 > 状态：`in-review`
+> 实作状态：`baseline 已落地`
 > 依赖：03-agent-core、07-memory-architecture、13-composer-and-settings
-> 更新时间：2026-04-13 15:29:14
+> 更新时间：2026-04-23 22:17:37
 
 ## 14.1 设计目标
 

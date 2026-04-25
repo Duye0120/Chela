@@ -1,7 +1,9 @@
 # 07 — 记忆系统架构
 
 > 状态：`in-review`
+> 实作状态：`部分落地（T0 / T2 + local memory baseline）`
 > 依赖：03-agent-core, 05-builtin-tools
+> 更新时间：2026-04-23 22:17:37
 
 ## 7.1 设计理念
 
