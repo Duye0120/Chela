@@ -72,6 +72,7 @@ export {
   appendConfirmationRequestedEvent,
   appendConfirmationResolvedEvent,
   appendRunFinishedEvent,
+  appendRunRecoveryRequestedEvent,
   appendRunStartedEvent,
   appendRunStateChangedEvent,
   appendToolFinishedEvent,

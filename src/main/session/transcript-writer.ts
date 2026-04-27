@@ -307,3 +307,23 @@ export function appendRunFinishedEvent(input: {
 
   return event;
 }
+
+export function appendRunRecoveryRequestedEvent(input: {
+  sessionId: string;
+  runId: string;
+  resumedRunId: string;
+  recoveryPrompt: string;
+  source: "interrupted_approval" | "context_recovery";
+}): SessionTranscriptEvent {
+  return appendTranscriptEvent(input.sessionId, (nextSeq) => ({
+    seq: nextSeq,
+    sessionId: input.sessionId,
+    runId: input.runId,
+    timestamp: new Date().toISOString(),
+    type: "run_recovery_requested",
+    resumedRunId: input.resumedRunId,
+    recoveryStatus: "requested",
+    recoveryPrompt: input.recoveryPrompt,
+    source: input.source,
+  }));
+}
