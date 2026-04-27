@@ -1,6 +1,7 @@
 import type { AgentEvent, ConfirmationResponse } from "./agent-events.js";
 import type { MemoryEmbeddingModelId } from "./memory.js";
 import type { ProviderErrorCode } from "./provider-errors.js";
+import type { RunFailureKind } from "./run-recovery.js";
 
 export type ChatRole = "user" | "assistant" | "system";
 export type ChatMessageStatus = "idle" | "streaming" | "done" | "error";
@@ -722,6 +723,17 @@ export type SessionTranscriptEvent =
     finalState: "completed" | "aborted" | "failed";
     reason?: string;
     metadata?: Record<string, unknown>;
+  }
+  | {
+    seq: number;
+    sessionId: string;
+    runId: string;
+    timestamp: string;
+    type: "run_recovery_requested";
+    resumedRunId: string;
+    recoveryStatus: "requested";
+    recoveryPrompt: string;
+    source: "interrupted_approval" | "context_recovery";
   };
 
 export type AgentRunScope = {
@@ -899,7 +911,13 @@ export type ContextSummary = {
   risks: string[];
   todos: SessionTodoItem[];
   lastToolFailure: { toolName: string; error: string } | null;
-  recoverableRun: { runId: string; reason: string } | null;
+  recoverableRun: {
+    runId: string;
+    reason: string;
+    failureKind: RunFailureKind;
+    recoveryStatus: "recoverable" | "recovered" | "failed";
+    recoveryPrompt: string;
+  } | null;
   autoCompactFailureCount: number;
   autoCompactBlocked: boolean;
   autoCompactBlockedAt: string | null;
