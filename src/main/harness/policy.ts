@@ -33,6 +33,8 @@ function getRiskLevel(toolName: string): HarnessRiskLevel {
     toolName === "web_search" ||
     toolName === "WebSearch" ||
     toolName === "get_time" ||
+    toolName === "code_inspect" ||
+    toolName === "code_diagnostics" ||
     toolName === "glob_search" ||
     toolName === "grep_search" ||
     toolName === "command_history" ||
@@ -335,7 +337,12 @@ export function evaluateToolPolicy({
     };
   }
 
-  if (toolName === "glob_search" || toolName === "grep_search") {
+  if (
+    toolName === "glob_search" ||
+    toolName === "grep_search" ||
+    toolName === "code_inspect" ||
+    toolName === "code_diagnostics"
+  ) {
     return {
       toolName,
       riskLevel,

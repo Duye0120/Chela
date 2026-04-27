@@ -301,6 +301,8 @@ export type MemoryStats = {
   lastIndexedAt: string | null;
   lastRebuiltAt: string | null;
   workerState: "idle" | "starting" | "ready" | "error";
+  dbPath: string;
+  modelLoaded: boolean;
 };
 
 export type MemoryRebuildResult = {
@@ -394,6 +396,79 @@ export type RunChangeSummary = {
   additions: number;
   deletions: number;
   files: RunChangeSummaryFile[];
+};
+
+export type CodeDiagnosticSeverity = "error" | "warning" | "suggestion" | "message";
+
+export type CodeDiagnostic = {
+  filePath: string;
+  line: number;
+  character: number;
+  code: string;
+  severity: CodeDiagnosticSeverity;
+  message: string;
+};
+
+export type CodeSymbolKind =
+  | "function"
+  | "class"
+  | "interface"
+  | "type"
+  | "enum"
+  | "variable"
+  | "component"
+  | "method";
+
+export type CodeSymbolSummary = {
+  name: string;
+  kind: CodeSymbolKind;
+  line: number;
+  exported: boolean;
+};
+
+export type CodeImportSummary = {
+  source: string;
+  names: string[];
+  line: number;
+};
+
+export type CodeExportSummary = {
+  name: string;
+  kind: string;
+  line: number;
+};
+
+export type CodeInspectDetails = {
+  path: string;
+  language: "typescript" | "tsx" | "javascript" | "jsx" | "unknown";
+  imports: CodeImportSummary[];
+  exports: CodeExportSummary[];
+  symbols: CodeSymbolSummary[];
+  diagnostics: CodeDiagnostic[];
+};
+
+export type CodeDiagnosticsDetails = {
+  mode: "auto" | "typescript";
+  filesChecked: string[];
+  diagnostics: CodeDiagnostic[];
+  errorCount: number;
+  warningCount: number;
+};
+
+export type McpServerStatus = {
+  name: string;
+  configured: boolean;
+  disabled: boolean;
+  connected: boolean;
+  status: "connected" | "connecting" | "disconnected" | "failed" | "disabled";
+  command: string | null;
+  args: string[];
+  cwd: string | null;
+  toolCount: number | null;
+  resourceCount: number | null;
+  startedAt: number | null;
+  updatedAt: number | null;
+  lastError: string | null;
 };
 
 export type InstalledSkillSource = "project" | "user";
@@ -745,6 +820,15 @@ export type QueuedMessage = {
   createdAt: string;
 };
 
+export type SessionTodoStatus = "pending" | "in_progress" | "completed";
+
+export type SessionTodoItem = {
+  id: string;
+  content: string;
+  activeForm: string;
+  status: SessionTodoStatus;
+};
+
 export type EnqueueQueuedMessageInput = {
   sessionId: string;
   text: string;
@@ -810,6 +894,9 @@ export type ContextSummary = {
   openLoops: string[];
   nextActions: string[];
   risks: string[];
+  todos: SessionTodoItem[];
+  lastToolFailure: { toolName: string; error: string } | null;
+  recoverableRun: { runId: string; reason: string } | null;
   autoCompactFailureCount: number;
   autoCompactBlocked: boolean;
   autoCompactBlockedAt: string | null;
@@ -873,7 +960,7 @@ export type GenerateCommitMessageRequest = {
 export type GenerateCommitMessageResult = {
   title: string;
   description: string;
-  usedModelRole: "utility" | "chat";
+  usedModelRole: "utility" | "chat" | "subagent";
   fallbackUsed: boolean;
   skillName: "commit";
   skillUsage: RuntimeSkillUsage;
@@ -891,7 +978,7 @@ export type CommitPlanGroup = {
 
 export type GenerateCommitPlanResult = {
   groups: CommitPlanGroup[];
-  usedModelRole: "utility" | "chat";
+  usedModelRole: "utility" | "chat" | "subagent";
   fallbackUsed: boolean;
   skillName: "commit";
   skillUsage: RuntimeSkillUsage;
@@ -996,6 +1083,12 @@ export type DesktopApi = {
       skillId: string,
       source: InstalledSkillSource,
     ) => Promise<void>;
+  };
+  mcp: {
+    listStatus: () => Promise<McpServerStatus[]>;
+    reloadConfig: () => Promise<McpServerStatus[]>;
+    restartServer: (serverName: string) => Promise<McpServerStatus[]>;
+    disconnectServer: (serverName: string) => Promise<McpServerStatus[]>;
   };
   providers: {
     listSources: () => Promise<ProviderSource[]>;

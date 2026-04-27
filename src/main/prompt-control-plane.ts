@@ -263,6 +263,9 @@ export function buildRuntimeCapabilitySection(
       input.toolNames.includes("command_history")
         ? "命令历史：command_history 可读取当前线程最近 shell_exec 命令、退出码和耗时。"
         : "",
+      input.toolNames.includes("code_inspect") && input.toolNames.includes("code_diagnostics")
+        ? "代码修改默认流程：先用搜索定位，再分段读取或 code_inspect 理解结构，编辑后对相关 TS/JS 文件运行 code_diagnostics，必要时再补更窄的测试。"
+        : "",
       "文件路径默认相对于当前 workspace。",
       `shell_exec 使用 ${resolveShellLabel(input.shell)} 语法，不要默认写 bash 专属语法。`,
     ]

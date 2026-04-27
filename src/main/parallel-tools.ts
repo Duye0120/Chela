@@ -21,6 +21,8 @@ import { appLogger } from "./logger.js";
 
 export const SIDE_EFFECT_FREE_TOOLS = new Set([
   "file_read",
+  "code_inspect",
+  "code_diagnostics",
   "glob_search",
   "grep_search",
   "command_history",

@@ -45,10 +45,18 @@ type FileEditDetails = {
   originalFile: string;
   newFile: string;
   structuredPatch: StructuredPatchHunk[];
+  changedRanges: Array<{
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+  }>;
   usedFuzzy: boolean;
   replaceAll: boolean;
   userModified: boolean;
   gitDiff: null;
+  lineEndingPreserved: boolean;
+  diagnosticsSuggested: boolean;
 };
 
 function emptyDetails(filePath: string, edits: Edit[], replaceAll: boolean): FileEditDetails {
@@ -61,10 +69,13 @@ function emptyDetails(filePath: string, edits: Edit[], replaceAll: boolean): Fil
     originalFile: "",
     newFile: "",
     structuredPatch: [],
+    changedRanges: [],
     usedFuzzy: false,
     replaceAll,
     userModified: false,
     gitDiff: null,
+    lineEndingPreserved: true,
+    diagnosticsSuggested: false,
   };
 }
 
@@ -208,6 +219,12 @@ export function createFileEditTool(
           applied.baseContent,
           applied.newContent,
         );
+        const changedRanges = structuredPatch.map((hunk) => ({
+          oldStart: hunk.oldStart,
+          oldLines: hunk.oldLines,
+          newStart: hunk.newStart,
+          newLines: hunk.newLines,
+        }));
         const details: FileEditDetails = {
           filePath,
           edits,
@@ -216,10 +233,13 @@ export function createFileEditTool(
           originalFile: applied.baseContent,
           newFile: applied.newContent,
           structuredPatch,
+          changedRanges,
           usedFuzzy: applied.usedFuzzy,
           replaceAll,
           userModified: false,
           gitDiff: null,
+          lineEndingPreserved: true,
+          diagnosticsSuggested: /\.(tsx?|jsx?)$/i.test(filePath),
         };
 
         const summary =

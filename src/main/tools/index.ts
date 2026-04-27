@@ -6,6 +6,7 @@ import {
   getMcpResourceTools,
 } from "../../mcp/adapter.js";
 import { createCommandHistoryTool } from "./command-history.js";
+import { createCodeDiagnosticsTool, createCodeInspectTool } from "./code-analysis.js";
 import { getTimeTool } from "./get-time.js";
 import { createFileEditTool } from "./file-edit.js";
 import { createFileReadTool } from "./file-read.js";
@@ -70,6 +71,8 @@ export function getBuiltinTools(options: BuiltinToolOptions): AgentTool<any, any
 
   return [
     getTimeTool,
+    createCodeInspectTool(options.workspacePath),
+    createCodeDiagnosticsTool(options.workspacePath),
     createFileReadTool(options.workspacePath),
     fileEdit,
     aliasTool(fileEdit, "edit_file", "编辑文件"),

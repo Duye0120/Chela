@@ -76,6 +76,8 @@ Agent 启动时：
 ```
 1. 收集内置工具
    ├─ file_read
+   ├─ code_inspect
+   ├─ code_diagnostics
    ├─ file_write
    ├─ shell_exec
    ├─ web_fetch
@@ -88,7 +90,7 @@ Agent 启动时：
    └─ 包装成 AgentTool 格式（MCP 工具 → AgentTool 适配器）
 
 3. 合并工具列表
-   allTools = [...builtinTools, ...mcpTools]
+   allTools = [...builtinTools, ...mcpResourceTools, mcpBroker, ...directMcpTools]
 
 4. 注入 Agent
    new Agent({ initialState: { tools: allTools, ... } })
@@ -158,6 +160,12 @@ type ToolPolicyDecision =
 ```
 
 注意：MCP 工具也不例外。凡是副作用能力，一律先过 Harness。
+
+代码类只读工具属于 safe 工具：
+
+- `code_inspect` 只读取单文件 AST outline 与目标诊断。
+- `code_diagnostics` 只对指定 TS/JS 文件运行诊断。
+- `file_edit` 仍属于 guarded 工具，返回 structured patch、changed ranges 和是否建议继续诊断。
 
 ### 三层防护
 

@@ -8,6 +8,8 @@
 | 工具 | 能力 | 风险等级 | 流式输出 |
 |------|------|---------|---------|
 | file_read | 读取本地文件内容 | guarded | 否 |
+| code_inspect | 读取代码结构、imports/exports、符号和目标诊断 | safe | 否 |
+| code_diagnostics | 对指定 TS/JS 文件运行目标诊断 | safe | 否 |
 | file_write | 写入/创建本地文件 | guarded | 否 |
 | shell_exec | 执行 shell 命令 | guarded | 是（stdout 实时推送） |
 | web_fetch | 获取网页内容 | safe | 否 |
@@ -58,7 +60,35 @@
 - 文件不存在 → 返回错误 "文件不存在: ./xxx"
 - 路径超出白名单 → 被安全沙箱拦截（不会到达 execute）
 
-## 5.3 file_write
+## 5.3 code_inspect / code_diagnostics
+
+**用途：** 让 agent 在改代码前先理解文件结构，在改代码后对相关文件做目标诊断。
+
+**code_inspect 参数：**
+```typescript
+{
+  path: string;
+}
+```
+
+**code_diagnostics 参数：**
+```typescript
+{
+  paths: string[];
+  mode?: "auto" | "typescript";
+}
+```
+
+**返回：**
+- `code_inspect` 返回 imports、exports、函数/类/组件等符号 outline，以及该文件的 TypeScript 诊断。
+- `code_diagnostics` 返回指定文件的诊断列表、错误数、警告数。
+
+**默认使用规则：**
+- 代码任务先用搜索定位，再用 `file_read` 或 `code_inspect` 理解局部结构。
+- `file_edit` 修改 TS/JS 文件后，优先对本轮相关文件调用 `code_diagnostics`。
+- 涉及共享类型、IPC 或跨 renderer/main 的接口时，可以扩大诊断文件集合。
+
+## 5.4 file_write
 
 **用途：** 创建或写入文件，让 agent 能"动手"修改项目。
 
@@ -101,7 +131,7 @@
 - 覆盖已有文件时 → 通过 Adapter 请求用户确认
 - 新建文件 → 直接执行，不需确认
 
-## 5.4 shell_exec
+## 5.5 shell_exec
 
 **用途：** 执行 shell 命令，让 agent 能真正"做事"——安装依赖、跑测试、查进程等。
 
@@ -179,7 +209,7 @@ async execute(toolCallId, params, signal, onUpdate) {
 2. auto-approve 白名单 → 直接执行
 3. 其他命令 → 用户确认
 
-## 5.5 web_fetch
+## 5.6 web_fetch
 
 **用途：** 获取网页内容，让 agent 能查资料、读文档。
 
@@ -231,7 +261,7 @@ To install the package, run:
 
 有时用户说"帮我查一下 React 19 的新特性"，agent 用 web_fetch 拉了一个页面回来，但页面很长，大部分内容不相关。prompt 参数让工具内部先做一次提取，只返回相关部分。这是工具级的上下文控制——在信息进入 agent context 之前就过滤掉噪音。
 
-## 5.6 memory_search
+## 5.7 memory_search
 
 **用途：** 检索长期记忆，让 agent 能"回忆"之前的对话和用户偏好。
 
@@ -286,7 +316,7 @@ To install the package, run:
 1. **主动检索** — agent 在 system prompt 里被告知"如果需要回忆之前的信息，使用 memory_search 工具"，当它觉得需要时会自己调用
 2. **自动注入** — 在 transformContext 里我们也会做一次自动检索（见 03-agent-core 3.5），但那是基于最新用户消息的隐式检索。memory_search 工具让 agent 能主动用不同的 query 检索，更灵活
 
-## 5.7 工具之间的协作模式
+## 5.8 工具之间的协作模式
 
 LLM 可以在一次回复中调用多个工具（并行），也可以跨多轮串联调用。常见的协作模式：
 
