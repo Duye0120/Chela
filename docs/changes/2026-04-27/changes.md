@@ -534,6 +534,91 @@
 - `pnpm exec tsx tests/provider-regression.test.ts` 通过。
 - `pnpm exec tsx tests/foundation-regression.test.ts` 通过。
 
+## Phase 5 Harness 恢复闭环
+
+时间：2026-04-27 17:46:07
+
+改了什么：
+- 新增 `src/shared/run-recovery.ts`，统一 run failure 分类和 recovery prompt 生成。
+- `ContextSummary.recoverableRun` 增加 `failureKind`、`recoveryStatus`、`recoveryPrompt`。
+- Context 恢复按钮优先投递标准 recovery prompt，包含 latest tool failure、todos、transcript tail。
+- 新增 `run_recovery_requested` transcript 事件，interrupted approval 恢复时写入来源 run、恢复 run 和 recovery prompt。
+- Context 卡片展示恢复状态和失败类型。
+- 新增 `tests/harness-run-regression.test.ts`，并纳入 `test:regression`。
+
+为什么改：
+- Phase 5 要让失败 run 和中断审批具备可审计恢复链路；恢复提示需要稳定生成，恢复动作需要进入正式队列，transcript 需要记录恢复来源。
+
+涉及文件：
+- `src/shared/contracts.ts`
+- `src/shared/run-recovery.ts`
+- `src/main/context/snapshot.ts`
+- `src/main/harness/approvals.ts`
+- `src/main/session/service.ts`
+- `src/main/session/transcript-writer.ts`
+- `src/renderer/src/components/assistant-ui/context-summary-trigger.tsx`
+- `src/renderer/src/components/assistant-ui/thread.tsx`
+- `tests/harness-run-regression.test.ts`
+- `package.json`
+- `docs/todos/foundation-hardening-roadmap.md`
+- `docs/changes/2026-04-27/changes.md`
+
+结果：
+- `pnpm run test:regression` 通过。
+
+## Phase 6 插件扩展底座
+
+时间：2026-04-27 18:20:54
+
+改了什么：
+- 新增 `src/shared/plugins.ts`，定义 Chela plugin manifest、权限边界和 workflow schema，并提供 manifest 校验函数。
+- 新增 `src/main/plugins/registry.ts`，实现插件目录扫描、manifest 校验、无效插件错误收集和启停状态持久化。
+- 新增 `src/main/plugins/workflow.ts`，实现最小串行 workflow runner，按步骤调用工具并在失败时停止。
+- 新增 `src/main/plugins/external-api.ts`，提供 External API Adapter 最小请求接口。
+- 新增 `tests/plugin-regression.test.ts`，覆盖 manifest 校验、目录扫描、无效插件隔离、启停状态持久化、workflow 运行和 external API adapter。
+- 将 plugin 回归测试纳入 `test:regression`。
+
+为什么改：
+- Phase 6 目标是给后续 Workflow、External API Adapter、Plugin Loader 做最小可用底座；这一轮先建立稳定 schema、扫描、启停和串行执行能力。
+
+涉及文件：
+- `src/shared/plugins.ts`
+- `src/main/plugins/registry.ts`
+- `src/main/plugins/workflow.ts`
+- `src/main/plugins/external-api.ts`
+- `tests/plugin-regression.test.ts`
+- `package.json`
+- `docs/todos/foundation-hardening-roadmap.md`
+- `docs/changes/2026-04-27/changes.md`
+
+结果：
+- `pnpm exec tsx tests/plugin-regression.test.ts` 通过。
+
+## Phase 4 Provider 聊天 Smoke 入口
+
+时间：2026-04-27 18:26:38
+
+改了什么：
+- 新增 `src/main/provider-chat-smoke.ts`，提供 OpenAI-compatible / DashScope 兼容聊天 smoke runner。
+- 新增 `smoke:provider-chat` 脚本，通过 `CHELA_SMOKE_BASE_URL`、`CHELA_SMOKE_API_KEY`、`CHELA_SMOKE_MODEL` 发起 `/chat/completions` 请求。
+- 无真实凭据时 smoke 脚本返回 skipped 结果，不阻断本地回归。
+- 扩展 `tests/provider-regression.test.ts`，覆盖请求 URL、Authorization、请求体、响应解析、环境变量读取和 Windows CLI 入口判断。
+- 更新底层基建路线图，将 Phase 4 最后一项标为完成。
+
+为什么改：
+- Phase 4 剩余项要求保留真实聊天发送 smoke 流程；这条入口让 OpenAI-compatible / DashScope 配置到位后可以直接验证真实聊天链路。
+
+涉及文件：
+- `src/main/provider-chat-smoke.ts`
+- `tests/provider-regression.test.ts`
+- `package.json`
+- `docs/todos/foundation-hardening-roadmap.md`
+- `docs/changes/2026-04-27/changes.md`
+
+结果：
+- `pnpm exec tsx tests/provider-regression.test.ts` 通过。
+- `pnpm run smoke:provider-chat` 在无凭据环境返回 skipped。
+
 ## 提交计划生成空态居中
 
 时间：2026-04-27 17:04:18

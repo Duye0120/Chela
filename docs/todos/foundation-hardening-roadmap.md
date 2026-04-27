@@ -1,6 +1,6 @@
 # Chela 底层基建完善路线图
 
-更新时间：2026-04-27 17:28:40
+更新时间：2026-04-27 18:26:38
 
 目标：把 Chela 从“执行主干已具备”推进到“适合长期持续加功能”的底层状态。路线按 6 个阶段推进，预计 12-18 轮有效改动。优先做前 3 阶段：环境 Doctor、IPC 契约校验、Memory 管理闭环。
 
@@ -118,7 +118,7 @@
 - [x] provider directory cache 增加错误态和 stale fallback。
 - [x] 设置页展示最近一次 provider directory 同步状态。
 - [x] 增加真实 provider fetch 的 mockable integration test。
-- [ ] 对 OpenAI-compatible / DashScope 兼容层保留真实聊天发送 smoke 流程。
+- [x] 对 OpenAI-compatible / DashScope 兼容层保留真实聊天发送 smoke 流程。
 
 完成标准：
 - [x] Provider 错误能被 UI 精确展示。
@@ -127,6 +127,8 @@
 
 结果记录：2026-04-27 17:28:40 完成 Phase 4 第一轮 Provider 稳定性。Provider 测试和模型拉取结果新增 `errorCode`，区分认证、网络、超时、协议、空模型、配置缺失；`fetchModels` 抽出可测 helper，支持 timeout 和外部 abort signal；provider directory 刷新失败时可返回 stale cache；设置页展示模型目录同步状态。剩余真实聊天 smoke 流程待后续人工凭据环境验证。
 
+结果记录：2026-04-27 18:26:38 完成 Phase 4 真实聊天 smoke 入口。新增 `smoke:provider-chat`，通过 `CHELA_SMOKE_BASE_URL`、`CHELA_SMOKE_API_KEY`、`CHELA_SMOKE_MODEL` 对 OpenAI-compatible / DashScope 兼容端点发起 `/chat/completions` smoke；无凭据时返回 skipped；mock fetch 回归覆盖请求体、Authorization、响应解析和 Windows CLI 入口判断。Phase 4 任务已收口。
+
 ## Phase 5：Harness / 长任务恢复
 
 目标：让复杂任务失败后更容易恢复，让 run 生命周期更清晰。
@@ -134,17 +136,19 @@
 预计：2-3 轮有效改动。
 
 任务：
-- [ ] 标准化 run failed / aborted 的恢复提示生成。
-- [ ] 把 latest tool failure、todos、transcript tail 组合成可审计 recovery prompt。
-- [ ] approval interrupted 恢复结果写入 transcript。
-- [ ] run lifecycle 增加失败原因分类。
-- [ ] Context 卡片展示恢复入口的状态：可恢复、已恢复、恢复失败。
-- [ ] 增加 Harness run lifecycle 回归测试。
+- [x] 标准化 run failed / aborted 的恢复提示生成。
+- [x] 把 latest tool failure、todos、transcript tail 组合成可审计 recovery prompt。
+- [x] approval interrupted 恢复结果写入 transcript。
+- [x] run lifecycle 增加失败原因分类。
+- [x] Context 卡片展示恢复入口的状态：可恢复、已恢复、恢复失败。
+- [x] 增加 Harness run lifecycle 回归测试。
 
 完成标准：
-- [ ] 失败 run 可以稳定生成恢复提示。
-- [ ] 恢复动作进入正式队列模型。
-- [ ] transcript 能追踪恢复来源。
+- [x] 失败 run 可以稳定生成恢复提示。
+- [x] 恢复动作进入正式队列模型。
+- [x] transcript 能追踪恢复来源。
+
+结果记录：2026-04-27 17:46:07 完成 Phase 5 第一轮 Harness 恢复闭环。新增 run recovery shared helper，统一失败原因分类和恢复 prompt；ContextSummary 的 recoverableRun 带 `failureKind`、`recoveryStatus`、`recoveryPrompt`；Context 恢复按钮会投递标准恢复 prompt；interrupted approval 恢复会写入 `run_recovery_requested` transcript 事件；新增 harness run 回归测试并纳入 `test:regression`。Phase 5 任务和完成标准已收口。
 
 ## Phase 6：插件 / 扩展底座
 
@@ -153,19 +157,21 @@
 预计：3-4 轮有效改动。
 
 任务：
-- [ ] 定义 Chela plugin manifest schema。
-- [ ] 实现插件目录扫描和 manifest 校验。
-- [ ] 实现插件启用 / 禁用状态存储。
-- [ ] 定义插件权限边界：tools、MCP servers、UI panels、workflows。
-- [ ] External API Adapter 最小接口。
-- [ ] Workflow 编排最小版本：串行步骤、工具调用、失败停止、状态持久化。
-- [ ] 插件加载失败不影响主应用启动。
-- [ ] 增加插件 manifest 回归测试。
+- [x] 定义 Chela plugin manifest schema。
+- [x] 实现插件目录扫描和 manifest 校验。
+- [x] 实现插件启用 / 禁用状态存储。
+- [x] 定义插件权限边界：tools、MCP servers、UI panels、workflows。
+- [x] External API Adapter 最小接口。
+- [x] Workflow 编排最小版本：串行步骤、工具调用、失败停止、状态持久化。
+- [x] 插件加载失败不影响主应用启动。
+- [x] 增加插件 manifest 回归测试。
 
 完成标准：
-- [ ] 插件可以被扫描、校验、启停。
-- [ ] 无效插件有明确错误。
-- [ ] Workflow 能跑最小串行任务。
+- [x] 插件可以被扫描、校验、启停。
+- [x] 无效插件有明确错误。
+- [x] Workflow 能跑最小串行任务。
+
+结果记录：2026-04-27 18:20:54 完成 Phase 6 插件 / 扩展底座最小闭环。新增 Chela plugin manifest schema、扫描器、启停状态存储、权限边界、External API Adapter 最小接口和串行 workflow runner；无效 manifest 会进入 scan errors，不影响有效插件加载；新增 plugin 回归测试并纳入 `test:regression`。Phase 6 任务和完成标准已收口。
 
 ## 推荐执行顺序
 
