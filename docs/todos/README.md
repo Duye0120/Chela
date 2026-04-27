@@ -1,70 +1,88 @@
 # Chela TODO 索引
 
-最后更新：2026-04-25
+最后更新：2026-04-27（Phase 2 IPC 契约校验已启动）
 
 本目录用于沉淀「想做但没做」的事项；正在执行的计划仍放在 `docs/plans/`，已落定的设计放在 `specs/`。
 本索引按优先级聚合各来源（plan、spec、AGENTS 约束、讨论稿），同一条事项不重复落地点，只指向源文档。
 
 ---
 
-## 🔥 P0 — 致命/数据安全/崩溃风险（来自 full-project-audit）
+## 🧱 底层基建完善路线图
 
-源：[../plans/full-project-audit-2026-04-22.md](../plans/full-project-audit-2026-04-22.md) （6 条）
+源：[foundation-hardening-roadmap.md](foundation-hardening-roadmap.md)
 
-- terminalEventFlushed 缺陷
-- session 并发写入
-- 窗口销毁后 send
-- 路径白名单绕过
-- PowerShell 注入
-- API Key 泄露
+执行顺序：
+- [x] Phase 1：环境 Doctor
+- [ ] Phase 2：IPC 契约校验（`settings:update` 已覆盖）
+- [ ] Phase 3：Memory 管理闭环
+- [ ] Phase 4：Provider / 模型目录稳定性
+- [ ] Phase 5：Harness / 长任务恢复
+- [ ] Phase 6：插件 / 扩展底座
 
-> 行动：按 audit 文件的 P0 章节逐条修。
+目标：把 Chela 的底层从“执行主干已具备”推进到“适合长期持续加功能”的状态，预计 12-18 轮有效改动。
 
 ---
 
-## ⚠️ P1 — 严重（资源/契约/竞态，13 条）
+## 🔥 P0 — 致命/数据安全/崩溃风险（来自 full-project-audit）✅ 全部已修复
+
+源：[../plans/full-project-audit-2026-04-22.md](../plans/full-project-audit-2026-04-22.md) （6 条，全部修完）
+
+- ~~terminalEventFlushed 缺陷~~ → 已改为 `Set<runId>`
+- ~~session 并发写入~~ → 已加 `withSessionWriteLock` 互斥
+- ~~窗口销毁后 send~~ → `adapter.ts` + `terminal.ts` 已包 try/catch
+- ~~路径白名单绕过~~ → 已用 `fs.realpathSync.native`
+- ~~PowerShell 注入~~ → 已用 argv 数组 + 换行归一化
+- ~~API Key 泄露~~ → getter 闭包 + logger 递归脱敏
+
+---
+
+## ⚠️ P1 — 严重 ✅ 已完成
 
 源：[../plans/full-project-audit-2026-04-22.md](../plans/full-project-audit-2026-04-22.md)
 
-主要类型：EventBus 监听泄漏、取消语义重复、Failover 重复初始化、IPC 序列化失败、gitPull 死链、DevTools 生产可开、render 订阅泄漏、session 竞态、闭包风险。
+已修复（13/13）：
+- ~~M4 EventBus 监听泄漏~~、~~M5 cancel 幂等~~、~~M6 failover 重复初始化~~、~~M8 gitPull 死链路~~、
+  ~~R6 context 0% 灰环~~、~~R7 approval 卡片泄露 ID~~、~~M7 IPC handler 错误结构化~~、
+  ~~M9 生产环境开启 renderer sandbox~~、~~R5 branch-switcher 缓存改为组件实例级 useRef~~
+
+补充验证：
+- `agent.onEvent` 订阅在 run cleanup、结束后补事件、组件卸载时都会清理。
+- `activeSessionIdRef` 在 hydrate 时同步更新，降低切 session 与持久化交错风险。
+- provider directory 已有 abort + timeout + cache；`foundation-regression.test.ts` 覆盖超时和缓存复用。
 
 ---
 
-## 💬 聊天主线修复
+## 💬 聊天主线修复 ✅ 基本完成
 
 源：[../critical-chat-fixes-plan.md](../critical-chat-fixes-plan.md)
 
-- **P0-1 代理**：`network.proxy` 配置 + settings 深合并 + 全局 dispatcher
-- **P0-2 Failover**：prepare 阶段 `resolveWithFailover` 收口，execute 阶段 provider/network failover
-- **P0-3 学习注入**：`prompt-control-plane` 新增 learnings layer
-- **P1 会话搜索**：新建 `src/main/session/search.ts`，索引 session.json / transcript.jsonl / context-snapshot.json
-- **P2-1 模型切换**：下一条消息按新模型重建 handle（非 mid-turn 热切）
-- **P2-2 引导**：`pendingRedirectDraft` 队列化，run 结束自动补发 follow-up
+- ~~P0-1 代理~~ → `src/main/network/proxy.ts` 完整实现
+- ~~P0-2 Failover~~ → prepare + execute 双层 failover + 退避重试
+- ~~P0-3 学习注入~~ → `buildLearningsSection()` 读 memdir learnings topic
+- ~~P1 会话搜索~~ → `src/main/session/search.ts` 307 行，IPC 已接线
+- ~~P2-1 模型切换~~ → 文档收口完成
+- ♻️ P2-2 引导 → 已被 `queuedMessages` 机制替代，`pendingRedirectDraft` 仅保留做兼容迁移
 
 ---
 
 ## 🧠 记忆 / RAG 系统
 
-### 工程实施（待执行）
+### 工程实施 ✅ 完成，2 条收尾
 源：[../plans/memory-rag-implementation.md](../plans/memory-rag-implementation.md)
 
-- Phase 1 基础设施（依赖 + electron-builder 原生模块配置） ← 部分已做（better-sqlite3 已重建）
-- Phase 2 EmbeddingService 单例 + worker_threads 隔离 ← 已做
-- Phase 3 SQLite 表结构、批量写入优化 ← 已做
-- Phase 4 search 实现、余弦相似度、Query 缓存 ← 已做
-- Phase 5 ipcMain.handle 注册 ← 已做
-- **剩余**：embedding 对接 Ollama 已上线，需回归 + 写入率监控
+- ~~Phase 1-5~~ → `embedding.ts`（worker_threads）、`store.ts`（SQLite）、`retrieval.ts`（余弦相似度 + 缓存）、IPC 注册 全部完成
+- ~~spec 07 / 09 对齐当前 SQLite + embedding worker 实现~~ ✅
+- **剩余**：原生依赖 ABI 重建流程、embedding 真实 provider 回归、写入率监控
 
-### 信号驱动记忆（设计中）
+### 信号驱动记忆（全部未开始）
 源：[memory-system-signal-driven.md](memory-system-signal-driven.md)
 
-把"我得记下来"收敛到 4 类信号通道（情绪冲击 / 预测违背 / 重复出现 / 显式标记），统一走候选事件总线 + 可学习评分器。落地优先级：
-1. 抽 `MemoryCandidateBus`
-2. 改造 `active-learning` 为订阅者
-3. 加 ExplicitMarker（ROI 最高）
-4. 加 EmotionalSpike → candidate
-5. 加 PredictionMismatch
-6. UI 删除即降权
+- [ ] 抽 `MemoryCandidateBus`（`src/main/memory/candidate-bus.ts`）
+- [ ] 改造 `active-learning` 为订阅者
+- [ ] 加 ExplicitMarker（ROI 最高）
+- [ ] 加 EmotionalSpike → candidate
+- [ ] 加 PredictionMismatch
+- [ ] UI 删除即降权
 
 ### 偏好观察 + 向量检索（评审中）
 源：[../memory-rag-upgrade-spec.md](../memory-rag-upgrade-spec.md)
@@ -75,52 +93,51 @@
 
 ---
 
-## 📐 Spec 未完成（部分落地）
+## 📐 Spec 未完成
 
 源：[../../specs/README.md](../../specs/README.md)
 
 | Spec | 状态 | 主要未落地点 |
 |---|---|---|
-| [07 memory-architecture](../../specs/07-memory-architecture.md) | in-review | T1 向量检索完整集成、T1-T2 在 context 层的混合注入 |
-| [09 rag-and-embedding](../../specs/09-rag-and-embedding.md) | in-review | Ollama/OpenAI fallback 完整兼容、降级运行模式、向量存储查询优化 |
-| [16 extensibility-architecture](../../specs/16-extensibility-architecture.md) | draft | Plugin Loader、OAuth、External API Adapters、Workflow 编排 |
+| [07 memory-architecture](../../specs/07-memory-architecture.md) | in-review | 已对齐当前 T0/T1/T2 baseline；后续补记忆管理 UI |
+| [09 rag-and-embedding](../../specs/09-rag-and-embedding.md) | in-review | 已对齐当前 SQLite + embedding worker；后续补 provider 自动探测、降级 UI、native rebuild 指引 |
+| [16 extensibility-architecture](../../specs/16-extensibility-architecture.md) | draft | Plugin Loader、OAuth、External API Adapters、Workflow 编排 **完全未开始** |
 
 其余 13 个 spec：`in-review` + baseline 已落地。
 
 ---
 
-## 🌐 浏览器预览 / DOM Inspector
+## 🌐 浏览器预览 / DOM Inspector ❌ 未开始
 
 源：[../browser-preview-dom-inspector-spec.md](../browser-preview-dom-inspector-spec.md)
 
-- Phase 2 Inspector Content Script
-- Phase 3 Tiptap Tag/Mention 集成
+- 仅 spec 存在，代码完全未开始
 
 ---
 
-## 🎨 UI 改造
+## 🎨 UI 改造（待逐项验证）
 
-源：`docs/superpowers/plans/2026-04-01-ui-redesign.md`（如存在）
+源：`docs/superpowers/plans/2026-04-01-ui-redesign.md`
 
 - Task 1-14 分阶段实施（archive 层、组件、样式统一）
 - 依赖 design spec 中的精确数值（字号、间距、圆角）
 
-### AGENTS.md 约束的违反项（需回归）
-- branch-switcher 未走缓存
-- context 圆环缺失「0% 灰环」状态
-- approval 卡片错误文案泄露内部 ID（sessionId / runId / payloadHash）
+### AGENTS.md 约束的违反项（2/3 已修复）
+- ~~context 圆环缺失「0% 灰环」状态~~ ✅
+- ~~approval 卡片错误文案泄露内部 ID~~ ✅
+- ~~branch-switcher 未走缓存~~ ✅ 组件实例级 `useRef` 缓存
 
 ---
 
-## 🏗 架构细节待定
+## 🏗 架构细节待定 ✅ 大部分已落地
 
 源：[../backend-architecture-blueprint.md](../backend-architecture-blueprint.md)（L2.3）
 
-- approval 单独怎么存
-- awaiting_confirmation 恢复到 UI 的协议
-- transformContext 最终接口设计
-- 手动 compact 的触发协议与回放语义
-- session memory snapshot 字段结构与刷新时机
+- ~~approval 存储格式~~ → `interrupted-approvals.json`
+- ~~awaiting_confirmation 恢复协议~~ → `HarnessRunState` + transcript events
+- ~~transformContext 接口~~ → `createTransformContext()` 已定义
+- ~~手动 compact 触发协议~~ → `compactSession()` + IPC handler
+- ~~session memory snapshot 字段结构~~ → `contracts.ts` 完整定义
 - memory_search / RAG / embedding 接进 Agent Core 的方案
 - run 级别数据存储位置（session 内 vs 单独拆 `runs/`）
 
@@ -130,7 +147,7 @@
 
 源：[../../specs/03-agent-core.md](../../specs/03-agent-core.md) L382
 
-- 中断审批：当前能恢复状态，**真正恢复执行**仍未完成
+- ⚠️ 中断审批：`recoveryPrompt` + `canResume` 已有，"真正恢复执行"仍未完成
 
 ---
 
