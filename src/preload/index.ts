@@ -17,55 +17,116 @@ import type {
   TrimSessionMessagesInput,
 } from "../shared/contracts.js";
 import type { AgentEvent, ConfirmationResponse } from "../shared/agent-events.js";
-import { IPC_CHANNELS } from "../shared/ipc.js";
+import {
+  IPC_CHANNELS,
+  IPC_ERROR_MESSAGE_PREFIX,
+  type IpcErrorPayload,
+} from "../shared/ipc.js";
+
+type DesktopIpcError = Error & IpcErrorPayload;
+
+function isIpcErrorPayload(value: unknown): value is IpcErrorPayload {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as Record<string, unknown>).code === "string" &&
+    typeof (value as Record<string, unknown>).message === "string"
+  );
+}
+
+function decodeIpcErrorPayload(error: unknown): IpcErrorPayload | null {
+  if (isIpcErrorPayload(error)) {
+    return error;
+  }
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  const prefixIndex = message.indexOf(IPC_ERROR_MESSAGE_PREFIX);
+  if (prefixIndex < 0) {
+    return null;
+  }
+
+  const encoded = message.slice(prefixIndex + IPC_ERROR_MESSAGE_PREFIX.length).trim();
+  try {
+    const parsed = JSON.parse(encoded) as unknown;
+    return isIpcErrorPayload(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function createDesktopIpcError(payload: IpcErrorPayload): DesktopIpcError {
+  const error = new Error(payload.message) as DesktopIpcError;
+  error.code = payload.code;
+  return error;
+}
+
+async function invokeIpc<T = unknown>(
+  channel: string,
+  ...args: unknown[]
+): Promise<T> {
+  try {
+    return await ipcRenderer.invoke(channel, ...args);
+  } catch (error) {
+    const payload = decodeIpcErrorPayload(error) ?? {
+      code: "IPC_INVOKE_FAILED",
+      message: error instanceof Error ? error.message : "IPC 调用失败。",
+    };
+    throw createDesktopIpcError(payload);
+  }
+}
 
 const desktopApi: DesktopApi = {
   files: {
-    pick: () => ipcRenderer.invoke(IPC_CHANNELS.filesPick),
-    readPreview: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.filesReadPreview, filePath),
-    readImageDataUrl: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.filesReadImageDataUrl, filePath),
-    saveFromClipboard: (payload) => ipcRenderer.invoke(IPC_CHANNELS.filesSaveFromClipboard, payload),
+    pick: () => invokeIpc(IPC_CHANNELS.filesPick),
+    readPreview: (filePath: string) => invokeIpc(IPC_CHANNELS.filesReadPreview, filePath),
+    readImageDataUrl: (filePath: string) => invokeIpc(IPC_CHANNELS.filesReadImageDataUrl, filePath),
+    saveFromClipboard: (payload) => invokeIpc(IPC_CHANNELS.filesSaveFromClipboard, payload),
   },
   sessions: {
-    list: () => ipcRenderer.invoke(IPC_CHANNELS.sessionsList),
-    load: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.sessionsLoad, sessionId),
-    save: (session: ChatSession) => ipcRenderer.invoke(IPC_CHANNELS.sessionsSave, session),
-    create: () => ipcRenderer.invoke(IPC_CHANNELS.sessionsCreate),
-    archive: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.sessionsArchive, sessionId),
-    unarchive: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.sessionsUnarchive, sessionId),
-    listArchived: () => ipcRenderer.invoke(IPC_CHANNELS.sessionsListArchived),
-    delete: (sessionId: string) => ipcRenderer.invoke(IPC_CHANNELS.sessionsDelete, sessionId),
-    setGroup: (sessionId: string, groupId: string | null) => ipcRenderer.invoke(IPC_CHANNELS.sessionsSetGroup, sessionId, groupId),
-    rename: (sessionId: string, title: string) => ipcRenderer.invoke(IPC_CHANNELS.sessionsRename, sessionId, title),
-    setPinned: (sessionId: string, pinned: boolean) => ipcRenderer.invoke(IPC_CHANNELS.sessionsSetPinned, sessionId, pinned),
+    list: () => invokeIpc(IPC_CHANNELS.sessionsList),
+    load: (sessionId: string) => invokeIpc(IPC_CHANNELS.sessionsLoad, sessionId),
+    save: (session: ChatSession) => invokeIpc(IPC_CHANNELS.sessionsSave, session),
+    create: () => invokeIpc(IPC_CHANNELS.sessionsCreate),
+    archive: (sessionId: string) => invokeIpc(IPC_CHANNELS.sessionsArchive, sessionId),
+    unarchive: (sessionId: string) => invokeIpc(IPC_CHANNELS.sessionsUnarchive, sessionId),
+    listArchived: () => invokeIpc(IPC_CHANNELS.sessionsListArchived),
+    delete: (sessionId: string) => invokeIpc(IPC_CHANNELS.sessionsDelete, sessionId),
+    setGroup: (sessionId: string, groupId: string | null) => invokeIpc(IPC_CHANNELS.sessionsSetGroup, sessionId, groupId),
+    rename: (sessionId: string, title: string) => invokeIpc(IPC_CHANNELS.sessionsRename, sessionId, title),
+    setPinned: (sessionId: string, pinned: boolean) => invokeIpc(IPC_CHANNELS.sessionsSetPinned, sessionId, pinned),
     search: (query: string, limit?: number): Promise<SessionSearchResult[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.sessionsSearch, query, limit),
+      invokeIpc(IPC_CHANNELS.sessionsSearch, query, limit),
     reindexSearch: (): Promise<void> =>
-      ipcRenderer.invoke(IPC_CHANNELS.sessionsReindexSearch),
+      invokeIpc(IPC_CHANNELS.sessionsReindexSearch),
   },
   groups: {
-    list: (): Promise<SessionGroup[]> => ipcRenderer.invoke(IPC_CHANNELS.groupsList),
+    list: (): Promise<SessionGroup[]> => invokeIpc(IPC_CHANNELS.groupsList),
     create: (input: SessionGroupCreateInput): Promise<SessionGroup> =>
-      ipcRenderer.invoke(IPC_CHANNELS.groupsCreate, input),
-    rename: (groupId: string, name: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.groupsRename, groupId, name),
-    delete: (groupId: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.groupsDelete, groupId),
+      invokeIpc(IPC_CHANNELS.groupsCreate, input),
+    rename: (groupId: string, name: string): Promise<void> => invokeIpc(IPC_CHANNELS.groupsRename, groupId, name),
+    delete: (groupId: string): Promise<void> => invokeIpc(IPC_CHANNELS.groupsDelete, groupId),
   },
   chat: {
-    send: (input: SendMessageInput) => ipcRenderer.invoke(IPC_CHANNELS.chatSend, input),
+    send: (input: SendMessageInput) => invokeIpc(IPC_CHANNELS.chatSend, input),
     trimSessionMessages: (input: TrimSessionMessagesInput) =>
-      ipcRenderer.invoke(IPC_CHANNELS.chatTrimSessionMessages, input),
+      invokeIpc(IPC_CHANNELS.chatTrimSessionMessages, input),
     enqueueQueuedMessage: (input: EnqueueQueuedMessageInput) =>
-      ipcRenderer.invoke(IPC_CHANNELS.chatEnqueueQueuedMessage, input),
+      invokeIpc(IPC_CHANNELS.chatEnqueueQueuedMessage, input),
     triggerQueuedMessage: (input: TriggerQueuedMessageInput) =>
-      ipcRenderer.invoke(IPC_CHANNELS.chatTriggerQueuedMessage, input),
+      invokeIpc(IPC_CHANNELS.chatTriggerQueuedMessage, input),
     removeQueuedMessage: (input: RemoveQueuedMessageInput) =>
-      ipcRenderer.invoke(IPC_CHANNELS.chatRemoveQueuedMessage, input),
+      invokeIpc(IPC_CHANNELS.chatRemoveQueuedMessage, input),
   },
   context: {
     getSummary: (sessionId: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.contextGetSummary, sessionId),
+      invokeIpc(IPC_CHANNELS.contextGetSummary, sessionId),
     compact: (sessionId: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.contextCompact, sessionId),
+      invokeIpc(IPC_CHANNELS.contextCompact, sessionId),
   },
 
   // ── Agent (wired in Phase 1) ──────────────────────────────
@@ -75,78 +136,86 @@ const desktopApi: DesktopApi = {
       ipcRenderer.on(IPC_CHANNELS.agentEvent, handler);
       return () => { ipcRenderer.removeListener(IPC_CHANNELS.agentEvent, handler); };
     },
-    cancel: (scope: AgentRunScope) => ipcRenderer.invoke(IPC_CHANNELS.agentCancel, scope),
+    cancel: (scope: AgentRunScope) => invokeIpc(IPC_CHANNELS.agentCancel, scope),
     confirmResponse: (response: ConfirmationResponse) =>
-      ipcRenderer.invoke(IPC_CHANNELS.agentConfirmResponse, response),
+      invokeIpc(IPC_CHANNELS.agentConfirmResponse, response),
     listPendingApprovalGroups: (sessionId?: string): Promise<PendingApprovalGroup[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.agentListPendingApprovalGroups, sessionId),
+      invokeIpc(IPC_CHANNELS.agentListPendingApprovalGroups, sessionId),
     listInterruptedApprovals: (sessionId?: string): Promise<InterruptedApprovalNotice[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.agentListInterruptedApprovals, sessionId),
+      invokeIpc(IPC_CHANNELS.agentListInterruptedApprovals, sessionId),
     listInterruptedApprovalGroups: (sessionId?: string): Promise<InterruptedApprovalGroup[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.agentListInterruptedApprovalGroups, sessionId),
+      invokeIpc(IPC_CHANNELS.agentListInterruptedApprovalGroups, sessionId),
     dismissInterruptedApproval: (runId: string): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.agentDismissInterruptedApproval, runId),
+      invokeIpc(IPC_CHANNELS.agentDismissInterruptedApproval, runId),
     resumeInterruptedApproval: (runId: string): Promise<string> =>
-      ipcRenderer.invoke(IPC_CHANNELS.agentResumeInterruptedApproval, runId),
+      invokeIpc(IPC_CHANNELS.agentResumeInterruptedApproval, runId),
   },
 
   // ── Settings (wired in Phase 1) ───────────────────────────
   settings: {
-    get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
-    update: (partial) => ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, partial),
-    getLogSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetLogSnapshot),
-    openLogFolder: (logId) => ipcRenderer.invoke(IPC_CHANNELS.settingsOpenLogFolder, logId),
+    get: () => invokeIpc(IPC_CHANNELS.settingsGet),
+    update: (partial) => invokeIpc(IPC_CHANNELS.settingsUpdate, partial),
+    getLogSnapshot: () => invokeIpc(IPC_CHANNELS.settingsGetLogSnapshot),
+    openLogFolder: (logId) => invokeIpc(IPC_CHANNELS.settingsOpenLogFolder, logId),
   },
   memory: {
-    add: (input) => ipcRenderer.invoke(IPC_CHANNELS.memoryAdd, input),
-    search: (query, limit) => ipcRenderer.invoke(IPC_CHANNELS.memorySearch, query, limit),
-    list: (input) => ipcRenderer.invoke(IPC_CHANNELS.memoryList, input),
-    getStats: () => ipcRenderer.invoke(IPC_CHANNELS.memoryGetStats),
-    rebuild: () => ipcRenderer.invoke(IPC_CHANNELS.memoryRebuild),
+    add: (input) => invokeIpc(IPC_CHANNELS.memoryAdd, input),
+    search: (query, limit) => invokeIpc(IPC_CHANNELS.memorySearch, query, limit),
+    list: (input) => invokeIpc(IPC_CHANNELS.memoryList, input),
+    getStats: () => invokeIpc(IPC_CHANNELS.memoryGetStats),
+    rebuild: () => invokeIpc(IPC_CHANNELS.memoryRebuild),
   },
   skills: {
-    listInstalled: () => ipcRenderer.invoke(IPC_CHANNELS.skillsListInstalled),
-    searchCatalog: (query: string) => ipcRenderer.invoke(IPC_CHANNELS.skillsSearchCatalog, query),
-    install: (request) => ipcRenderer.invoke(IPC_CHANNELS.skillsInstall, request),
+    listInstalled: () => invokeIpc(IPC_CHANNELS.skillsListInstalled),
+    searchCatalog: (query: string) => invokeIpc(IPC_CHANNELS.skillsSearchCatalog, query),
+    install: (request) => invokeIpc(IPC_CHANNELS.skillsInstall, request),
     openDirectory: (skillId: string, source) =>
-      ipcRenderer.invoke(IPC_CHANNELS.skillsOpenDirectory, skillId, source),
+      invokeIpc(IPC_CHANNELS.skillsOpenDirectory, skillId, source),
     openSkillFile: (skillId: string, source) =>
-      ipcRenderer.invoke(IPC_CHANNELS.skillsOpenSkillFile, skillId, source),
+      invokeIpc(IPC_CHANNELS.skillsOpenSkillFile, skillId, source),
+  },
+  mcp: {
+    listStatus: () => invokeIpc(IPC_CHANNELS.mcpListStatus),
+    reloadConfig: () => invokeIpc(IPC_CHANNELS.mcpReloadConfig),
+    restartServer: (serverName: string) =>
+      invokeIpc(IPC_CHANNELS.mcpRestartServer, serverName),
+    disconnectServer: (serverName: string) =>
+      invokeIpc(IPC_CHANNELS.mcpDisconnectServer, serverName),
   },
 
   // ── Providers / Models ─────────────────────────────────────
   providers: {
-    listSources: () => ipcRenderer.invoke(IPC_CHANNELS.providersListSources),
-    getSource: (sourceId) => ipcRenderer.invoke(IPC_CHANNELS.providersGetSource, sourceId),
-    saveSource: (draft) => ipcRenderer.invoke(IPC_CHANNELS.providersSaveSource, draft),
-    deleteSource: (sourceId) => ipcRenderer.invoke(IPC_CHANNELS.providersDeleteSource, sourceId),
-    testSource: (draft) => ipcRenderer.invoke(IPC_CHANNELS.providersTestSource, draft),
-    fetchModels: (draft) => ipcRenderer.invoke(IPC_CHANNELS.providersFetchModels, draft),
-    getCredentials: (sourceId) => ipcRenderer.invoke(IPC_CHANNELS.providersGetCredentials, sourceId),
-    setCredentials: (sourceId, apiKey) => ipcRenderer.invoke(IPC_CHANNELS.providersSetCredentials, sourceId, apiKey),
+    listSources: () => invokeIpc(IPC_CHANNELS.providersListSources),
+    getSource: (sourceId) => invokeIpc(IPC_CHANNELS.providersGetSource, sourceId),
+    saveSource: (draft) => invokeIpc(IPC_CHANNELS.providersSaveSource, draft),
+    deleteSource: (sourceId) => invokeIpc(IPC_CHANNELS.providersDeleteSource, sourceId),
+    testSource: (draft) => invokeIpc(IPC_CHANNELS.providersTestSource, draft),
+    fetchModels: (draft) => invokeIpc(IPC_CHANNELS.providersFetchModels, draft),
+    getCredentials: (sourceId) => invokeIpc(IPC_CHANNELS.providersGetCredentials, sourceId),
+    setCredentials: (sourceId, apiKey) => invokeIpc(IPC_CHANNELS.providersSetCredentials, sourceId, apiKey),
   },
   models: {
-    listEntries: () => ipcRenderer.invoke(IPC_CHANNELS.modelsListEntries),
-    listEntriesBySource: (sourceId) => ipcRenderer.invoke(IPC_CHANNELS.modelsListEntriesBySource, sourceId),
-    saveEntry: (draft) => ipcRenderer.invoke(IPC_CHANNELS.modelsSaveEntry, draft),
-    deleteEntry: (entryId) => ipcRenderer.invoke(IPC_CHANNELS.modelsDeleteEntry, entryId),
-    getEntry: (entryId) => ipcRenderer.invoke(IPC_CHANNELS.modelsGetEntry, entryId),
+    listEntries: () => invokeIpc(IPC_CHANNELS.modelsListEntries),
+    listEntriesBySource: (sourceId) => invokeIpc(IPC_CHANNELS.modelsListEntriesBySource, sourceId),
+    saveEntry: (draft) => invokeIpc(IPC_CHANNELS.modelsSaveEntry, draft),
+    deleteEntry: (entryId) => invokeIpc(IPC_CHANNELS.modelsDeleteEntry, entryId),
+    getEntry: (entryId) => invokeIpc(IPC_CHANNELS.modelsGetEntry, entryId),
   },
 
   // ── Workspace (wired in Phase 5) ──────────────────────────
   workspace: {
-    change: (path) => ipcRenderer.invoke(IPC_CHANNELS.workspaceChange, path),
-    getSoul: () => ipcRenderer.invoke(IPC_CHANNELS.workspaceGetSoul),
-    pickFolder: () => ipcRenderer.invoke(IPC_CHANNELS.workspacePickFolder),
-    openFolder: () => ipcRenderer.invoke(IPC_CHANNELS.workspaceOpenFolder),
+    change: (path) => invokeIpc(IPC_CHANNELS.workspaceChange, path),
+    getSoul: () => invokeIpc(IPC_CHANNELS.workspaceGetSoul),
+    pickFolder: () => invokeIpc(IPC_CHANNELS.workspacePickFolder),
+    openFolder: () => invokeIpc(IPC_CHANNELS.workspaceOpenFolder),
   },
 
   // ── Terminal (wired in Phase 7) ───────────────────────────
   terminal: {
-    create: (options) => ipcRenderer.invoke(IPC_CHANNELS.terminalCreate, options),
-    write: (id, data) => ipcRenderer.invoke(IPC_CHANNELS.terminalWrite, id, data),
-    resize: (id, cols, rows) => ipcRenderer.invoke(IPC_CHANNELS.terminalResize, id, cols, rows),
-    destroy: (id) => ipcRenderer.invoke(IPC_CHANNELS.terminalDestroy, id),
+    create: (options) => invokeIpc(IPC_CHANNELS.terminalCreate, options),
+    write: (id, data) => invokeIpc(IPC_CHANNELS.terminalWrite, id, data),
+    resize: (id, cols, rows) => invokeIpc(IPC_CHANNELS.terminalResize, id, cols, rows),
+    destroy: (id) => invokeIpc(IPC_CHANNELS.terminalDestroy, id),
     onData: (callback: (terminalId: string, data: string) => void) => {
       const handler = (_e: Electron.IpcRendererEvent, id: string, data: string) => callback(id, data);
       ipcRenderer.on(IPC_CHANNELS.terminalData, handler);
@@ -159,37 +228,37 @@ const desktopApi: DesktopApi = {
     },
   },
   git: {
-    getSummary: () => ipcRenderer.invoke(IPC_CHANNELS.gitSummary),
-    getSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.gitStatus),
-    listBranches: () => ipcRenderer.invoke(IPC_CHANNELS.gitListBranches),
+    getSummary: () => invokeIpc(IPC_CHANNELS.gitSummary),
+    getSnapshot: () => invokeIpc(IPC_CHANNELS.gitStatus),
+    listBranches: () => invokeIpc(IPC_CHANNELS.gitListBranches),
     switchBranch: (branchName: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.gitSwitchBranch, branchName),
+      invokeIpc(IPC_CHANNELS.gitSwitchBranch, branchName),
     createAndSwitchBranch: (branchName: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.gitCreateBranch, branchName),
-    stageFiles: (paths: string[]) => ipcRenderer.invoke(IPC_CHANNELS.gitStageFiles, paths),
-    unstageFiles: (paths: string[]) => ipcRenderer.invoke(IPC_CHANNELS.gitUnstageFiles, paths),
-    commit: (input) => ipcRenderer.invoke(IPC_CHANNELS.gitCommit, input),
-    push: () => ipcRenderer.invoke(IPC_CHANNELS.gitPush),
-    pull: () => ipcRenderer.invoke(IPC_CHANNELS.gitPull),
+      invokeIpc(IPC_CHANNELS.gitCreateBranch, branchName),
+    stageFiles: (paths: string[]) => invokeIpc(IPC_CHANNELS.gitStageFiles, paths),
+    unstageFiles: (paths: string[]) => invokeIpc(IPC_CHANNELS.gitUnstageFiles, paths),
+    commit: (input) => invokeIpc(IPC_CHANNELS.gitCommit, input),
+    push: () => invokeIpc(IPC_CHANNELS.gitPush),
+    pull: () => invokeIpc(IPC_CHANNELS.gitPull),
   },
   worker: {
     generateCommitMessage: (request) =>
-      ipcRenderer.invoke(IPC_CHANNELS.workerGenerateCommitMessage, request),
+      invokeIpc(IPC_CHANNELS.workerGenerateCommitMessage, request),
     generateCommitPlan: (request) =>
-      ipcRenderer.invoke(IPC_CHANNELS.workerGenerateCommitPlan, request),
+      invokeIpc(IPC_CHANNELS.workerGenerateCommitPlan, request),
   },
 
   ui: {
-    getState: () => ipcRenderer.invoke(IPC_CHANNELS.uiGetState),
-    setDiffPanelOpen: (open: boolean) => ipcRenderer.invoke(IPC_CHANNELS.uiSetDiffPanelOpen, open),
-    setRightPanelState: (partial) => ipcRenderer.invoke(IPC_CHANNELS.uiSetRightPanelState, partial),
+    getState: () => invokeIpc(IPC_CHANNELS.uiGetState),
+    setDiffPanelOpen: (open: boolean) => invokeIpc(IPC_CHANNELS.uiSetDiffPanelOpen, open),
+    setRightPanelState: (partial) => invokeIpc(IPC_CHANNELS.uiSetRightPanelState, partial),
   },
   window: {
-    getState: () => ipcRenderer.invoke(IPC_CHANNELS.windowGetState),
-    getBounds: () => ipcRenderer.invoke(IPC_CHANNELS.windowGetBounds),
-    setBounds: (bounds) => ipcRenderer.invoke(IPC_CHANNELS.windowSetBounds, bounds),
+    getState: () => invokeIpc(IPC_CHANNELS.windowGetState),
+    getBounds: () => invokeIpc(IPC_CHANNELS.windowGetBounds),
+    setBounds: (bounds) => invokeIpc(IPC_CHANNELS.windowSetBounds, bounds),
     minimize: () => ipcRenderer.send(IPC_CHANNELS.windowMinimize),
-    toggleMaximize: () => ipcRenderer.invoke(IPC_CHANNELS.windowToggleMaximize),
+    toggleMaximize: () => invokeIpc(IPC_CHANNELS.windowToggleMaximize),
     close: () => ipcRenderer.send(IPC_CHANNELS.windowClose),
     onStateChange: (listener: (state: WindowFrameState) => void) => {
       const wrappedListener = (_event: Electron.IpcRendererEvent, state: WindowFrameState) => {

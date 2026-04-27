@@ -2,16 +2,18 @@ import { app, shell, type BrowserWindow } from "electron";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getHarnessAuditLogPath } from "./harness/audit.js";
+import {
+  isPlainLogObject,
+  sanitizeForLog,
+  sanitizeLogMessage,
+  sanitizeLogValue,
+  sanitizeStringForLog,
+  serializeLogError,
+  type SerializedLogError,
+} from "./log-sanitize.js";
 import type { DiagnosticLogBundle, DiagnosticLogSnapshot } from "../shared/contracts.js";
 
 export type AppLogLevel = "debug" | "info" | "warn" | "error";
-
-type SerializedError = {
-  name: string;
-  message: string;
-  stack?: string;
-  cause?: unknown;
-};
 
 type AppLogEntry = {
   timestamp: string;
@@ -20,7 +22,7 @@ type AppLogEntry = {
   message: string;
   pid: number;
   data?: unknown;
-  error?: SerializedError;
+  error?: SerializedLogError;
 };
 
 type AppLogInput = {
@@ -29,35 +31,6 @@ type AppLogInput = {
   data?: unknown;
   error?: unknown;
 };
-
-const REDACT_KEYS = [
-  "apikey",
-  "api_key",
-  "authorization",
-  "token",
-  "password",
-  "secret",
-  "credential",
-];
-
-const INLINE_SECRET_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
-  {
-    pattern: /\bsk-(?:proj-|ant-)?[A-Za-z0-9_-]{12,}\b/g,
-    replacement: "[redacted-api-key]",
-  },
-  {
-    pattern: /\bAIza[0-9A-Za-z\-_]{20,}\b/g,
-    replacement: "[redacted-api-key]",
-  },
-  {
-    pattern: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9._-]{8,}\.[A-Za-z0-9._-]{8,}\b/g,
-    replacement: "[redacted-jwt]",
-  },
-  {
-    pattern: /\bBearer\s+[A-Za-z0-9._-]{16,}\b/gi,
-    replacement: "Bearer [redacted]",
-  },
-];
 
 let processLoggingRegistered = false;
 
@@ -159,103 +132,7 @@ export async function openDiagnosticLogFolder(
   }
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-function shouldRedact(key: string): boolean {
-  const normalized = key.replace(/[^a-z_]/gi, "").toLowerCase();
-  return REDACT_KEYS.some((candidate) => normalized.includes(candidate));
-}
-
-function sanitizeStringForLog(value: string): string {
-  let next = value;
-
-  for (const { pattern, replacement } of INLINE_SECRET_PATTERNS) {
-    next = next.replace(pattern, replacement);
-  }
-
-  return next.length <= 500 ? next : next.slice(0, 500) + "…";
-}
-
-export function sanitizeLogMessage(value: string): string {
-  return sanitizeStringForLog(value);
-}
-
-function sanitizeForLog(value: unknown, depth = 0): unknown {
-  if (depth > 4) {
-    return "[truncated]";
-  }
-
-  if (
-    value === null ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    return sanitizeStringForLog(value);
-  }
-
-  if (typeof value === "bigint") {
-    return value.toString();
-  }
-
-  if (typeof value === "function") {
-    return `[function ${value.name || "anonymous"}]`;
-  }
-
-  if (value instanceof Error) {
-    return serializeError(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value.slice(0, 20).map((item) => sanitizeForLog(item, depth + 1));
-  }
-
-  if (!isPlainObject(value)) {
-    return sanitizeStringForLog(String(value));
-  }
-
-  const next: Record<string, unknown> = {};
-  for (const [key, nested] of Object.entries(value)) {
-    next[key] = shouldRedact(key)
-      ? "[redacted]"
-      : sanitizeForLog(nested, depth + 1);
-  }
-  return next;
-}
-
-export function sanitizeLogValue(value: unknown): unknown {
-  return sanitizeForLog(value);
-}
-
-function serializeError(error: unknown): SerializedError {
-  if (error instanceof Error) {
-    const serialized: SerializedError = {
-      name: error.name,
-      message: sanitizeStringForLog(error.message),
-      stack: error.stack ? sanitizeStringForLog(error.stack) : undefined,
-    };
-
-    const withCause = error as Error & { cause?: unknown };
-    if (withCause.cause !== undefined) {
-      serialized.cause = sanitizeForLog(withCause.cause);
-    }
-
-    return serialized;
-  }
-
-  return {
-    name: "NonError",
-    message:
-      typeof error === "string"
-        ? sanitizeStringForLog(error)
-        : sanitizeStringForLog(JSON.stringify(sanitizeForLog(error))),
-  };
-}
+export { sanitizeLogMessage, sanitizeLogValue } from "./log-sanitize.js";
 
 function writeLog(level: AppLogLevel, input: AppLogInput): void {
   const filePath = getAppLogPath();
@@ -268,7 +145,7 @@ function writeLog(level: AppLogLevel, input: AppLogInput): void {
     message: sanitizeLogMessage(input.message),
     pid: process.pid,
     data: input.data === undefined ? undefined : sanitizeForLog(input.data),
-    error: input.error === undefined ? undefined : serializeError(input.error),
+    error: input.error === undefined ? undefined : serializeLogError(input.error),
   };
 
   appendFileSync(filePath, JSON.stringify(entry) + "\n", "utf-8");
@@ -300,7 +177,7 @@ export function summarizeIpcArgs(args: unknown[]): unknown {
       return { type: "array", length: arg.length };
     }
 
-    if (!isPlainObject(arg)) {
+    if (!isPlainLogObject(arg)) {
       return sanitizeForLog(arg);
     }
 

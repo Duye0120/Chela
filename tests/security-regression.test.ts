@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { checkShellCommand } from "../src/main/security.ts";
 import { evaluateToolPolicy } from "../src/main/harness/policy.ts";
-import { sanitizeLogMessage, sanitizeLogValue } from "../src/main/logger.ts";
+import { sanitizeLogMessage, sanitizeLogValue } from "../src/main/log-sanitize.ts";
 
 function withTempWorkspace(test: (workspacePath: string) => void): void {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "chela-security-"));
