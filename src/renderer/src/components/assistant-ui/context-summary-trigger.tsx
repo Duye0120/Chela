@@ -337,7 +337,19 @@ function ContextExpandedSummary({
               </p>
             ) : null}
             {summary.recoverableRun ? (
-              <p className="break-words">{summary.recoverableRun.reason}</p>
+              <div className="space-y-1">
+                <p className="break-words">{summary.recoverableRun.reason}</p>
+                <p>
+                  状态：
+                  {summary.recoverableRun.recoveryStatus === "recoverable"
+                    ? "可恢复"
+                    : summary.recoverableRun.recoveryStatus === "recovered"
+                      ? "已恢复"
+                      : "恢复失败"}
+                  {" · "}
+                  类型：{summary.recoverableRun.failureKind}
+                </p>
+              </div>
             ) : null}
           </div>
           {summary.recoverableRun ? (

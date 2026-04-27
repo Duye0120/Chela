@@ -790,18 +790,20 @@ const Composer: FC<ThreadResolvedProps> = ({
   ]);
 
   const recoverContextTask = useCallback(async () => {
-    const text = [
-      "请恢复上次未完成的任务，先读取当前上下文摘要和任务状态板，再继续推进。",
-      contextSummary.lastToolFailure
-        ? `最近工具失败：${contextSummary.lastToolFailure.toolName} - ${contextSummary.lastToolFailure.error}`
-        : "",
-      contextSummary.recoverableRun?.reason
-        ? `恢复线索：${contextSummary.recoverableRun.reason}`
-        : "",
-      contextSummary.todos.length > 0
-        ? `当前任务板：${contextSummary.todos.map((todo) => `${todo.status}:${todo.content}`).join("；")}`
-        : "",
-    ].filter(Boolean).join("\n");
+    const text =
+      contextSummary.recoverableRun?.recoveryPrompt ??
+      [
+        "请恢复上次未完成的任务，先读取当前上下文摘要和任务状态板，再继续推进。",
+        contextSummary.lastToolFailure
+          ? `最近工具失败：${contextSummary.lastToolFailure.toolName} - ${contextSummary.lastToolFailure.error}`
+          : "",
+        contextSummary.recoverableRun?.reason
+          ? `恢复线索：${contextSummary.recoverableRun.reason}`
+          : "",
+        contextSummary.todos.length > 0
+          ? `当前任务板：${contextSummary.todos.map((todo) => `${todo.status}:${todo.content}`).join("；")}`
+          : "",
+      ].filter(Boolean).join("\n");
 
     if (text.trim()) {
       await onEnqueueQueuedMessage(text);
