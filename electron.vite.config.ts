@@ -12,6 +12,7 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
+        external: ["typescript"],
         input: {
           index: resolve("src/main/index.ts"),
           "embedding-worker": resolve("src/main/memory/embedding-worker.ts"),
