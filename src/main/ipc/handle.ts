@@ -1,16 +1,34 @@
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
+import { IPC_ERROR_MESSAGE_PREFIX, type IpcErrorPayload } from "../../shared/ipc.js";
 import { appLogger, summarizeIpcArgs } from "../logger.js";
 
-function normalizeIpcError(error: unknown): Error {
-  if (error instanceof Error) {
+function isIpcErrorPayload(value: unknown): value is IpcErrorPayload {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as Record<string, unknown>).code === "string" &&
+    typeof (value as Record<string, unknown>).message === "string"
+  );
+}
+
+function normalizeIpcError(error: unknown): IpcErrorPayload {
+  if (isIpcErrorPayload(error)) {
     return error;
   }
 
-  if (typeof error === "string" && error.trim()) {
-    return new Error(error.trim());
+  if (error instanceof Error) {
+    return { code: "INTERNAL_ERROR", message: error.message };
   }
 
-  return new Error("操作失败，请稍后重试。");
+  if (typeof error === "string" && error.trim()) {
+    return { code: "INTERNAL_ERROR", message: error.trim() };
+  }
+
+  return { code: "INTERNAL_ERROR", message: "操作失败，请稍后重试。" };
+}
+
+function createEncodedIpcError(payload: IpcErrorPayload): Error {
+  return new Error(`${IPC_ERROR_MESSAGE_PREFIX}${JSON.stringify(payload)}`);
 }
 
 // M21: sender frame 校验 — 只接受主 frame（顶层文档）发出的 IPC，
@@ -37,7 +55,10 @@ export function handleIpc(
         message: "拒绝来自非主 frame 的 IPC 调用",
         data: { channel },
       });
-      throw new Error("不允许的 IPC 调用来源。");
+      throw createEncodedIpcError({
+        code: "FORBIDDEN_IPC_SENDER",
+        message: "不允许的 IPC 调用来源。",
+      });
     }
 
     try {
@@ -52,7 +73,7 @@ export function handleIpc(
         },
         error,
       });
-      throw normalizeIpcError(error);
+      throw createEncodedIpcError(normalizeIpcError(error));
     }
   });
 }
