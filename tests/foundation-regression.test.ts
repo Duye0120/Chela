@@ -84,6 +84,22 @@ function createDesktopApi(input: {
   assert.equal(entryCalls, 1);
   assert.deepEqual(second.sources, [source]);
   assert.deepEqual(second.entries, [entry]);
+
+  const stale = await loadProviderDirectory(
+    createDesktopApi({
+      sources: [],
+      entries: [],
+      onListSources: () => {
+        throw new Error("provider directory offline");
+      },
+    }),
+    { force: true, timeoutMs: 20 },
+  );
+
+  assert.deepEqual(stale.sources, [source]);
+  assert.deepEqual(stale.entries, [entry]);
+  assert.equal(stale.stale, true);
+  assert.match(stale.error ?? "", /provider directory offline/);
 }
 
 console.log("foundation regression tests passed");

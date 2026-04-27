@@ -1,6 +1,6 @@
 # Chela 底层基建完善路线图
 
-更新时间：2026-04-27 16:58:54
+更新时间：2026-04-27 17:28:40
 
 目标：把 Chela 从“执行主干已具备”推进到“适合长期持续加功能”的底层状态。路线按 6 个阶段推进，预计 12-18 轮有效改动。优先做前 3 阶段：环境 Doctor、IPC 契约校验、Memory 管理闭环。
 
@@ -113,17 +113,19 @@
 预计：2-3 轮有效改动。
 
 任务：
-- [ ] Provider 测试结果结构化，区分认证失败、网络失败、协议失败、模型为空。
-- [ ] `fetchModels` 支持取消和统一 timeout。
-- [ ] provider directory cache 增加错误态和 stale fallback。
-- [ ] 设置页展示最近一次 provider directory 同步状态。
-- [ ] 增加真实 provider fetch 的 mockable integration test。
+- [x] Provider 测试结果结构化，区分认证失败、网络失败、协议失败、模型为空。
+- [x] `fetchModels` 支持取消和统一 timeout。
+- [x] provider directory cache 增加错误态和 stale fallback。
+- [x] 设置页展示最近一次 provider directory 同步状态。
+- [x] 增加真实 provider fetch 的 mockable integration test。
 - [ ] 对 OpenAI-compatible / DashScope 兼容层保留真实聊天发送 smoke 流程。
 
 完成标准：
-- [ ] Provider 错误能被 UI 精确展示。
-- [ ] 模型目录加载失败时可保留旧缓存。
-- [ ] provider directory 的 timeout/cache/abort 有回归测试。
+- [x] Provider 错误能被 UI 精确展示。
+- [x] 模型目录加载失败时可保留旧缓存。
+- [x] provider directory 的 timeout/cache/abort 有回归测试。
+
+结果记录：2026-04-27 17:28:40 完成 Phase 4 第一轮 Provider 稳定性。Provider 测试和模型拉取结果新增 `errorCode`，区分认证、网络、超时、协议、空模型、配置缺失；`fetchModels` 抽出可测 helper，支持 timeout 和外部 abort signal；provider directory 刷新失败时可返回 stale cache；设置页展示模型目录同步状态。剩余真实聊天 smoke 流程待后续人工凭据环境验证。
 
 ## Phase 5：Harness / 长任务恢复
 

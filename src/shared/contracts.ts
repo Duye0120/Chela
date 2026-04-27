@@ -1,5 +1,6 @@
 import type { AgentEvent, ConfirmationResponse } from "./agent-events.js";
 import type { MemoryEmbeddingModelId } from "./memory.js";
+import type { ProviderErrorCode } from "./provider-errors.js";
 
 export type ChatRole = "user" | "assistant" | "system";
 export type ChatMessageStatus = "idle" | "streaming" | "done" | "error";
@@ -157,12 +158,14 @@ export type SourceCredentials = {
 
 export type SourceTestResult = {
   success: boolean;
+  errorCode?: ProviderErrorCode;
   error?: string;
   models?: string[];
 };
 
 export type SourceModelsResult = {
   success: boolean;
+  errorCode?: ProviderErrorCode;
   error?: string;
   models: string[];
 };

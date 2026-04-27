@@ -16,9 +16,12 @@ export type SelectableModelOption = {
   source: ProviderSource;
 };
 
-type ProviderDirectorySnapshot = {
+export type ProviderDirectorySnapshot = {
   sources: ProviderSource[];
   entries: ModelEntry[];
+  loadedAt: number;
+  stale: boolean;
+  error: string | null;
 };
 
 type LoadProviderDirectoryOptions = {
@@ -104,7 +107,13 @@ function fetchProviderDirectory(
         desktopApi.providers.listSources(),
         desktopApi.models.listEntries(),
       ]).then(([sources, entries]) => {
-        providerDirectoryCache = { sources, entries };
+        providerDirectoryCache = {
+          sources,
+          entries,
+          loadedAt: Date.now(),
+          stale: false,
+          error: null,
+        };
         return providerDirectoryCache;
       }),
     {
@@ -179,7 +188,17 @@ export async function loadProviderDirectory(
     return providerDirectoryPromise;
   }
 
-  const request = fetchProviderDirectory(desktopApi, options);
+  const request = fetchProviderDirectory(desktopApi, options).catch((error) => {
+    if (providerDirectoryCache) {
+      providerDirectoryCache = {
+        ...providerDirectoryCache,
+        stale: true,
+        error: error instanceof Error ? error.message : String(error),
+      };
+      return providerDirectoryCache;
+    }
+    throw error;
+  });
 
   if (!canReuseSharedPromise) {
     return request;

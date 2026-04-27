@@ -6,6 +6,7 @@ import {
   buildSelectableModelOptions,
   findEntryLabel,
   loadProviderDirectory,
+  type ProviderDirectorySnapshot,
   subscribeProviderDirectoryChanged,
 } from "@renderer/lib/provider-directory";
 import type { ModelOption } from "@renderer/components/assistant-ui/model-selector";
@@ -51,15 +52,30 @@ function SettingsViewImpl({
   const desktopApi = window.desktopApi;
   const [sources, setSources] = useState<ProviderSource[]>([]);
   const [entries, setEntries] = useState<ModelEntry[]>([]);
+  const [directoryStatus, setDirectoryStatus] =
+    useState<Pick<ProviderDirectorySnapshot, "loadedAt" | "stale" | "error"> | null>(null);
   const [soulStatus, setSoulStatus] = useState<SoulFilesStatus | null>(null);
   const directoryLoadedRef = useRef(false);
 
   const loadDirectory = useCallback(async (force = false) => {
     if (!desktopApi || (directoryLoadedRef.current && !force)) return;
-    const nextDirectory = await loadProviderDirectory(desktopApi, { force });
-    setSources(nextDirectory.sources);
-    setEntries(nextDirectory.entries);
-    directoryLoadedRef.current = true;
+    try {
+      const nextDirectory = await loadProviderDirectory(desktopApi, { force });
+      setSources(nextDirectory.sources);
+      setEntries(nextDirectory.entries);
+      setDirectoryStatus({
+        loadedAt: nextDirectory.loadedAt,
+        stale: nextDirectory.stale,
+        error: nextDirectory.error,
+      });
+      directoryLoadedRef.current = true;
+    } catch (error) {
+      setDirectoryStatus({
+        loadedAt: Date.now(),
+        stale: true,
+        error: error instanceof Error ? error.message : "模型目录加载失败",
+      });
+    }
   }, [desktopApi]);
 
   const loadSoulStatus = useCallback(async () => {
@@ -140,6 +156,21 @@ function SettingsViewImpl({
             <p className="mt-2.5 max-w-[680px] text-[13px] leading-6 text-muted-foreground">
               {meta.description}
             </p>
+            {(activeSection === "ai_model" || activeSection === "general") &&
+              directoryStatus ? (
+              <p
+                className={[
+                  "mt-3 inline-flex rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-1.5 text-[12px] leading-5",
+                  directoryStatus.stale
+                    ? "text-amber-700 dark:text-amber-300"
+                    : "text-muted-foreground",
+                ].join(" ")}
+              >
+                {directoryStatus.stale
+                  ? `模型目录使用缓存：${directoryStatus.error ?? "刷新失败"}`
+                  : `模型目录已同步：${new Date(directoryStatus.loadedAt).toLocaleTimeString()}`}
+              </p>
+            ) : null}
           </header>
 
           <div className="space-y-4 pb-8">

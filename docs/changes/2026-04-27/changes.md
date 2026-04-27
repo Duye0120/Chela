@@ -501,6 +501,39 @@
 - `pnpm exec tsx tests/ipc-contract-regression.test.ts` 通过。
 - `pnpm exec tsx tests/memory-ui-regression.test.ts` 通过。
 
+## Phase 4 Provider 错误分类与目录缓存
+
+时间：2026-04-27 17:28:40
+
+改了什么：
+- 新增 `src/shared/provider-errors.ts`，定义 Provider 错误码、分类函数和 UI 标签。
+- `SourceTestResult`、`SourceModelsResult` 增加 `errorCode`，主进程 provider 测试和模型拉取会区分认证、网络、超时、协议、空模型、配置缺失。
+- 新增 `src/main/provider-model-fetch.ts`，将模型列表请求抽成可测试 helper，支持统一 timeout、外部 abort signal 和 mock fetch。
+- provider directory 刷新失败时保留旧缓存，返回 `stale/error/loadedAt` 状态。
+- Settings 顶部展示模型目录同步状态，刷新失败且有缓存时提示正在使用缓存。
+- 新增 `tests/provider-regression.test.ts`，并将 provider 回归纳入 `test:regression`。
+
+为什么改：
+- Phase 4 要让 provider 和模型目录成为稳定底座；错误需要结构化，模型目录需要超时/取消和 stale fallback，设置页需要显示当前同步状态。
+
+涉及文件：
+- `src/shared/contracts.ts`
+- `src/shared/provider-errors.ts`
+- `src/main/providers.ts`
+- `src/main/provider-model-fetch.ts`
+- `src/renderer/src/lib/provider-directory.ts`
+- `src/renderer/src/components/assistant-ui/settings-view.tsx`
+- `src/renderer/src/components/assistant-ui/settings/keys-section.tsx`
+- `tests/provider-regression.test.ts`
+- `tests/foundation-regression.test.ts`
+- `package.json`
+- `docs/todos/foundation-hardening-roadmap.md`
+- `docs/changes/2026-04-27/changes.md`
+
+结果：
+- `pnpm exec tsx tests/provider-regression.test.ts` 通过。
+- `pnpm exec tsx tests/foundation-regression.test.ts` 通过。
+
 ## 提交计划生成空态居中
 
 时间：2026-04-27 17:04:18
