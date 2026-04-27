@@ -14,6 +14,7 @@ import { cn } from "@renderer/lib/utils";
 type ContextSummaryTriggerProps = {
   summary: ContextUsageSummary;
   onCompact?: () => void | Promise<void>;
+  onRecover?: () => void | Promise<void>;
 };
 
 const CONTEXT_HOVER_CONTENT_WIDTH = 240;
@@ -231,6 +232,7 @@ function ContextHoverSummary({ summary }: ContextSummaryTriggerProps) {
 function ContextExpandedSummary({
   summary,
   onCompact,
+  onRecover,
 }: ContextSummaryTriggerProps) {
   const headlineRows = getHeadlineRows(summary);
   const summaryRows = getSummaryRows(summary);
@@ -310,6 +312,48 @@ function ContextExpandedSummary({
         </ContextSection>
       ) : null}
 
+      {summary.todos.length > 0 ? (
+        <ContextSection label="任务状态">
+          <div className="mt-2 space-y-1.5 text-[12px] leading-5 text-[color:var(--color-text-secondary)]">
+            {summary.todos.slice(0, 4).map((todo) => (
+              <p key={todo.id} className="truncate">
+                {todo.status === "completed"
+                  ? "完成"
+                  : todo.status === "in_progress"
+                    ? "进行中"
+                    : "待处理"}：{todo.content}
+              </p>
+            ))}
+          </div>
+        </ContextSection>
+      ) : null}
+
+      {summary.lastToolFailure || summary.recoverableRun ? (
+        <ContextSection label="恢复线索">
+          <div className="mt-2 space-y-1.5 text-[12px] leading-5 text-[color:var(--color-text-secondary)]">
+            {summary.lastToolFailure ? (
+              <p className="break-words">
+                {summary.lastToolFailure.toolName}：{summary.lastToolFailure.error}
+              </p>
+            ) : null}
+            {summary.recoverableRun ? (
+              <p className="break-words">{summary.recoverableRun.reason}</p>
+            ) : null}
+          </div>
+          {summary.recoverableRun ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void onRecover?.()}
+              className="mt-3 h-8 rounded-[var(--radius-shell)] px-3 text-[12px]"
+            >
+              恢复任务
+            </Button>
+          ) : null}
+        </ContextSection>
+      ) : null}
+
       <section className="rounded-[var(--radius-shell)] border border-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] px-3.5 py-3 shadow-[var(--color-control-shadow)]">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -343,6 +387,7 @@ function ContextExpandedSummary({
 export function ContextSummaryTrigger({
   summary,
   onCompact,
+  onRecover,
 }: ContextSummaryTriggerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [hoverOpen, setHoverOpen] = useState(false);
@@ -471,6 +516,7 @@ export function ContextSummaryTrigger({
                 <ContextExpandedSummary
                   summary={summary}
                   onCompact={onCompact}
+                  onRecover={onRecover}
                 />
               ) : (
                 <ContextHoverSummary summary={summary} />

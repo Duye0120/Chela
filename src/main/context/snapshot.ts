@@ -15,6 +15,7 @@ import {
   appendCompactAppliedEvent,
   getPersistedSnapshot,
   getSessionMeta,
+  listSessionTodos,
   loadTranscriptEvents,
   updateSessionMeta,
   writePersistedSnapshot,
@@ -693,6 +694,25 @@ function getUsageStats(events: SessionTranscriptEvent[]) {
   };
 }
 
+function getRecoverableRun(events: SessionTranscriptEvent[]) {
+  const latestFinished = getLatestRunFinished(events);
+  if (
+    !latestFinished ||
+    (latestFinished.finalState !== "failed" && latestFinished.finalState !== "aborted")
+  ) {
+    return null;
+  }
+
+  return {
+    runId: latestFinished.runId,
+    reason:
+      latestFinished.reason ??
+      (latestFinished.finalState === "failed"
+        ? "上次运行失败，等待恢复。"
+        : "上次运行已取消，等待恢复。"),
+  };
+}
+
 function getCompactedMessageCount(
   events: SessionTranscriptEvent[],
   compactedUntilSeq: number,
@@ -744,6 +764,8 @@ function buildContextSummaryFromUsage(sessionId: string): ContextSummary {
       ? Math.min(1, Math.max(0, estimatedRemainingTokens / contextWindow))
       : null;
   const snapshot = getPersistedSnapshot(sessionId);
+  const todos = listSessionTodos(sessionId);
+  const latestToolFailure = getLatestToolFailure(events);
   const requiredCompactedUntilSeq = getRequiredCompactedUntilSeq(sessionId);
   const hasSnapshot = snapshot.revision > 0;
   const compactedMessageCount = getCompactedMessageCount(
@@ -782,6 +804,14 @@ function buildContextSummaryFromUsage(sessionId: string): ContextSummary {
     openLoops: hasSnapshot ? snapshot.openLoops.slice(0, 3) : [],
     nextActions: hasSnapshot ? snapshot.nextActions.slice(0, 3) : [],
     risks: hasSnapshot ? snapshot.risks.slice(0, 3) : [],
+    todos,
+    lastToolFailure: latestToolFailure?.error
+      ? {
+          toolName: latestToolFailure.toolName,
+          error: truncateText(latestToolFailure.error, 180),
+        }
+      : null,
+    recoverableRun: getRecoverableRun(events),
     autoCompactFailureCount: meta?.autoCompactFailureCount ?? 0,
     autoCompactBlocked: !!meta?.autoCompactBlockedAt,
     autoCompactBlockedAt: meta?.autoCompactBlockedAt ?? null,
@@ -1016,6 +1046,19 @@ function buildSnapshotPrompt(snapshot: SessionMemorySnapshot): string {
   return sections.join("\n");
 }
 
+function buildTodoPrompt(sessionId: string): string {
+  const todos = listSessionTodos(sessionId);
+  if (todos.length === 0) {
+    return "";
+  }
+
+  return [
+    "## Task Tracker",
+    "以下是当前线程的任务状态板。复杂任务开始时维护它，阶段完成后更新状态，完成前保留验证项。",
+    ...todos.map((todo) => `- [${todo.status}] ${todo.content}`),
+  ].join("\n");
+}
+
 export async function getContextSummary(sessionId: string): Promise<ContextSummary> {
   return buildContextSummaryFromUsage(sessionId);
 }
@@ -1060,7 +1103,10 @@ export async function reactiveCompact(sessionId: string): Promise<boolean> {
 export async function getSessionMemoryPromptSection(
   sessionId: string,
 ): Promise<string> {
-  return buildSnapshotPrompt(getPersistedSnapshot(sessionId));
+  return [
+    buildSnapshotPrompt(getPersistedSnapshot(sessionId)),
+    buildTodoPrompt(sessionId),
+  ].filter(Boolean).join("\n\n");
 }
 
 export async function ensureContextSnapshotCoverage(

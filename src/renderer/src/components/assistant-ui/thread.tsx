@@ -789,6 +789,25 @@ const Composer: FC<ThreadResolvedProps> = ({
     runCompletionSerial,
   ]);
 
+  const recoverContextTask = useCallback(async () => {
+    const text = [
+      "请恢复上次未完成的任务，先读取当前上下文摘要和任务状态板，再继续推进。",
+      contextSummary.lastToolFailure
+        ? `最近工具失败：${contextSummary.lastToolFailure.toolName} - ${contextSummary.lastToolFailure.error}`
+        : "",
+      contextSummary.recoverableRun?.reason
+        ? `恢复线索：${contextSummary.recoverableRun.reason}`
+        : "",
+      contextSummary.todos.length > 0
+        ? `当前任务板：${contextSummary.todos.map((todo) => `${todo.status}:${todo.content}`).join("；")}`
+        : "",
+    ].filter(Boolean).join("\n");
+
+    if (text.trim()) {
+      await onEnqueueQueuedMessage(text);
+    }
+  }, [contextSummary, onEnqueueQueuedMessage]);
+
   return (
     <ComposerPrimitive.Root className="relative flex w-full flex-col gap-1.5">
       <ComposerAttachmentSync
@@ -918,6 +937,7 @@ const Composer: FC<ThreadResolvedProps> = ({
         contextSummary={contextSummary}
         runStatusLabel={runStatusLabel}
         onCompactContext={onCompactContext}
+        onRecoverContext={recoverContextTask}
         onBranchChanged={onBranchChanged}
         disableGlobalSideEffects={disableGlobalSideEffects}
       />
@@ -1223,6 +1243,7 @@ const ComposerStatusBar: FC<{
   contextSummary: ContextUsageSummary;
   runStatusLabel: string;
   onCompactContext: () => void | Promise<void>;
+  onRecoverContext: () => void | Promise<void>;
   onBranchChanged: () => void | Promise<void>;
   disableGlobalSideEffects: boolean;
 }> = ({
@@ -1230,6 +1251,7 @@ const ComposerStatusBar: FC<{
   contextSummary,
   runStatusLabel,
   onCompactContext,
+  onRecoverContext,
   onBranchChanged,
   disableGlobalSideEffects,
 }) => {
@@ -1302,7 +1324,11 @@ const ComposerStatusBar: FC<{
 
         </div>
 
-        <ContextSummaryTrigger summary={contextSummary} onCompact={onCompactContext} />
+        <ContextSummaryTrigger
+          summary={contextSummary}
+          onCompact={onCompactContext}
+          onRecover={onRecoverContext}
+        />
       </div>
     );
   };
