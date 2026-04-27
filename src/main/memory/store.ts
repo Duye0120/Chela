@@ -124,6 +124,10 @@ export class MemoryStore {
     return this.dbPath;
   }
 
+  close(): void {
+    this.db.close();
+  }
+
   add(
     input: MemoryAddInput,
     embedding: number[],

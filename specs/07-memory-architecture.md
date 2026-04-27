@@ -1,16 +1,16 @@
 # 07 — 记忆系统架构
 
 > 状态：`in-review`
-> 实作状态：`部分落地（T0 / T2 + local memory baseline）`
+> 实作状态：`T0 / T1 / T2 baseline 已落地`
 > 依赖：03-agent-core, 05-builtin-tools
-> 更新时间：2026-04-23 22:17:37
+> 更新时间：2026-04-27 13:48:12
 
 ## 7.1 设计理念
 
 记忆系统让 agent 从"每次都失忆的聊天机器人"变成"越用越懂你的助手"。
 
 核心原则：
-- **透明可控** — 所有记忆存储在用户可见的文件里（.md 和 .json），不是黑箱数据库
+- **透明可控** — 人类可读记忆存储在用户可见的 `.md` 文件里，语义检索索引存储在本地 SQLite
 - **分层管理** — 不同类型的记忆有不同的生命周期和访问方式
 - **按需加载** — 不把所有记忆塞进 context，只检索相关的
 
@@ -59,12 +59,15 @@
 
 ### 当前实现收口
 
-这轮先只落 `T0 + T2`：
+截至 2026-04-27，当前实现已经落到三层 baseline：
 
 - `T0` 继续来自 `SOUL / USER / AGENTS`
 - `T2` 已固定成 `recent transcript tail + session memory snapshot`
-- `T1` 现在只保留架构位置，不做 embedding / RAG / memory_search
+- `T1` 已有两条链路：
+  - `memdir`：`memory_save` / `memory_list` 写入人类可读 topic 文件，适合规则、偏好、经验教训。
+  - `SQLite + embedding worker`：`memory.add/search/list/stats/rebuild` IPC 和 `memory_search` 语义检索，适合长期语义检索。
 - `compact` 已改成 Main 侧 context 能力，不在 Renderer 本地做压缩
+- session todos 已进入 context summary 和 prompt，作为多步任务的工作记忆入口
 
 ## 7.3 数据流全景
 
@@ -82,7 +85,7 @@
 
 3. 用户发送第一条消息："帮我看看上次那个项目的进度"
 
-4. transformContext 触发隐式记忆检索
+4. Context Engine 触发语义记忆检索
    "上次那个项目" → embedding → 向量检索 T1
    → 找到记忆："用户在做一个 Electron agent 项目，使用 pi-agent-core"
    → 注入到 context 中
@@ -95,10 +98,10 @@
 6. 多轮对话，T2 持续增长
    用户消息、agent 回复、工具调用结果不断追加
 
-7. transformContext 持续管理
+7. Context Engine 持续管理
    如果 T2 太大 → 压缩早期对话为摘要
 
-8. Agent 可以主动调用 memory_search 工具
+8. Agent 可以主动调用 memory_search / memory_save 工具
    "让我查一下用户之前的偏好..." → 检索 T1
 
 ═══ 会话结束 ═══
@@ -125,19 +128,18 @@ workspace/
   USER.md                    # T0: 用户信息
   AGENTS.md                  # T0: 行为规则
   memory/
-    MEMORY.md                # T1: 长期记忆索引（人类可读的摘要列表）
-    entries/                 # T1: 记忆条目（每条一个 JSON 文件）
-      2026-03-28-001.json
-      2026-03-29-001.json
-      2026-03-31-001.json
-      2026-03-31-002.json
-    vectors/                 # T1: 向量索引
-      index.json             # 所有记忆的 embedding 向量
+    MEMORY.md                # T1: memdir 人类可读索引
+    topics/                  # T1: topic markdown 文件
+      preferences.md
+      architecture.md
+  userData/
+    data/
+      memory.sqlite          # T1: 语义记忆、embedding、统计元数据
 ```
 
-### MEMORY.md 的作用
+### MEMORY.md / topics 的作用
 
-MEMORY.md 是长期记忆的 **人类可读索引**。用户打开就能看到 agent 记住了什么：
+MEMORY.md 是长期记忆的 **人类可读索引**。topic 文件保存可追溯的事实、偏好、经验教训。用户打开就能看到 agent 记住了什么：
 
 ```markdown
 # 长期记忆
@@ -154,47 +156,28 @@ MEMORY.md 是长期记忆的 **人类可读索引**。用户打开就能看到 a
 - [2026-03-28] 偏好 pnpm + TypeScript，代码风格偏简洁
 ```
 
-这个文件同时被 agent 读取——作为 T1 的高层摘要，在 transformContext 时可以选择性注入。但详细内容的检索走向量索引，不靠这个文件。
+这些文件同时被 agent 读取，作为 T1 的高层摘要进入 semantic memory section。详细语义检索走 SQLite embedding 记录。
 
-### entries/ 里的 JSON 格式
+### SQLite 语义记忆记录
 
-```json
-{
-  "id": "2026-03-31-001",
-  "content": "用户计划于 2026-04-07 面试字节跳动，岗位：全栈工程师",
-  "source": {
-    "sessionId": "session-abc123",
-    "messageIndex": 15
-  },
-  "tags": ["career", "interview"],
-  "createdAt": "2026-03-31T10:30:00Z"
-}
+```typescript
+type MemoryRecord = {
+  id: number;
+  content: string;
+  metadata: MemoryMetadata | null;
+  createdAt: string;
+  matchCount: number;
+  feedbackScore: number;
+  lastMatchedAt: string | null;
+};
 ```
 
-### vectors/index.json 格式
+SQLite 存储在 Electron `userData/data/memory.sqlite`，包含：
 
-```json
-{
-  "model": "nomic-embed-text",
-  "dimension": 768,
-  "entries": [
-    {
-      "id": "2026-03-31-001",
-      "vector": [0.012, -0.034, 0.056, ...]
-    },
-    {
-      "id": "2026-03-31-002",
-      "vector": [0.078, -0.012, 0.045, ...]
-    }
-  ]
-}
-```
+- `memories`：content、embedding JSON、metadata、match_count、feedback_score、last_matched_at、created_at。
+- `memory_meta`：indexed_model_id、last_indexed_at、last_rebuilt_at。
 
-**为什么用 JSON 文件存向量而不是向量数据库？**
-
-因为我们的数据量不大。一个用户积累几百条记忆，向量文件也就几 MB。JSON 文件加载到内存里做余弦相似度计算，几百条的检索耗时不到 10ms。引入向量数据库（如 Chroma、Qdrant）会增加安装复杂度，对桌面应用来说得不偿失。
-
-如果后续记忆量到了几万条，再考虑换成轻量级的 SQLite + 向量扩展。
+当前没有引入外部向量数据库。SQLite 负责持久化，检索时取候选集后在 Node worker 内做余弦相似度排序。
 
 ## 7.5 记忆提取策略
 
@@ -220,19 +203,19 @@ MEMORY.md 是长期记忆的 **人类可读索引**。用户打开就能看到 a
     - 对话中的寒暄
     返回 JSON 数组，每条包含 content 和 tags。"
 3. 解析 LLM 返回的结构化数据
-4. 对每条记忆计算 embedding → 存入 entries/ 和 vectors/
-5. 更新 MEMORY.md 索引
+4. 对每条语义记忆计算 embedding → 写入 SQLite
+5. 对人类可读记忆更新 MEMORY.md / topic 文件
 ```
 
 **去重：**
 新记忆写入前，先检索 T1 看有没有语义相近的已有记忆（相似度 > 0.9）。如果有，更新已有记忆而不是新建。防止"用户是全栈工程师"被重复记录 10 次。
 
-## 7.6 记忆与 transformContext 的协作
+## 7.6 记忆与 Context Engine 的协作
 
-每轮 LLM 调用前，transformContext 做的事：
+每轮 LLM 调用前，Context Engine 做的事：
 
 ```
-function transformContext(messages) {
+async function buildContext(messages) {
   // 1. 从最近的用户消息提取检索 query
   const lastUserMsg = messages.findLast(m => m.role === 'user');
 
@@ -243,7 +226,7 @@ function transformContext(messages) {
   const memoryContext = formatMemories(memories);
 
   // 4. 如果消息历史太长，压缩早期对话
-  const compressed = await compressIfNeeded(messages);
+  const compressed = await compactIfNeeded(messages);
 
   // 5. 返回最终的 messages
   return [
@@ -253,7 +236,7 @@ function transformContext(messages) {
 }
 ```
 
-注意：T0（Soul 文件）不在 transformContext 里处理，它是在 Agent 初始化时就写入 systemPrompt 的，始终存在。
+注意：T0（Soul 文件）不在语义检索里处理，它是在 Agent 初始化时就写入 systemPrompt 的，始终存在。
 
 ## 7.7 用户控制
 
@@ -261,12 +244,12 @@ function transformContext(messages) {
 
 | 操作 | 方式 |
 |------|------|
-| 查看所有记忆 | 打开 workspace/memory/MEMORY.md |
-| 查看某条记忆详情 | 打开 workspace/memory/entries/xxx.json |
-| 删除某条记忆 | 删除对应的 .json 文件（下次启动时向量索引自动清理） |
+| 查看 memdir 记忆 | 打开 workspace/memory/MEMORY.md 和 topics/*.md |
+| 查看语义记忆 | 设置页 Memory 区或 memory:list IPC |
+| 删除/降权语义记忆 | 后续 UI 入口，当前优先保留 store API 扩展位 |
 | 修改 agent 人格 | 编辑 SOUL.md |
 | 更新个人信息 | 编辑 USER.md |
 | 修改行为规则 | 编辑 AGENTS.md |
 | 清空所有记忆 | 删除 memory/ 目录 |
 
-不需要任何 UI——就是文件操作。当然后续可以在前端加一个记忆管理页面，但 v1 文件就够了。
+memdir 记忆继续保持文件可控。语义记忆由 SQLite 管理，后续记忆管理页面应优先提供查看、删除、降权和重建索引入口。

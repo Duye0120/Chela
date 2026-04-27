@@ -1,9 +1,9 @@
 # 09 — RAG 与 Embedding
 
 > 状态：`in-review`
-> 实作状态：`部分落地（local RAG baseline，升级版未完成）`
+> 实作状态：`local RAG baseline 已落地，自动探测和管理 UI 待增强`
 > 依赖：07-memory-architecture
-> 更新时间：2026-04-23 22:17:37
+> 更新时间：2026-04-27 13:50:06
 
 ## 9.1 职责
 
@@ -17,55 +17,56 @@
 
 | 方案 | 模型 | 维度 | 优点 | 缺点 |
 |------|------|------|------|------|
-| 本地优先 | Ollama nomic-embed-text | 768 | 免费、隐私、离线可用 | 需要用户安装 Ollama |
-| 远程 fallback | OpenAI text-embedding-3-small | 1536 | 不需要本地环境 | 花钱、需要网络 |
+| 本地默认 | Xenova/bge-small-zh | 模型决定 | 随桌面应用本地运行、隐私、离线可用 | 首次加载需要下载/缓存模型 |
+| 远程 provider | Provider 目录中的 embedding 模型 | provider 决定 | 可复用 OpenAI-compatible 配置 | 需要网络和 API Key |
 
 **策略：**
 ```
-启动时检测 Ollama 是否可用
-  ├─ 可用 → 使用 nomic-embed-text（本地、免费）
-  └─ 不可用 → 检查是否配置了 OpenAI API Key
-      ├─ 有 → 使用 text-embedding-3-small（远程）
-      └─ 没有 → 记忆系统降级运行（只有 T0 和 T2，没有 T1 向量检索）
+读取 settings.memory.embeddingModelId
+  ├─ Xenova/* → 使用 @xenova/transformers 本地 worker
+  └─ 其他模型 ID → 使用 settings.memory.embeddingProviderId 对应 provider
+      ├─ provider 可用 → 通过 OpenAI-compatible embeddings API 编码
+      └─ provider 不可用 → memory search/add 返回错误，T0/T2 和 memdir 继续可用
 ```
 
 **降级运行是什么意思？**
 
-没有 embedding 能力时，agent 仍然能工作——只是没有长期记忆检索。T0（Soul 文件）正常加载，T2（会话记忆）正常运行，只是 T1 的向量检索不可用。memory_search 工具会返回"记忆检索功能未启用，请安装 Ollama 或配置 OpenAI API Key"。
+没有 embedding 能力时，agent 仍然能工作。T0（Soul 文件）正常加载，T2（会话记忆）正常运行，memdir 记忆正常读取；语义 T1 检索不可用或返回错误。后续 UI 需要明确提示用户重建 native 依赖、下载本地模型或配置远程 embedding provider。
 
-这保证了应用的基本可用性——不会因为没装 Ollama 就完全不能用。
+这保证了应用的基本可用性。embedding provider 缺失或本地模型未就绪时，Agent 仍可使用 T0、T2 和 memdir。
 
 ## 9.3 向量存储
 
 ### 存储格式
 
-所有向量存在一个 JSON 文件中（07 spec 已定义）：
+语义记忆存在本地 SQLite（07 spec 已定义）：
 
-```json
-// memory/vectors/index.json
-{
-  "model": "nomic-embed-text",
-  "dimension": 768,
-  "entries": [
-    { "id": "2026-03-31-001", "vector": [0.012, -0.034, ...] },
-    { "id": "2026-03-31-002", "vector": [0.078, -0.012, ...] }
-  ]
-}
+```sql
+CREATE TABLE memories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  content TEXT NOT NULL,
+  embedding TEXT NOT NULL,
+  metadata TEXT,
+  match_count INTEGER NOT NULL DEFAULT 0,
+  feedback_score INTEGER NOT NULL DEFAULT 0,
+  last_matched_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
-### 为什么不用向量数据库
+### 为什么用 SQLite + JSON embedding
 
 ```
 我们的数据量：
   活跃使用 1 个月 → 大约 200-500 条记忆
-  每条 768 维 float → 约 3KB
-  500 条 → 约 1.5MB
+  embedding 以 JSON 存储在 SQLite text 字段
+  500 条 → MB 级别
 
 检索性能：
-  500 条暴力遍历（余弦相似度）→ < 5ms
-  即使 5000 条 → < 50ms
+  先按 created_at 取候选集（默认 500）
+  worker 内解析向量并做余弦相似度排序
 
-结论：JSON 文件 + 内存计算完全够用
+结论：SQLite 持久化 + worker 内计算足够支撑当前桌面单用户规模
 ```
 
 引入 Chroma / Qdrant / Pinecone 的代价：
@@ -73,28 +74,21 @@
 - 额外的进程管理
 - 额外的学习成本
 
-如果未来记忆量超过 10000 条，可以考虑换成 SQLite + sqlite-vss 扩展（单文件，无额外进程）。
+如果未来记忆量超过 10000 条，可以考虑引入 sqlite-vss / sqlite-vec 或分片索引。
 
-### 内存缓存
+### 原生依赖 ABI
 
-应用启动时把 index.json 加载到内存：
+`better-sqlite3` 是原生模块，必须和当前 Node ABI 匹配。项目默认 Node 版本固定为 `22.19.0`，切换 Node 版本后需要重新安装或重建原生依赖；否则 memory store 会在加载 `.node` 文件时报 `NODE_MODULE_VERSION` 不匹配。
+
+### 查询向量缓存
+
+当前实现缓存 query embedding，避免重复查询反复编码：
 
 ```typescript
-class VectorStore {
-  private entries: Map<string, Float32Array>;  // id → vector
-
-  async load() {
-    const data = JSON.parse(await readFile('memory/vectors/index.json'));
-    for (const entry of data.entries) {
-      this.entries.set(entry.id, new Float32Array(entry.vector));
-    }
-  }
-
-  // 检索时直接在内存中计算，不读磁盘
-  search(queryVector: Float32Array, limit: number): SearchResult[] { ... }
-
-  // 新增记忆时同时更新内存和文件
-  async add(id: string, vector: Float32Array) { ... }
+class QueryVectorCache {
+  get(query: string, modelId: string): number[] | null;
+  set(query: string, modelId: string, vector: number[]): void;
+  clear(): void;
 }
 ```
 
@@ -123,10 +117,10 @@ class VectorStore {
     └────────────────────────────────┘
             │
             ▼
-    根据 id 从 entries/ 读取完整记忆内容
+    从 SQLite row 直接返回完整记忆内容和 metadata
             │
             ▼
-    格式化成文本，注入 agent context
+    格式化成 semantic memory section 或 memory_search tool result
 ```
 
 ### 余弦相似度
@@ -147,7 +141,7 @@ function cosineSimilarity(a: Float32Array, b: Float32Array): number {
 
 ### 相似度阈值
 
-不是检索到的都返回。设一个最低相似度阈值 **0.6**：
+不是检索到的都返回。阈值来自 `settings.memory.similarityThreshold`：
 
 ```
 top-5 结果：
@@ -185,15 +179,13 @@ top-5 结果：
   3. 计算 embedding
      content → embedding 模型 → 向量
 
-  4. 写入 entries/
-     创建 memory/entries/{id}.json
+  4. 写入 SQLite memories
+     content、embedding JSON、metadata
 
-  5. 写入 vectors/
-     追加到 memory/vectors/index.json
-     同时更新内存缓存
+  5. 更新 memory_meta
+     indexed_model_id、last_indexed_at
 
-  6. 更新 MEMORY.md 索引
-     追加一行人类可读的摘要
+  6. memdir 链路另行更新 MEMORY.md / topics
 ```
 
 ### Embedding 的批处理
@@ -201,46 +193,48 @@ top-5 结果：
 如果一次提取出 5 条记忆，不要一条一条调 embedding API——批量发送：
 
 ```
-本地 Ollama：5 条并发请求（本地不限速）
-远程 OpenAI：一次 batch 请求（省 API 调用次数）
+本地 transformers：worker 内串行/批量优化空间保留
+远程 provider：当前按 OpenAI-compatible embeddings API 调用，后续可做 batch
 ```
 
 ## 9.6 模型切换处理
 
-如果用户从 Ollama 切换到 OpenAI（或反过来），embedding 维度不同，旧的向量就废了。
+如果用户从一个 embedding 模型切换到另一个模型，embedding 维度或向量空间可能不同，旧的向量就废了。
 
 **处理策略：**
 
 ```
-启动时检查 index.json 的 model 字段
+启动时检查 memory_meta.indexed_model_id
   ├─ 和当前 embedding 模型一致 → 正常使用
   └─ 不一致 → 需要重建索引
      → 前端提示："embedding 模型已变更，需要重建记忆索引。
         这会重新计算所有记忆的向量，大约需要 X 秒。"
-     → 用户确认 → 遍历所有 entries/ → 重新计算 embedding → 写入新 index.json
+     → 用户确认 → 遍历 SQLite memories → 重新计算 embedding → 更新 embedding 字段
 ```
 
-记忆内容（entries/）不受影响，只是向量需要重算。
+记忆内容不受影响，只是向量需要重算。
 
 ## 9.7 性能预估
 
-| 操作 | 数据量 | 耗时（本地 Ollama） | 耗时（远程 OpenAI） |
+| 操作 | 数据量 | 耗时（本地 transformers） | 耗时（远程 provider） |
 |------|--------|-------------------|-------------------|
 | 单条 embedding | 1 条 | ~50ms | ~200ms |
 | 检索 | 500 条 | < 5ms | < 5ms（内存计算） |
 | 批量写入 | 5 条 | ~250ms | ~400ms |
 | 索引重建 | 500 条 | ~25s | ~30s |
 
-对于桌面应用来说，这些延迟用户几乎无感（检索在 transformContext 里异步执行，不阻塞 UI）。
+对于桌面应用来说，检索在 Context Engine / worker 链路异步执行，不阻塞主要 UI。
 
 ## 9.8 文件结构
 
 ```
-src/
-  memory/
-    index.ts            # 记忆系统对外接口
-    vector-store.ts     # 向量存储：加载、检索、添加、删除
-    embedding.ts        # Embedding 封装：Ollama / OpenAI，自动选择
-    extractor.ts        # 记忆提取：对话 → LLM 分析 → 结构化记忆
-    memory-file.ts      # MEMORY.md 索引读写
+src/main/memory/
+  rag-service.ts        # Main 侧 memory IPC 服务入口
+  embedding.ts          # worker client
+  embedding-worker.ts   # worker runtime，隔离 transformers / better-sqlite3
+  embedding-types.ts    # worker 协议
+  store.ts              # SQLite schema、写入、列表、统计、重建
+  retrieval.ts          # 余弦相似度、排序、query cache
+  metadata.ts           # metadata 入口收窄
+  service.ts            # memdir、memory_search、auto summarize
 ```
