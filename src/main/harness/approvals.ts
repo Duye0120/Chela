@@ -7,6 +7,7 @@ import type {
 } from "../../shared/contracts.js";
 import { buildInterruptedApprovalRecoveryPrompt } from "../../shared/interrupted-approval-recovery.js";
 import { harnessRuntime } from "./singleton.js";
+import { appendRunRecoveryRequestedEvent } from "../session/service.js";
 
 export function listPendingApprovalGroups(
   sessionId?: string,
@@ -143,7 +144,20 @@ export function dismissInterruptedApproval(runId: string): boolean {
 }
 
 export function resumeInterruptedApproval(runId: string): string {
-  return harnessRuntime.resumeInterruptedRun(runId);
+  const approval = harnessRuntime
+    .getInterruptedApprovals()
+    .find((record) => record.runId === runId);
+  const resumedRunId = harnessRuntime.resumeInterruptedRun(runId);
+  if (approval) {
+    appendRunRecoveryRequestedEvent({
+      sessionId: approval.sessionId,
+      runId: approval.runId,
+      resumedRunId,
+      recoveryPrompt: buildInterruptedApprovalRecoveryPrompt(approval),
+      source: "interrupted_approval",
+    });
+  }
+  return resumedRunId;
 }
 
 export function resolveApprovalResponse(
