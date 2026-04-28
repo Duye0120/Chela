@@ -401,7 +401,7 @@ export function MemorySection({
   );
 
   const handleMemorySettingChange = useCallback(
-    (key: keyof Settings["memory"], value: any) => {
+    <K extends keyof Settings["memory"],>(key: K, value: Settings["memory"][K]) => {
       onSettingsChange({
         memory: {
           ...settings.memory,
