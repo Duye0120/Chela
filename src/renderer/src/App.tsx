@@ -7,12 +7,9 @@ import type {
   ChatSession,
   ChatSessionSummary,
   ContextSummary,
-  GitBranchSummary,
-  GitDiffOverview,
   InterruptedApprovalGroup,
   ModelRoutingRole,
   RightPanelState,
-  SelectedFile,
   Settings,
   SessionGroup,
   ThinkingLevel,
@@ -79,7 +76,19 @@ import {
   type DeepPartialSettings,
 } from "@renderer/lib/app-shell";
 import { loadProviderDirectory } from "@renderer/lib/provider-directory";
-import { mergeAttachments, upsertSummary } from "@renderer/lib/session";
+import { upsertSummary } from "@renderer/lib/session";
+import {
+  applySessionToArchivedSummaries,
+  applySessionToLiveSummaries,
+  findGroupByPath,
+  removeRecordKey,
+  resolveGroupName,
+  resolveGroupPath,
+  resolveSessionProjectPath,
+  updateRunningSessionIds,
+} from "@renderer/lib/app-session-state";
+import { useAppGitState } from "@renderer/hooks/use-app-git-state";
+import { useSessionAttachments } from "@renderer/hooks/use-session-attachments";
 import type { PanelImperativeHandle, PanelSize } from "react-resizable-panels";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -89,7 +98,6 @@ export default function App() {
   const location = useLocation();
   const [booting, setBooting] = useState(true);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [isPickingFiles, setIsPickingFiles] = useState(false);
   const [summaries, setSummaries] = useState<ChatSessionSummary[]>([]);
   const [archivedSummaries, setArchivedSummaries] = useState<
     ChatSessionSummary[]
@@ -138,11 +146,6 @@ export default function App() {
     "builtin:anthropic:claude-sonnet-4-20250514",
   );
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("off");
-  const [gitBranchSummary, setGitBranchSummary] = useState<GitBranchSummary | null>(
-    null,
-  );
-  const [gitOverview, setGitOverview] = useState<GitDiffOverview | null>(null);
-  const [gitOverviewLoading, setGitOverviewLoading] = useState(false);
   const [sidebarAnimating, setSidebarAnimating] = useState(false);
   const [rightPanelAnimating, setRightPanelAnimating] = useState(false);
 
@@ -190,14 +193,6 @@ export default function App() {
   const activeSessionIdRef = useRef<string | null>(null);
   const sessionCacheRef = useRef<Record<string, ChatSession>>({});
   const appliedCustomThemeKeysRef = useRef<string[]>([]);
-  const lastGitBranchRefreshRef = useRef(0);
-  const gitBranchRequestRef = useRef<Promise<GitBranchSummary | null> | null>(null);
-  const gitBranchRequestWorkspaceRef = useRef<string | null>(null);
-  const gitBranchRequestSerialRef = useRef(0);
-  const gitOverviewRequestRef = useRef<Promise<GitDiffOverview | null> | null>(null);
-  const gitOverviewRequestWorkspaceRef = useRef<string | null>(null);
-  const gitOverviewRequestSerialRef = useRef(0);
-  const diffPanelAutoRefreshArmedRef = useRef(false);
   const rightPanelDragStateRef = useRef<{
     startX: number;
     startWidth: number;
@@ -331,115 +326,18 @@ export default function App() {
     );
   }, [settings]);
 
-  const refreshGitBranchSummary = useCallback(async () => {
-    if (!desktopApi?.git) {
-      setGitBranchSummary(null);
-      return null;
-    }
-
-    const workspace = settingsRef.current?.workspace ?? null;
-
-    if (
-      gitBranchRequestRef.current &&
-      gitBranchRequestWorkspaceRef.current === workspace
-    ) {
-      return gitBranchRequestRef.current;
-    }
-
-    lastGitBranchRefreshRef.current = Date.now();
-    gitBranchRequestWorkspaceRef.current = workspace;
-    const requestSerial = ++gitBranchRequestSerialRef.current;
-    const request = desktopApi.git
-      .getSummary()
-      .then((nextSummary) => {
-        if (
-          gitBranchRequestSerialRef.current === requestSerial &&
-          settingsRef.current?.workspace === workspace
-        ) {
-          setGitBranchSummary(nextSummary);
-        }
-        return nextSummary;
-      })
-      .finally(() => {
-        if (gitBranchRequestRef.current === request) {
-          gitBranchRequestRef.current = null;
-          gitBranchRequestWorkspaceRef.current = null;
-        }
-      });
-
-    gitBranchRequestRef.current = request;
-    return request;
-  }, [desktopApi]);
-
-  const refreshGitOverview = useCallback(async () => {
-    if (!desktopApi?.git) {
-      setGitBranchSummary(null);
-      setGitOverview(null);
-      return null;
-    }
-
-    const workspace = settingsRef.current?.workspace ?? null;
-
-    if (
-      gitOverviewRequestRef.current &&
-      gitOverviewRequestWorkspaceRef.current === workspace
-    ) {
-      return gitOverviewRequestRef.current;
-    }
-
-    setGitOverviewLoading(true);
-    gitOverviewRequestWorkspaceRef.current = workspace;
-    const requestSerial = ++gitOverviewRequestSerialRef.current;
-
-    const request = desktopApi.git
-      .getSnapshot()
-      .then((nextOverview) => {
-        if (
-          gitOverviewRequestSerialRef.current === requestSerial &&
-          settingsRef.current?.workspace === workspace
-        ) {
-          setGitOverview(nextOverview);
-          setGitBranchSummary(nextOverview.branch);
-        }
-        return nextOverview;
-      })
-      .finally(() => {
-        if (gitOverviewRequestRef.current === request) {
-          gitOverviewRequestRef.current = null;
-          gitOverviewRequestWorkspaceRef.current = null;
-        }
-        setGitOverviewLoading(false);
-      });
-
-    gitOverviewRequestRef.current = request;
-    return request;
-  }, [desktopApi]);
-
-  useEffect(() => {
-    if (mainView !== "thread" || diffPanelOpen) {
-      return;
-    }
-
-    if (Date.now() - lastGitBranchRefreshRef.current < 1_500) {
-      return;
-    }
-
-    void refreshGitBranchSummary();
-  }, [diffPanelOpen, mainView, refreshGitBranchSummary]);
-
-  useEffect(() => {
-    if (mainView !== "thread" || !diffPanelOpen) {
-      diffPanelAutoRefreshArmedRef.current = false;
-      return;
-    }
-
-    if (diffPanelAutoRefreshArmedRef.current) {
-      return;
-    }
-
-    diffPanelAutoRefreshArmedRef.current = true;
-    void refreshGitOverview();
-  }, [diffPanelOpen, mainView, refreshGitOverview]);
+  const {
+    gitBranchSummary,
+    gitOverview,
+    gitOverviewLoading,
+    refreshGitBranchSummary,
+    refreshGitOverview,
+  } = useAppGitState({
+    desktopApi,
+    settingsRef,
+    mainView,
+    diffPanelOpen,
+  });
 
   const cacheSession = useCallback((session: ChatSession) => {
     setSessionCache((current) => {
@@ -508,24 +406,8 @@ export default function App() {
   );
 
   const removeCachedSession = useCallback((sessionId: string) => {
-    setSessionCache((current) => {
-      if (!(sessionId in current)) {
-        return current;
-      }
-
-      const next = { ...current };
-      delete next[sessionId];
-      return next;
-    });
-    setContextSummaryBySessionId((current) => {
-      if (!(sessionId in current)) {
-        return current;
-      }
-
-      const next = { ...current };
-      delete next[sessionId];
-      return next;
-    });
+    setSessionCache((current) => removeRecordKey(current, sessionId));
+    setContextSummaryBySessionId((current) => removeRecordKey(current, sessionId));
   }, []);
 
   const hydrateSession = useCallback((session: ChatSession) => {
@@ -561,17 +443,10 @@ export default function App() {
       if (activeSessionIdRef.current === sessionId) {
         setActiveSession(session);
       }
-      if (session.archived) {
-        setArchivedSummaries((current) => upsertSummary(current, session));
-        setSummaries((current) =>
-          current.filter((summary) => summary.id !== sessionId),
-        );
-      } else {
-        setSummaries((current) => upsertSummary(current, session));
-        setArchivedSummaries((current) =>
-          current.filter((summary) => summary.id !== sessionId),
-        );
-      }
+      setSummaries((current) => applySessionToLiveSummaries(current, session));
+      setArchivedSummaries((current) =>
+        applySessionToArchivedSummaries(current, session),
+      );
       await refreshContextSummary(sessionId);
       await refreshInterruptedApprovalGroups(sessionId);
     },
@@ -584,32 +459,31 @@ export default function App() {
       if (activeSessionIdRef.current === session.id) {
         setActiveSession(session);
       }
-      if (session.archived) {
-        setArchivedSummaries((current) => upsertSummary(current, session));
-        setSummaries((current) =>
-          current.filter((summary) => summary.id !== session.id),
-        );
-      } else {
-        setSummaries((current) => upsertSummary(current, session));
-        setArchivedSummaries((current) =>
-          current.filter((summary) => summary.id !== session.id),
-        );
-      }
+      setSummaries((current) => applySessionToLiveSummaries(current, session));
+      setArchivedSummaries((current) =>
+        applySessionToArchivedSummaries(current, session),
+      );
       void desktopApi?.sessions.save(session);
     },
     [cacheSession, desktopApi],
   );
 
+  const {
+    isPickingFiles,
+    attachFiles,
+    pasteFiles,
+    removeAttachment,
+  } = useSessionAttachments({
+    activeSession,
+    desktopApi,
+    persistSession,
+  });
+
   const handleSessionRunStateChange = useCallback(
     (sessionId: string, isRunning: boolean) => {
-      setRunningSessionIds((current) => {
-        const exists = current.includes(sessionId);
-        if (isRunning) {
-          return exists ? current : [...current, sessionId];
-        }
-
-        return exists ? current.filter((id) => id !== sessionId) : current;
-      });
+      setRunningSessionIds((current) =>
+        updateRunningSessionIds(current, sessionId, isRunning),
+      );
     },
     [],
   );
@@ -824,9 +698,9 @@ export default function App() {
         return;
       }
 
-      const targetGroup = groupsRef.current.find((group) => group.id === groupId);
-      if (targetGroup?.path.trim()) {
-        await switchWorkspacePath(targetGroup.path);
+      const targetGroupPath = resolveGroupPath(groupsRef.current, groupId);
+      if (targetGroupPath) {
+        await switchWorkspacePath(targetGroupPath);
       }
 
       const nextSession = await desktopApi.sessions.create();
@@ -860,12 +734,12 @@ export default function App() {
 
       const selectionSerial = ++sessionSelectionSerialRef.current;
 
-      const summary =
-        summariesRef.current.find((item) => item.id === sessionId) ??
-        archivedSummariesRef.current.find((item) => item.id === sessionId);
-      const projectPath = summary?.groupId
-        ? groupsRef.current.find((group) => group.id === summary.groupId)?.path.trim()
-        : "";
+      const projectPath = resolveSessionProjectPath(
+        sessionId,
+        summariesRef.current,
+        archivedSummariesRef.current,
+        groupsRef.current,
+      );
       if (projectPath) {
         await switchWorkspacePath(projectPath);
         if (sessionSelectionSerialRef.current !== selectionSerial) {
@@ -964,7 +838,9 @@ export default function App() {
       const wasActive = activeSessionIdRef.current === sessionId;
       await desktopApi.sessions.delete(sessionId);
       removeCachedSession(sessionId);
-      setRunningSessionIds((current) => current.filter((id) => id !== sessionId));
+      setRunningSessionIds((current) =>
+        updateRunningSessionIds(current, sessionId, false),
+      );
       const { sessionSummaries } = await refreshSessionLists();
 
       if (!wasActive) {
@@ -1030,8 +906,7 @@ export default function App() {
         return;
       }
 
-      const currentName =
-        groupsRef.current.find((group) => group.id === groupId)?.name ?? "";
+      const currentName = resolveGroupName(groupsRef.current, groupId);
       const nextName = window.prompt("重命名项目", currentName);
       if (nextName === null) {
         return;
@@ -1054,8 +929,7 @@ export default function App() {
         return;
       }
 
-      const projectName =
-        groupsRef.current.find((group) => group.id === groupId)?.name ?? "当前项目";
+      const projectName = resolveGroupName(groupsRef.current, groupId) || "当前项目";
       const confirmed = window.confirm(
         `删除项目“${projectName}”？项目下聊天会保留，并移动到“聊天”区。`,
       );
@@ -1073,110 +947,6 @@ export default function App() {
       }
     },
     [desktopApi, refreshGroups, refreshSessionLists, reloadSession],
-  );
-
-  const enrichSelectedFiles = useCallback(
-    async (files: SelectedFile[]) => {
-      if (!desktopApi) {
-        return files;
-      }
-
-      return Promise.all(
-        files.map(async (file) => {
-          if (file.kind !== "text") {
-            return file;
-          }
-
-          const preview = await desktopApi.files.readPreview(file.path);
-          return {
-            ...file,
-            previewText: preview.previewText,
-            truncated: preview.truncated,
-            error: preview.error,
-          };
-        }),
-      );
-    },
-    [desktopApi],
-  );
-
-  const appendAttachmentsToSession = useCallback(
-    async (files: SelectedFile[]) => {
-      if (!activeSession || !desktopApi || files.length === 0) {
-        return;
-      }
-
-      const enrichedFiles = await enrichSelectedFiles(files);
-      const nextSession: ChatSession = {
-        ...activeSession,
-        attachments: mergeAttachments(activeSession.attachments, enrichedFiles),
-        updatedAt: new Date().toISOString(),
-      };
-
-      persistSession(nextSession);
-    },
-    [activeSession, desktopApi, enrichSelectedFiles, persistSession],
-  );
-
-  const attachFiles = useCallback(async () => {
-    if (!activeSession || !desktopApi) {
-      return;
-    }
-
-    setIsPickingFiles(true);
-
-    try {
-      const pickedFiles = await desktopApi.files.pick();
-      await appendAttachmentsToSession(pickedFiles);
-    } finally {
-      setIsPickingFiles(false);
-    }
-  }, [activeSession, appendAttachmentsToSession, desktopApi]);
-
-  const pasteFiles = useCallback(
-    async (files: File[]) => {
-      if (!activeSession || !desktopApi || files.length === 0) {
-        return;
-      }
-
-      setIsPickingFiles(true);
-
-      try {
-        const pastedFiles = await Promise.all(
-          files.map(async (file) =>
-            desktopApi.files.saveFromClipboard({
-              name: file.name,
-              mimeType: file.type,
-              buffer: await file.arrayBuffer(),
-            }),
-          ),
-        );
-
-        await appendAttachmentsToSession(pastedFiles);
-      } finally {
-        setIsPickingFiles(false);
-      }
-    },
-    [activeSession, appendAttachmentsToSession, desktopApi],
-  );
-
-  const removeAttachment = useCallback(
-    (attachmentId: string) => {
-      if (!activeSession) {
-        return;
-      }
-
-      const nextSession: ChatSession = {
-        ...activeSession,
-        attachments: activeSession.attachments.filter(
-          (attachment) => attachment.id !== attachmentId,
-        ),
-        updatedAt: new Date().toISOString(),
-      };
-
-      persistSession(nextSession);
-    },
-    [activeSession, persistSession],
   );
 
   const dismissInterruptedApproval = useCallback(
@@ -1527,9 +1297,7 @@ export default function App() {
       return;
     }
 
-    const existingGroup = groupsRef.current.find(
-      (group) => group.path === nextWorkspace,
-    );
+    const existingGroup = findGroupByPath(groupsRef.current, nextWorkspace);
     if (existingGroup) {
       await createSessionInGroup(existingGroup.id);
       return;
@@ -1546,12 +1314,12 @@ export default function App() {
 
   const handleSelectProject = useCallback(
     async (groupId: string) => {
-      const targetGroup = groupsRef.current.find((group) => group.id === groupId);
-      if (!targetGroup?.path.trim()) {
+      const targetGroupPath = resolveGroupPath(groupsRef.current, groupId);
+      if (!targetGroupPath) {
         return;
       }
 
-      await switchWorkspacePath(targetGroup.path);
+      await switchWorkspacePath(targetGroupPath);
     },
     [switchWorkspacePath],
   );
