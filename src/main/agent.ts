@@ -44,6 +44,33 @@ export interface AgentHandle {
   };
 }
 
+type CoreToolCallContent = {
+  type: "toolCall";
+  id: string;
+  name: string;
+  arguments?: Record<string, unknown>;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isCoreToolCallContent(value: unknown): value is CoreToolCallContent {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (
+    value.type !== "toolCall" ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string"
+  ) {
+    return false;
+  }
+
+  return value.arguments === undefined || isRecord(value.arguments);
+}
+
 const handlesByOwner = new Map<string, AgentHandle>();
 const initGenerations = new Map<string, number>();
 
@@ -68,14 +95,12 @@ function subscribeToAgent(
       "content" in event.message &&
       Array.isArray(event.message.content)
     ) {
-      const toolCalls = event.message.content.filter(
-        (c: any) => c.type === "toolCall",
-      );
+      const toolCalls = event.message.content.filter(isCoreToolCallContent);
       if (toolCalls.length > 1 && runId) {
-        const entries = toolCalls.map((tc: any) => ({
-          toolCallId: tc.id as string,
-          toolName: tc.name as string,
-          args: (tc.arguments ?? {}) as Record<string, unknown>,
+        const entries = toolCalls.map((tc) => ({
+          toolCallId: tc.id,
+          toolName: tc.name,
+          args: tc.arguments ?? {},
         }));
         // 使用 agent 的内部 abort signal（通过一个长期 controller）
         const controller = new AbortController();

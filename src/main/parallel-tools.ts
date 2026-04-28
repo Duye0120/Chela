@@ -48,12 +48,11 @@ interface ToolResult {
   details?: Record<string, unknown>;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolExecutor = (
   toolCallId: string,
   args: Record<string, unknown>,
   signal: AbortSignal,
-) => Promise<any>;
+) => Promise<unknown>;
 
 // ---------------------------------------------------------------------------
 // ParallelExecutionManager
@@ -61,7 +60,7 @@ type ToolExecutor = (
 
 class ParallelExecutionManager {
   private batches = new Map<string, BatchEntry[]>();
-  private cache = new Map<string, Promise<any>>();
+  private cache = new Map<string, Promise<unknown | null>>();
   private executors = new Map<string, ToolExecutor>();
   private activeSignals = new Map<string, AbortSignal>();
 
@@ -109,7 +108,7 @@ class ParallelExecutionManager {
           data: { error: err instanceof Error ? err.message : String(err) },
         });
         // 返回 null 让串行流程重新执行
-        return null as any;
+        return null;
       });
 
       this.cache.set(entry.toolCallId, promise);
@@ -125,7 +124,7 @@ class ParallelExecutionManager {
   /**
    * 获取缓存的预执行结果
    */
-  async getCachedResult(toolCallId: string): Promise<any | null> {
+  async getCachedResult(toolCallId: string): Promise<unknown | null> {
     const cached = this.cache.get(toolCallId);
     if (!cached) return null;
 

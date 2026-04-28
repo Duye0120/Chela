@@ -23,9 +23,14 @@ function parseVector(value: string): number[] {
       return [];
     }
 
-    return parsed
-      .map((item) => (typeof item === "number" ? item : Number(item)))
-      .filter((item) => Number.isFinite(item));
+    const vector: number[] = [];
+    for (const item of parsed) {
+      const value = typeof item === "number" ? item : Number(item);
+      if (Number.isFinite(value)) {
+        vector.push(value);
+      }
+    }
+    return vector;
   } catch {
     return [];
   }
@@ -55,11 +60,39 @@ export function cosineSimilarity(left: number[], right: number[]): number {
   return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
 }
 
+function insertRankedCandidate(
+  ranked: RankedCandidate[],
+  candidate: RankedCandidate,
+  limit: number,
+) {
+  let insertIndex = ranked.length;
+  while (
+    insertIndex > 0 &&
+    ranked[insertIndex - 1].rankScore < candidate.rankScore
+  ) {
+    insertIndex -= 1;
+  }
+
+  if (insertIndex >= limit) {
+    return;
+  }
+
+  ranked.splice(insertIndex, 0, candidate);
+  if (ranked.length > limit) {
+    ranked.pop();
+  }
+}
+
 export function rankMemories(
   queryVector: number[],
   candidates: StoredMemoryCandidate[],
   limit: number,
 ): MemorySearchResult[] {
+  const resultLimit = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 0;
+  if (resultLimit <= 0) {
+    return [];
+  }
+
   const ranked: RankedCandidate[] = [];
 
   for (const candidate of candidates) {
@@ -71,7 +104,7 @@ export function rankMemories(
     const confidenceBoost = Math.max(-0.08, Math.min(0.08, confidenceScore * 0.01));
     const rankScore = score + confidenceBoost;
 
-    ranked.push({
+    const rankedCandidate = {
       id: candidate.id,
       content: candidate.content,
       metadata: candidate.metadata,
@@ -81,12 +114,12 @@ export function rankMemories(
       lastMatchedAt: candidate.lastMatchedAt,
       score,
       rankScore,
-    });
+    };
+
+    insertRankedCandidate(ranked, rankedCandidate, resultLimit);
   }
 
-  ranked.sort((left, right) => right.rankScore - left.rankScore);
-
-  return ranked.slice(0, limit).map((item) => ({
+  return ranked.map((item) => ({
     id: item.id,
     content: item.content,
     metadata: item.metadata,

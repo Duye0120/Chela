@@ -24,7 +24,7 @@ export async function mcpToolsFromConnection(
 
 function mcpToolToAgentTool(
   conn: McpConnection,
-  tool: { name: string; description?: string; inputSchema?: any },
+  tool: { name: string; description?: string; inputSchema?: unknown },
 ): AgentTool<any, any> {
   const safeServerName = normalizeMcpIdentifier(conn.name, "server");
   const safeToolName = normalizeMcpIdentifier(tool.name, "tool");

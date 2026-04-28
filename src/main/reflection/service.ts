@@ -104,9 +104,14 @@ function generateLocalReflection(
 
   // 基本统计
   const totalMessages = sessions.reduce((sum, s) => sum + s.messageCount, 0);
-  const allUserMessages = sessions.flatMap((s) =>
-    s.messages.filter((m) => m.startsWith("[user]:")).map((m) => m.slice(8))
-  );
+  const allUserMessages: string[] = [];
+  for (const session of sessions) {
+    for (const message of session.messages) {
+      if (message.startsWith("[user]:")) {
+        allUserMessages.push(message.slice(8));
+      }
+    }
+  }
 
   // 简单情绪推断
   const positiveKeywords = ["谢谢", "不错", "好的", "可以", "厉害", "nice", "good", "thanks", "完美", "赞"];

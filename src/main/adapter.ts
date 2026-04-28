@@ -94,7 +94,13 @@ function getAssistantFinalThinking(
 }
 
 function getLatestThinkingStep(steps: AgentStep[]) {
-  return [...steps].reverse().find((step) => step.kind === "thinking");
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    const step = steps[index];
+    if (step.kind === "thinking") {
+      return step;
+    }
+  }
+  return undefined;
 }
 
 function mergeRuntimeSkillUsages(

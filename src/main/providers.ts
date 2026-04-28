@@ -1121,7 +1121,14 @@ export async function fetchSourceModels(
 
   try {
     const ids = await fetchProviderModelIds(normalized, apiKey);
-    const unique = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+    const uniqueIds = new Set<string>();
+    for (const id of ids) {
+      const trimmed = id.trim();
+      if (trimmed) {
+        uniqueIds.add(trimmed);
+      }
+    }
+    const unique = Array.from(uniqueIds);
     unique.sort((a, b) => a.localeCompare(b));
     return createProviderModelsResult(unique);
   } catch (error) {
@@ -1228,9 +1235,12 @@ export function deleteEntry(entryId: string): void {
 
 export function listSelectableModelEntries(): ModelEntry[] {
   const state = readProviderState();
-  const enabledSourceIds = new Set(
-    state.sources.filter((source) => source.enabled).map((source) => source.id),
-  );
+  const enabledSourceIds = new Set<string>();
+  for (const source of state.sources) {
+    if (source.enabled) {
+      enabledSourceIds.add(source.id);
+    }
+  }
   return state.entries
     .filter((entry) => entry.enabled && enabledSourceIds.has(entry.sourceId))
     .map(cloneEntry);

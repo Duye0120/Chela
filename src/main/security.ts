@@ -70,6 +70,14 @@ function globToRegex(pattern: string): RegExp {
   return new RegExp(`(^|/)${source}$`);
 }
 
+const FORBIDDEN_FILE_REGEXES = FORBIDDEN_FILE_PATTERNS.map(globToRegex);
+
+function isAllowedFetchScheme(
+  scheme: string,
+): scheme is (typeof FETCH_POLICY.allowedSchemes)[number] {
+  return (FETCH_POLICY.allowedSchemes as readonly string[]).includes(scheme);
+}
+
 export function isPathAllowed(targetPath: string, workspacePath: string): boolean {
   const resolved = resolvePathWithSymlinks(targetPath);
   const wsResolved = resolvePathWithSymlinks(workspacePath);
@@ -80,9 +88,7 @@ export function isPathAllowed(targetPath: string, workspacePath: string): boolea
 
 export function isPathForbiddenRead(targetPath: string): boolean {
   const normalized = normalizePolicyPath(targetPath);
-  return FORBIDDEN_FILE_PATTERNS.some((pattern) =>
-    globToRegex(pattern).test(normalized),
-  );
+  return FORBIDDEN_FILE_REGEXES.some((pattern) => pattern.test(normalized));
 }
 
 export function isWritePathForbidden(targetPath: string): boolean {
@@ -164,7 +170,7 @@ export function checkFetchUrl(url: string): { allowed: boolean; reason?: string 
   }
 
   const scheme = parsed.protocol.replace(":", "");
-  if (!FETCH_POLICY.allowedSchemes.includes(scheme as any)) {
+  if (!isAllowedFetchScheme(scheme)) {
     return { allowed: false, reason: `不允许的协议: ${scheme}` };
   }
 

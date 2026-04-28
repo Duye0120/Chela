@@ -540,7 +540,7 @@ export class HarnessRuntime {
       timestamp: Date.now(),
       state: run.state,
       toolName: evaluation.toolName,
-      decision: evaluation.decision.type as any,
+      decision: evaluation.decision.type,
       reason: evaluation.decision.reason,
       metadata: {
         riskLevel: evaluation.riskLevel,

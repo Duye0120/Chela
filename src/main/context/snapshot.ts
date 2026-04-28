@@ -202,8 +202,24 @@ function getMessageSnippets(message: ChatMessage, maxLength = 100): string[] {
     .filter(Boolean);
 }
 
+function findLastItem<T, S extends T>(
+  items: readonly T[],
+  predicate: (item: T) => item is S,
+): S | undefined;
+function findLastItem<T>(items: readonly T[], predicate: (item: T) => boolean): T | undefined;
+function findLastItem<T>(items: readonly T[], predicate: (item: T) => boolean): T | undefined {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (predicate(item)) {
+      return item;
+    }
+  }
+  return undefined;
+}
+
 function getLatestPendingConfirmation(events: SessionTranscriptEvent[]) {
-  const latestRequested = [...events].reverse().find(
+  const latestRequested = findLastItem(
+    events,
     (
       event,
     ): event is Extract<SessionTranscriptEvent, { type: "confirmation_requested" }> =>
@@ -213,7 +229,8 @@ function getLatestPendingConfirmation(events: SessionTranscriptEvent[]) {
     return null;
   }
 
-  const resolved = [...events].reverse().find(
+  const resolved = findLastItem(
+    events,
     (
       event,
     ): event is Extract<SessionTranscriptEvent, { type: "confirmation_resolved" }> =>
@@ -225,7 +242,8 @@ function getLatestPendingConfirmation(events: SessionTranscriptEvent[]) {
 }
 
 function getLatestUserEvent(events: SessionTranscriptEvent[]) {
-  return [...events].reverse().find(
+  return findLastItem(
+    events,
     (
       event,
     ): event is Extract<SessionTranscriptEvent, { type: "user_message" }> =>
@@ -234,7 +252,8 @@ function getLatestUserEvent(events: SessionTranscriptEvent[]) {
 }
 
 function getLatestAssistantEvent(events: SessionTranscriptEvent[]) {
-  return [...events].reverse().find(
+  return findLastItem(
+    events,
     (
       event,
     ): event is Extract<SessionTranscriptEvent, { type: "assistant_message" }> =>
@@ -243,7 +262,8 @@ function getLatestAssistantEvent(events: SessionTranscriptEvent[]) {
 }
 
 function getLatestToolFailure(events: SessionTranscriptEvent[]) {
-  return [...events].reverse().find(
+  return findLastItem(
+    events,
     (
       event,
     ): event is Extract<SessionTranscriptEvent, { type: "tool_finished" }> =>
@@ -306,7 +326,8 @@ function resolveCurrentTask(events: SessionTranscriptEvent[]): string | null {
 }
 
 function getLatestRunFinished(events: SessionTranscriptEvent[]) {
-  return [...events].reverse().find(
+  return findLastItem(
+    events,
     (
       event,
     ): event is Extract<SessionTranscriptEvent, { type: "run_finished" }> =>
@@ -315,7 +336,8 @@ function getLatestRunFinished(events: SessionTranscriptEvent[]) {
 }
 
 function getLatestRunStarted(events: SessionTranscriptEvent[]) {
-  return [...events].reverse().find(
+  return findLastItem(
+    events,
     (
       event,
     ): event is Extract<SessionTranscriptEvent, { type: "run_started" }> =>
@@ -425,7 +447,8 @@ function collectRisks(events: SessionTranscriptEvent[]): string[] {
     risks.push("应用重启打断过一次运行，需要人工确认线程现场是否完整。");
   }
 
-  const latestConfirmation = [...events].reverse().find(
+  const latestConfirmation = findLastItem(
+    events,
     (
       event,
     ): event is Extract<SessionTranscriptEvent, { type: "confirmation_resolved" }> =>
@@ -710,7 +733,8 @@ function getRecoverableRun(events: SessionTranscriptEvent[]) {
 
   const latestToolFailure = getLatestToolFailure(events);
   const todos = listSessionTodos(latestFinished.sessionId);
-  const recoveryRequested = [...events].reverse().find(
+  const recoveryRequested = findLastItem(
+    events,
     (
       event,
     ): event is Extract<SessionTranscriptEvent, { type: "run_recovery_requested" }> =>
@@ -758,7 +782,16 @@ function getCompactedMessageCount(
     return 0;
   }
 
-  return getMessageEvents(events).filter((event) => event.seq <= compactedUntilSeq).length;
+  let count = 0;
+  for (const event of events) {
+    if (
+      (event.type === "user_message" || event.type === "assistant_message") &&
+      event.seq <= compactedUntilSeq
+    ) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function resolveContextWindow(sessionId: string): number | null {

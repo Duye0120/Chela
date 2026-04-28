@@ -166,8 +166,11 @@ export async function buildUserMessageContent(
     content.push(createTextBlock(trimmedText));
   }
 
-  for (const attachment of attachments) {
-    content.push(...(await attachmentToUserContent(attachment, allowImages)));
+  const attachmentBlocks = await Promise.all(
+    attachments.map((attachment) => attachmentToUserContent(attachment, allowImages)),
+  );
+  for (const blocks of attachmentBlocks) {
+    content.push(...blocks);
   }
 
   if (content.length === 0) {

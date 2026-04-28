@@ -57,8 +57,12 @@ export function findExecutableOnPath(executableNames: string[]): string | null {
       try {
         // App Execution Aliases in WindowsApps often throw EACCES and return false in existsSync
         fs.statSync(fullPath);
-      } catch (err: any) {
-        if ((err.code === "EACCES" || err.code === "EPERM") && fullPath.toLowerCase().includes("\\windowsapps\\")) {
+      } catch (error) {
+        const code =
+          typeof error === "object" && error !== null && "code" in error
+            ? error.code
+            : undefined;
+        if ((code === "EACCES" || code === "EPERM") && fullPath.toLowerCase().includes("\\windowsapps\\")) {
           return normalizeExecutablePath(fullPath, executableName);
         }
       }

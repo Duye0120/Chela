@@ -541,12 +541,21 @@ export function createCodeDiagnosticsTool(
         workspacePath,
         files.map((file) => file.absolutePath),
       );
+      let errorCount = 0;
+      let warningCount = 0;
+      for (const diagnostic of diagnostics) {
+        if (diagnostic.severity === "error") {
+          errorCount += 1;
+        } else if (diagnostic.severity === "warning") {
+          warningCount += 1;
+        }
+      }
       const details: CodeDiagnosticsDetails = {
         mode,
         filesChecked,
         diagnostics,
-        errorCount: diagnostics.filter((diagnostic) => diagnostic.severity === "error").length,
-        warningCount: diagnostics.filter((diagnostic) => diagnostic.severity === "warning").length,
+        errorCount,
+        warningCount,
       };
       const text = [
         `已检查 ${filesChecked.length} 个文件。`,

@@ -33,6 +33,8 @@ const MAX_PROMPT_SECTION_CHARS = 6_000;
 const MAX_SEARCH_RESULTS = 8;
 /** 记忆提取输入最大字符数 */
 const MAX_MEMORY_EXTRACTION_CHARS = 8_000;
+const MEMORY_NON_TOKEN_PATTERN = /[^\p{L}\p{N}\s]/gu;
+const MEMORY_TOKEN_SPLIT_PATTERN = /\s+/;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -224,8 +226,8 @@ function appendToTopicFile(
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .split(/\s+/)
+    .replace(MEMORY_NON_TOKEN_PATTERN, " ")
+    .split(MEMORY_TOKEN_SPLIT_PATTERN)
     .filter((tok) => tok.length > 1);
 }
 

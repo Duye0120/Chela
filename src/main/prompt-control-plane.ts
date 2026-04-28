@@ -227,8 +227,15 @@ export function buildRuntimeCapabilitySection(
   const activeServers = getActiveServers(loadMcpConfig(input.workspacePath)).map(
     ([name]) => name,
   );
-  const builtinToolNames = input.toolNames.filter((name) => !name.startsWith("mcp_"));
-  const mcpToolCount = input.toolNames.filter((name) => name.startsWith("mcp_")).length;
+  const builtinToolNames: string[] = [];
+  let mcpToolCount = 0;
+  for (const name of input.toolNames) {
+    if (name.startsWith("mcp_")) {
+      mcpToolCount += 1;
+    } else {
+      builtinToolNames.push(name);
+    }
+  }
 
   return {
     id: "runtime-capability-manifest",

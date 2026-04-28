@@ -24,7 +24,16 @@ type SessionSearchIndex = {
   documents: Record<string, SessionSearchDocument>;
 };
 
+type ScoredSessionSearchDocument = {
+  document: SessionSearchDocument;
+  score: number;
+};
+
 const SEARCH_INDEX_FILE = "session-search.json";
+const SEARCH_WHITESPACE_PATTERN = /\s+/g;
+const SESSION_TOKEN_SPLIT_PATTERN = /\s+/;
+const SESSION_NON_TOKEN_PATTERN = /[^\p{L}\p{N}\s]/gu;
+const HAN_SCRIPT_PATTERN = /\p{Script=Han}/u;
 
 function getSearchIndexPath(): string {
   return join(getDataDir(), SEARCH_INDEX_FILE);
@@ -52,7 +61,7 @@ function writeSearchIndex(index: SessionSearchIndex): void {
 }
 
 function normalizeSearchText(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
+  return text.replace(SEARCH_WHITESPACE_PATTERN, " ").trim();
 }
 
 function loadTranscriptText(sessionId: string): string {
@@ -139,15 +148,15 @@ function buildDocument(meta: PersistedSessionMeta): SessionSearchDocument | null
 function tokenize(text: string): string[] {
   const normalized = text
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ");
+    .replace(SESSION_NON_TOKEN_PATTERN, " ");
 
   const tokens = new Set<string>();
 
-  for (const segment of normalized.split(/\s+/)) {
+  for (const segment of normalized.split(SESSION_TOKEN_SPLIT_PATTERN)) {
     if (!segment) continue;
 
     // 非中文片段：整体作为一个 token
-    if (!/\p{Script=Han}/u.test(segment)) {
+    if (!HAN_SCRIPT_PATTERN.test(segment)) {
       tokens.add(segment);
       continue;
     }
@@ -164,6 +173,39 @@ function tokenize(text: string): string[] {
   }
 
   return [...tokens];
+}
+
+function compareScoredSessionSearchDocument(
+  left: ScoredSessionSearchDocument,
+  right: ScoredSessionSearchDocument,
+) {
+  if (right.score !== left.score) {
+    return right.score - left.score;
+  }
+  return right.document.updatedAt.localeCompare(left.document.updatedAt);
+}
+
+function insertScoredSessionSearchDocument(
+  ranked: ScoredSessionSearchDocument[],
+  entry: ScoredSessionSearchDocument,
+  limit: number,
+) {
+  let insertIndex = ranked.length;
+  while (
+    insertIndex > 0 &&
+    compareScoredSessionSearchDocument(entry, ranked[insertIndex - 1]) < 0
+  ) {
+    insertIndex -= 1;
+  }
+
+  if (insertIndex >= limit) {
+    return;
+  }
+
+  ranked.splice(insertIndex, 0, entry);
+  if (ranked.length > limit) {
+    ranked.pop();
+  }
 }
 
 function scoreDocument(document: SessionSearchDocument, queryTokens: string[]): number {
@@ -283,20 +325,19 @@ export function searchSessions(
 
   const queryTokens = tokenize(trimmedQuery);
   const index = readSearchIndex();
+  const resultLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 10;
+  const ranked: ScoredSessionSearchDocument[] = [];
 
-  return Object.values(index.documents)
-    .map((document) => ({
-      document,
-      score: scoreDocument(document, queryTokens),
-    }))
-    .filter((entry) => entry.score > 0)
-    .sort((left, right) => {
-      if (right.score !== left.score) {
-        return right.score - left.score;
-      }
-      return right.document.updatedAt.localeCompare(left.document.updatedAt);
-    })
-    .slice(0, Math.max(1, limit))
+  for (const document of Object.values(index.documents)) {
+    const score = scoreDocument(document, queryTokens);
+    if (score <= 0) {
+      continue;
+    }
+
+    insertScoredSessionSearchDocument(ranked, { document, score }, resultLimit);
+  }
+
+  return ranked
     .map(({ document }) => ({
       sessionId: document.sessionId,
       title: document.title,
