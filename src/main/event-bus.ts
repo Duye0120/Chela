@@ -14,8 +14,13 @@ import { appLogger } from "./logger.js";
 
 export type EventMap = {
   // ── Agent 生命周期 ──
+  "run:created": { sessionId: string; runId: string; modelEntryId: string; runKind: string; lane: string };
   "run:started": { sessionId: string; runId: string; modelEntryId: string };
+  "run:state_changed": { sessionId: string; runId: string; state: string; reason?: string; currentStepId?: string };
+  "run:cancel_requested": { sessionId: string; runId: string };
   "run:completed": { sessionId: string; runId: string; finalState: string; reason?: string };
+  "run:aborted": { sessionId: string; runId: string; reason?: string };
+  "run:failed": { sessionId: string; runId: string; reason?: string };
 
   // ── 消息 ──
   "message:user": { sessionId: string; text: string };
@@ -25,6 +30,7 @@ export type EventMap = {
   "tool:executing": { sessionId: string; runId: string; toolName: string; toolCallId: string };
   "tool:completed": { sessionId: string; runId: string; toolName: string; toolCallId: string };
   "tool:failed": { sessionId: string; runId: string; toolName: string; toolCallId: string; error: string };
+  "tool:policy_evaluated": { sessionId: string; runId: string; toolName: string; decision: string; riskLevel: string };
 
   // ── Harness 审批 ──
   "approval:requested": { sessionId: string; runId: string; requestId: string; toolName: string };
@@ -61,13 +67,19 @@ export type EventMap = {
 };
 
 export const BUS_EVENTS = {
+  RUN_CREATED: "run:created",
   RUN_STARTED: "run:started",
+  RUN_STATE_CHANGED: "run:state_changed",
+  RUN_CANCEL_REQUESTED: "run:cancel_requested",
   RUN_COMPLETED: "run:completed",
+  RUN_ABORTED: "run:aborted",
+  RUN_FAILED: "run:failed",
   MESSAGE_USER: "message:user",
   MESSAGE_ASSISTANT: "message:assistant",
   TOOL_EXECUTING: "tool:executing",
   TOOL_COMPLETED: "tool:completed",
   TOOL_FAILED: "tool:failed",
+  TOOL_POLICY_EVALUATED: "tool:policy_evaluated",
   APPROVAL_REQUESTED: "approval:requested",
   APPROVAL_RESOLVED: "approval:resolved",
   NOTIFICATION_SENT: "notification:sent",
