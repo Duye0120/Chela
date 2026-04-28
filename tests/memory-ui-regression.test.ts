@@ -51,7 +51,7 @@ async function runMemoryUiRegression(): Promise<void> {
     formatMemoryErrorMessage(
       new Error("The module better_sqlite3.node was compiled against a different NODE_MODULE_VERSION."),
     ),
-    "Memory 数据库 native 依赖不可用。请使用 Node 22.19.0 运行 pnpm rebuild better-sqlite3 后重启 Chela。",
+    "Memory 数据库 native 依赖需要按 Electron 41.1.0 重建。请退出 Chela 后运行 pnpm dlx @electron/rebuild -f -o better-sqlite3 -v 41.1.0，然后重启 Chela。",
   );
   assert.equal(
     formatMemoryErrorMessage(new Error("远端嵌入接口失败 401")),

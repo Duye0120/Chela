@@ -10,6 +10,8 @@ import {
   validateMemoryListPayload,
   validateMemorySearchLimitPayload,
   validateMemorySearchQueryPayload,
+  validatePluginEnabledPayload,
+  validatePluginIdPayload,
   validateProviderApiKeyPayload,
   validateProviderSourceDraftPayload,
   validateServerNamePayload,
@@ -355,5 +357,26 @@ assert.throws(
 
 assert.equal(validateWorkspacePathPayload("D:\\a_github\\first_pi_agent"), "D:\\a_github\\first_pi_agent");
 assert.equal(validateServerNamePayload(IPC_CHANNELS.mcpRestartServer, "filesystem"), "filesystem");
+
+assert.throws(
+  () => validatePluginIdPayload(IPC_CHANNELS.pluginsSetEnabled, "plugin\nbad"),
+  (error) =>
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "INVALID_IPC_PAYLOAD" &&
+    String((error as { message?: unknown }).message).includes("pluginId"),
+);
+
+assert.throws(
+  () => validatePluginEnabledPayload("true"),
+  (error) =>
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "INVALID_IPC_PAYLOAD" &&
+    String((error as { message?: unknown }).message).includes("enabled"),
+);
+
+assert.equal(validatePluginIdPayload(IPC_CHANNELS.pluginsSetEnabled, "demo-plugin"), "demo-plugin");
+assert.equal(validatePluginEnabledPayload(false), false);
 
 console.log("ipc contract regression tests passed");
