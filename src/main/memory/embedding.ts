@@ -12,12 +12,14 @@ import type { MemoryEmbeddingModelId } from "../../shared/memory.js";
 import { appLogger } from "../logger.js";
 import type {
   EmbeddingProviderInfo,
+  ErrorResponse,
   MemoryWorkerInitData,
   MemoryWorkerRequest,
   MemoryWorkerResponse,
   ReadyMessage,
   WorkerState,
 } from "./embedding-types.js";
+import { createMemoryWorkerExitError } from "./worker-errors.js";
 
 export type { EmbeddingProviderInfo } from "./embedding-types.js";
 
@@ -28,6 +30,10 @@ type PendingRequest<T> = {
 
 function isReadyMessage(message: MemoryWorkerResponse): message is ReadyMessage {
   return "type" in message && (message as { type?: unknown }).type === "ready";
+}
+
+function isBootstrapErrorMessage(message: MemoryWorkerResponse): message is ErrorResponse {
+  return !("type" in message) && message.ok === false && message.id === "bootstrap";
 }
 
 export class MemoryWorkerClient {
@@ -146,8 +152,17 @@ export class MemoryWorkerClient {
     };
     collectStream(worker.stdout, "stdout");
     collectStream(worker.stderr, "stderr");
+    let bootstrapError: string | null = null;
     this.readyPromise = new Promise<void>((resolve, reject) => {
       const handleMessage = (message: MemoryWorkerResponse) => {
+        if (isBootstrapErrorMessage(message)) {
+          bootstrapError = message.error;
+          worker.off("message", handleMessage);
+          this.state = "error";
+          reject(createMemoryWorkerExitError(1, bootstrapError));
+          return;
+        }
+
         if (!isReadyMessage(message)) {
           return;
         }
@@ -167,7 +182,7 @@ export class MemoryWorkerClient {
         if (code !== 0) {
           worker.off("message", handleMessage);
           this.state = "error";
-          reject(new Error(`Chela memory worker exited with code ${code}.`));
+          reject(createMemoryWorkerExitError(code, bootstrapError));
         }
       });
     });
@@ -180,6 +195,7 @@ export class MemoryWorkerClient {
       // Worker bootstrap / fatal failures are posted with id="bootstrap" and
       // have no pending caller; surface them so we can debug worker crashes.
       if (!message.ok && message.id === "bootstrap") {
+        bootstrapError = message.error;
         appLogger.error({
           scope: "memory.worker",
           message: "Chela memory worker bootstrap failed",
@@ -217,7 +233,7 @@ export class MemoryWorkerClient {
     worker.on("exit", (code) => {
       if (code !== 0) {
         this.state = "error";
-        this.rejectPending(new Error(`Chela memory worker exited with code ${code}.`));
+        this.rejectPending(createMemoryWorkerExitError(code, bootstrapError));
       } else if (this.state !== "error") {
         this.state = "idle";
       }
