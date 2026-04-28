@@ -279,6 +279,14 @@ export class HarnessRuntime {
       },
     });
 
+    bus.emit(BUS_EVENTS.RUN_CREATED, {
+      sessionId: run.sessionId,
+      runId: run.runId,
+      modelEntryId: run.modelEntryId,
+      runKind: run.runKind,
+      lane: run.lane,
+    });
+
     bus.emit(BUS_EVENTS.RUN_STARTED, {
       sessionId: run.sessionId,
       runId: run.runId,
@@ -331,6 +339,12 @@ export class HarnessRuntime {
         timestamp: Date.now(),
         state: run.state,
       });
+
+      bus.emit(BUS_EVENTS.RUN_CANCEL_REQUESTED, {
+        sessionId: run.sessionId,
+        runId: run.runId,
+      });
+
       if (run.pendingApproval?.requestId) {
         this.resolvePendingApproval(
           {
@@ -425,6 +439,14 @@ export class HarnessRuntime {
     });
     this.persistActiveRuns();
 
+    bus.emit(BUS_EVENTS.RUN_STATE_CHANGED, {
+      sessionId: run.sessionId,
+      runId: run.runId,
+      state: run.state,
+      reason: options?.reason,
+      currentStepId: options?.currentStepId,
+    });
+
     return this.toSnapshot(run);
   }
 
@@ -479,6 +501,20 @@ export class HarnessRuntime {
       reason: options?.reason,
     });
 
+    if (finalState === "aborted") {
+      bus.emit(BUS_EVENTS.RUN_ABORTED, {
+        sessionId: run.sessionId,
+        runId: run.runId,
+        reason: options?.reason,
+      });
+    } else if (finalState === "failed") {
+      bus.emit(BUS_EVENTS.RUN_FAILED, {
+        sessionId: run.sessionId,
+        runId: run.runId,
+        reason: options?.reason,
+      });
+    }
+
     return this.toSnapshot(run);
   }
 
@@ -511,6 +547,14 @@ export class HarnessRuntime {
         ...(evaluation.metadata ?? {}),
         ...(metadata ?? {}),
       },
+    });
+
+    bus.emit(BUS_EVENTS.TOOL_POLICY_EVALUATED, {
+      sessionId: run.sessionId,
+      runId: run.runId,
+      toolName: evaluation.toolName,
+      decision: evaluation.decision.type,
+      riskLevel: evaluation.riskLevel,
     });
   }
 
