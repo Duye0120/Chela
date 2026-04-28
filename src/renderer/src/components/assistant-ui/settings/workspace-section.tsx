@@ -54,7 +54,7 @@ function RuleFileItem({
           <span
             className={cn(
               "size-2 shrink-0 rounded-full",
-              exists ? "bg-emerald-500" : "bg-amber-400",
+              exists ? "bg-[color:var(--chela-status-success-text)]" : "bg-[color:var(--chela-status-warning-text)]",
             )}
           />
           <p className="truncate text-[12px] font-medium text-foreground">
@@ -64,7 +64,7 @@ function RuleFileItem({
         <span
           className={cn(
             "shrink-0 text-[11px]",
-            exists ? "text-emerald-600" : "text-amber-600",
+            exists ? "text-[color:var(--chela-status-success-text)]" : "text-[color:var(--chela-status-warning-text)]",
           )}
         >
           {exists ? "已加载" : "缺失"}

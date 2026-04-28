@@ -646,7 +646,7 @@ function SidebarImpl({
                               {group.name}
                             </span>
                             {!hasPath ? (
-                              <span className="shrink-0 rounded-full bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-300">
+                              <span className="shrink-0 rounded-full bg-[color:var(--chela-status-warning-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--chela-status-warning-text)]">
                                 待绑定
                               </span>
                             ) : null}

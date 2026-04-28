@@ -114,10 +114,10 @@ function getStatusMeta(status: ActivityStatus) {
     case "complete":
       return {
         icon: CheckCircle2Icon,
-        iconClassName: "text-emerald-500",
-        badgeClassName: "bg-emerald-500/10 text-emerald-600",
+        iconClassName: "text-[color:var(--chela-status-success-text)]",
+        badgeClassName: "bg-[color:var(--chela-status-success-bg)] text-[color:var(--chela-status-success-text)]",
         badgeLabel: "已完成",
-        dotClassName: "bg-emerald-500",
+        dotClassName: "bg-[color:var(--chela-status-success-text)]",
       };
     case "running":
       return {
@@ -130,10 +130,10 @@ function getStatusMeta(status: ActivityStatus) {
     case "requires-action":
       return {
         icon: AlertCircleIcon,
-        iconClassName: "text-amber-500",
-        badgeClassName: "bg-amber-400/12 text-amber-600",
+        iconClassName: "text-[color:var(--chela-status-warning-text)]",
+        badgeClassName: "bg-[color:var(--chela-status-warning-bg)] text-[color:var(--chela-status-warning-text)]",
         badgeLabel: "待确认",
-        dotClassName: "bg-amber-500",
+        dotClassName: "bg-[color:var(--chela-status-warning-text)]",
       };
     case "incomplete":
       if (status.reason === "cancelled") {
@@ -147,18 +147,18 @@ function getStatusMeta(status: ActivityStatus) {
       }
       return {
         icon: AlertCircleIcon,
-        iconClassName: "text-rose-500",
-        badgeClassName: "bg-rose-500/10 text-rose-600",
+        iconClassName: "text-[color:var(--chela-status-error-text)]",
+        badgeClassName: "bg-[color:var(--chela-status-error-bg)] text-[color:var(--chela-status-error-text)]",
         badgeLabel: "出错",
-        dotClassName: "bg-rose-500",
+        dotClassName: "bg-[color:var(--chela-status-error-text)]",
       };
     default:
       return {
         icon: CheckCircle2Icon,
-        iconClassName: "text-emerald-500",
-        badgeClassName: "bg-emerald-500/10 text-emerald-600",
+        iconClassName: "text-[color:var(--chela-status-success-text)]",
+        badgeClassName: "bg-[color:var(--chela-status-success-bg)] text-[color:var(--chela-status-success-text)]",
         badgeLabel: "已完成",
-        dotClassName: "bg-emerald-500",
+        dotClassName: "bg-[color:var(--chela-status-success-text)]",
       };
   }
 }
@@ -435,8 +435,8 @@ const ActivityRowItem: FC<ActivityRowProps> = ({
               ) : null}
 
               {row.errorText ? (
-                <div className="rounded-[var(--radius-shell)] bg-rose-500/10 px-3 py-2.5 text-[11px] leading-5 text-rose-700 dark:text-rose-300">
-                  <p className="mb-1 font-medium uppercase tracking-[0.08em] text-[10px] text-rose-600/80 dark:text-rose-300/80">
+                <div className="rounded-[var(--radius-shell)] bg-[color:var(--chela-status-error-bg)] px-3 py-2.5 text-[11px] leading-5 text-[color:var(--chela-status-error-text)]">
+                  <p className="mb-1 font-medium uppercase tracking-[0.08em] text-[10px] text-[color:var(--chela-status-error-text)]/80">
                     Error
                   </p>
                   <pre className="overflow-x-auto whitespace-pre-wrap">{row.errorText}</pre>

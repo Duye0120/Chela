@@ -110,7 +110,7 @@ function getStatusIcon(status: StepStatus, isRunning?: boolean) {
   if (isRunning) return <Loader2Icon className="size-3.5 animate-spin text-[color:var(--color-accent)]" />;
   switch (status) {
     case "success":
-      return <CheckCircle2Icon className="size-3.5 text-emerald-500" />;
+      return <CheckCircle2Icon className="size-3.5 text-[color:var(--chela-status-success-text)]" />;
     case "error":
       return <XCircleIcon className="size-3.5 text-red-500" />;
     case "cancelled":
@@ -281,7 +281,7 @@ const RunCard = memo(function RunCard({
             {!isRunning && (
               <span className={cn(
                 "text-[11px] font-medium",
-                run.status === "completed" && "text-emerald-500",
+                run.status === "completed" && "text-[color:var(--chela-status-success-text)]",
                 run.status === "error" && "text-red-500",
                 run.status === "cancelled" && "text-muted-foreground",
               )}>

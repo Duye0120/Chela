@@ -547,12 +547,12 @@ export function MemorySection({
             </div>
             {!isLocalEmbeddingModelId(settings.memory.embeddingModelId) &&
               !settings.memory.embeddingProviderId ? (
-              <p className="text-[12px] text-amber-500">
+              <p className="text-[12px] text-[color:var(--chela-status-warning-text)]">
                 未绑定 Provider，远端嵌入模型将无法调用，请重新选择。
               </p>
             ) : null}
             {embeddingProviderUnavailable ? (
-              <p className="text-[12px] text-amber-500">
+              <p className="text-[12px] text-[color:var(--chela-status-warning-text)]">
                 当前嵌入 Provider 未启用或已删除，请重新选择可用的嵌入模型。
               </p>
             ) : null}

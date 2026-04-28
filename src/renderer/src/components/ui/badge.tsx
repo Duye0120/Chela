@@ -13,9 +13,9 @@ const badgeVariants = cva(
         secondary: "bg-[color:var(--color-control-bg)] text-foreground shadow-[var(--color-control-shadow)]",
         outline:
           "border border-[color:var(--color-control-border)] bg-transparent text-[color:var(--color-text-secondary)]",
-        success: "bg-emerald-100 text-emerald-900",
-        warning: "bg-amber-100 text-amber-900",
-        destructive: "bg-rose-100 text-rose-900",
+        success: "bg-[color:var(--chela-status-success-bg)] text-[color:var(--chela-status-success-text)]",
+        warning: "bg-[color:var(--chela-status-warning-bg)] text-[color:var(--chela-status-warning-text)]",
+        destructive: "bg-[color:var(--chela-status-error-bg)] text-[color:var(--chela-status-error-text)]",
       },
     },
     defaultVariants: {

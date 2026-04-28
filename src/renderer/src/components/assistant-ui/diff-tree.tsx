@@ -238,7 +238,7 @@ const TreeItem = memo(function TreeItem({
       <div
         ref={rowRef}
         className={cn(
-          "flex cursor-pointer select-none items-center gap-1.5 rounded-[4px] pl-1.5 pr-2 py-1 hover:bg-secondary/50 group/item",
+          "flex cursor-pointer select-none items-center gap-1.5 rounded-[4px] pl-1.5 pr-2 py-1 hover:bg-[color:var(--color-control-bg-hover)] group/item",
           !isDir && "group"
         )}
         onMouseDown={(e) => {

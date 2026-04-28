@@ -429,7 +429,7 @@ export function BranchSwitcher({
           </div>
 
           {error ? (
-            <div className="rounded-[var(--radius-shell)] bg-rose-500/8 px-3 py-2.5 text-[12px] leading-5 text-rose-700">
+            <div className="rounded-[var(--radius-shell)] bg-[color:var(--chela-status-error-bg)] px-3 py-2.5 text-[12px] leading-5 text-[color:var(--chela-status-error-text)]">
               {error}
             </div>
           ) : null}

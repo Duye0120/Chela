@@ -648,14 +648,14 @@ export function DiffWorkbenchContent({
         <div
           role="status"
           aria-live="polite"
-          className="mt-2 rounded-[var(--radius-shell)] bg-rose-500/8 px-3 py-2 text-[12px] leading-5 text-rose-700"
+          className="mt-2 rounded-[var(--radius-shell)] bg-[color:var(--chela-status-error-bg)] px-3 py-2 text-[12px] leading-5 text-[color:var(--chela-status-error-text)]"
         >
           {commitPlanError}
         </div>
       ) : null}
 
       {showSparklesHint ? (
-        <div className="mt-2 rounded-[var(--radius-shell)] bg-secondary/30 px-3 py-2 text-[12px] leading-5 text-muted-foreground">
+        <div className="mt-2 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-2 text-[12px] leading-5 text-muted-foreground">
           勾选已更新，重新生成后计划会同步当前文件集合。
         </div>
       ) : null}
@@ -817,7 +817,7 @@ export function DiffWorkbenchContent({
               type="button"
               variant="outline"
               onClick={onRefresh}
-              className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px] text-muted-foreground bg-secondary/50 border-0 hover:bg-secondary/80 flex items-center gap-1.5 shrink-0"
+              className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px] text-muted-foreground bg-[color:var(--color-control-bg)] border-0 hover:bg-[color:var(--color-control-bg-hover)] flex items-center gap-1.5 shrink-0"
               aria-label="刷新 diff"
             >
               <RefreshCwIcon className={cn("size-3.5", isLoading && "animate-spin")} />
@@ -833,7 +833,7 @@ export function DiffWorkbenchContent({
               type="button"
               variant="outline"
               onClick={() => setLayout((prev) => (prev === "vertical" ? "horizontal" : "vertical"))}
-              className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px] text-muted-foreground bg-secondary/50 border-0 hover:bg-secondary/80 flex items-center gap-1.5 shrink-0"
+              className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px] text-muted-foreground bg-[color:var(--color-control-bg)] border-0 hover:bg-[color:var(--color-control-bg-hover)] flex items-center gap-1.5 shrink-0"
               aria-label="切换 diff 对比方向"
             >
               {layout === "vertical" ? (
@@ -856,7 +856,7 @@ export function DiffWorkbenchContent({
           variant="outline"
           onClick={handlePull}
           disabled={isPulling}
-          className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px] text-muted-foreground bg-secondary/50 border-0 hover:bg-secondary/80 flex items-center gap-1.5 shrink-0"
+          className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px] text-muted-foreground bg-[color:var(--color-control-bg)] border-0 hover:bg-[color:var(--color-control-bg-hover)] flex items-center gap-1.5 shrink-0"
           aria-label="拉取代码"
         >
           <DownloadIcon className={cn("size-3.5", isPulling && "animate-bounce")} />
@@ -874,7 +874,7 @@ export function DiffWorkbenchContent({
           variant="outline"
           onClick={handlePush}
           disabled={isPushing}
-          className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px] text-muted-foreground bg-secondary/50 border-0 hover:bg-secondary/80 flex items-center gap-1.5 shrink-0"
+          className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px] text-muted-foreground bg-[color:var(--color-control-bg)] border-0 hover:bg-[color:var(--color-control-bg-hover)] flex items-center gap-1.5 shrink-0"
           aria-label="推送代码"
         >
           <UploadIcon className={cn("size-3.5", isPushing && "animate-bounce")} />
@@ -895,7 +895,7 @@ export function DiffWorkbenchContent({
           <span className="inline-flex items-center rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2 py-1 text-[11px] text-foreground">
             {formatBranchLabel(overview)}
           </span>
-          <span className="inline-flex items-center rounded-[var(--radius-shell)] bg-secondary/50 px-2 py-1 text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2 py-1 text-[11px] text-muted-foreground">
             {overview.branch.hasChanges ? "有未提交改动" : "工作区干净"}
           </span>
           {currentSourceSnapshot.files.length > 0 && (
@@ -943,7 +943,7 @@ export function DiffWorkbenchContent({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 px-2.5 text-[12px] text-muted-foreground hover:bg-secondary/80 bg-secondary/50 rounded-[var(--radius-shell)]"
+                    className="h-7 px-2.5 text-[12px] text-muted-foreground hover:bg-[color:var(--color-control-bg-hover)] bg-[color:var(--color-control-bg)] rounded-[var(--radius-shell)]"
                     onClick={handleSelectAll}
                   >
                     {selectedPaths.size > 0 &&

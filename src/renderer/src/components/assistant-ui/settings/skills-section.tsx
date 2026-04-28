@@ -352,7 +352,7 @@ function TransferPreview({
                       {sameAsSource ? (
                         <span className="rounded-full bg-muted/20 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">当前</span>
                       ) : installed && !selected ? (
-                        <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">已存在</span>
+                        <span className="rounded-full bg-[color:var(--chela-status-warning-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--chela-status-warning-text)]">已存在</span>
                       ) : null}
                     </div>
                     <span className="text-[11px] text-muted-foreground/70">{location.hint}</span>
@@ -364,7 +364,7 @@ function TransferPreview({
           </div>
 
           {targetInstalled ? (
-            <p className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+            <p className="mt-3 flex items-center gap-1.5 text-[11px] text-[color:var(--chela-status-warning-text)]">
               <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>

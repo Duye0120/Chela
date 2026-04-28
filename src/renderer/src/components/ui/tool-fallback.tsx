@@ -104,7 +104,7 @@ function getStatusMeta(status?: ToolCallMessagePartStatus) {
   if (!status || status.type === "complete") {
     return {
       label: null,
-      tone: "text-emerald-600 bg-emerald-500/10",
+      tone: "text-[color:var(--chela-status-success-text)] bg-[color:var(--chela-status-success-bg)]",
     };
   }
 
@@ -118,7 +118,7 @@ function getStatusMeta(status?: ToolCallMessagePartStatus) {
   if (status.type === "requires-action") {
     return {
       label: "待确认",
-      tone: "text-amber-600 bg-amber-400/12",
+      tone: "text-[color:var(--chela-status-warning-text)] bg-[color:var(--chela-status-warning-bg)]",
     };
   }
 
@@ -131,7 +131,7 @@ function getStatusMeta(status?: ToolCallMessagePartStatus) {
 
   return {
     label: "出错",
-    tone: "text-rose-600 bg-rose-500/10",
+    tone: "text-[color:var(--chela-status-error-text)] bg-[color:var(--chela-status-error-bg)]",
   };
 }
 
@@ -576,7 +576,7 @@ function getCommandStatusClass(status: CommandGroupItem["status"]) {
     case "executing":
       return "text-[color:var(--color-accent)]";
     case "error":
-      return "text-rose-600 dark:text-rose-400";
+      return "text-[color:var(--chela-status-error-text)]";
     case "cancelled":
       return "text-[color:var(--chela-text-tertiary)]";
     default:
@@ -597,7 +597,7 @@ function getCommandDetailStatusMeta(status: CommandGroupItem["status"]) {
       return {
         label: "失败",
         Icon: XCircleIcon,
-        className: "text-rose-600 dark:text-rose-400",
+        className: "text-[color:var(--chela-status-error-text)]",
         iconClassName: "",
       };
     case "cancelled":
@@ -922,8 +922,8 @@ function ToolFallbackSummary({
                 <span className={cn(
                   "rounded-full px-1.5 py-0.5 font-medium tabular-nums",
                   exitCode === 0
-                    ? "bg-emerald-500/10 text-emerald-600"
-                    : "bg-rose-500/10 text-rose-600",
+                    ? "bg-[color:var(--chela-status-success-bg)] text-[color:var(--chela-status-success-text)]"
+                    : "bg-[color:var(--chela-status-error-bg)] text-[color:var(--chela-status-error-text)]",
                 )}>
                   {exitCode ?? "—"}
                 </span>
@@ -990,12 +990,12 @@ function ToolFallbackError({
         "aui-tool-fallback-error border-l-2 pl-4 py-0.5",
         isCancelled
           ? "border-slate-300 dark:border-slate-700"
-          : "border-rose-500/50 text-rose-700 dark:text-rose-300",
+          : "border-[color:var(--chela-status-error-text)]/50 text-[color:var(--chela-status-error-text)]",
         className,
       )}
       {...props}
     >
-      <p className={cn("aui-tool-fallback-error-header mb-1 text-[11px] font-medium", isCancelled ? "text-muted-foreground/50" : "text-rose-700/70 dark:text-rose-400/70")}>
+      <p className={cn("aui-tool-fallback-error-header mb-1 text-[11px] font-medium", isCancelled ? "text-muted-foreground/50" : "text-[color:var(--chela-status-error-text)]/70")}>
         {headerText}
       </p>
       <p className={cn("aui-tool-fallback-error-reason text-[12px] leading-relaxed", isCancelled ? "text-muted-foreground/80" : "")}>

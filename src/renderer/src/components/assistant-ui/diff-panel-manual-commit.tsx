@@ -96,7 +96,7 @@ export function ManualCommitPanel({
       />
 
       {error ? (
-        <div className="mt-2 rounded-[var(--radius-shell)] bg-rose-500/8 px-2.5 py-2 text-[12px] leading-5 text-rose-700">
+        <div className="mt-2 rounded-[var(--radius-shell)] bg-[color:var(--chela-status-error-bg)] px-2.5 py-2 text-[12px] leading-5 text-[color:var(--chela-status-error-text)]">
           {error}
         </div>
       ) : null}

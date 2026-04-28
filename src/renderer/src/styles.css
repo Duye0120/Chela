@@ -382,13 +382,8 @@ optgroup {
   }
 
   .chela-danger-soft {
-    background: rgba(239, 68, 68, 0.08);
-    color: #dc2626;
-  }
-
-  .dark .chela-danger-soft {
-    background: rgba(239, 68, 68, 0.16);
-    color: #fda4af;
+    background: var(--chela-status-error-bg);
+    color: var(--chela-status-error-text);
   }
 
   /* Streaming cursor blink */

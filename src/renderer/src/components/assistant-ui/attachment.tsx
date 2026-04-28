@@ -215,7 +215,7 @@ const AttachmentThumb: FC = () => {
   );
 
   return (
-    <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[var(--radius-shell)] bg-slate-100/80">
+    <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)]">
       {isImage && src ? (
         <img
           src={src}
@@ -255,18 +255,18 @@ const AttachmentTile: FC = () => {
         <AttachmentPreviewDialog>
           <TooltipTrigger asChild>
             <div
-              className="flex h-[72px] w-[220px] cursor-pointer items-center gap-3 rounded-[var(--radius-shell)] bg-slate-50/90 px-3 py-3 transition-colors hover:bg-slate-100/90"
+              className="flex h-[72px] w-[220px] cursor-pointer items-center gap-3 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-3 transition-colors hover:bg-[color:var(--color-control-bg-hover)]"
               role="button"
               aria-label={`${typeLabel} attachment`}
             >
-              <div className="size-12 shrink-0 overflow-hidden rounded-[var(--radius-shell)] bg-slate-100">
+              <div className="size-12 shrink-0 overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)]">
                 <AttachmentThumb />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[14px] font-medium text-slate-900">
+                <p className="truncate text-[14px] font-medium text-foreground">
                   {name}
                 </p>
-                <p className="mt-0.5 text-[12px] text-slate-500">
+                <p className="mt-0.5 text-[12px] text-muted-foreground">
                   {subtitle}
                 </p>
               </div>

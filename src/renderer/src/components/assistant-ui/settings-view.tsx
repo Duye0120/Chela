@@ -164,7 +164,7 @@ function SettingsViewImpl({
                 className={[
                   "mt-3 inline-flex rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-1.5 text-[12px] leading-5",
                   directoryStatus.stale
-                    ? "text-amber-700 dark:text-amber-300"
+                    ? "text-[color:var(--chela-status-warning-text)]"
                     : "text-muted-foreground",
                 ].join(" ")}
               >

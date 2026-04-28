@@ -1287,7 +1287,7 @@ const AssistantRunningNotice: FC<{ label: string; compact?: boolean }> = ({
         compact && "mb-2",
       )}
     >
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--chela-status-info-bg)] text-[color:var(--chela-status-info-text)]">
         <LoaderCircleIcon className="size-3 animate-spin" />
       </span>
       <span className="text-[13px] font-medium text-foreground/80">
@@ -1307,7 +1307,7 @@ const AssistantCancelledNotice: FC<{ compact?: boolean }> = ({
         compact && "mb-2",
       )}
     >
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-control-bg)] text-[color:var(--color-text-tertiary)]">
         <SquareIcon className="size-3 fill-current" />
       </span>
       <span className="text-[13px] font-medium text-foreground/80">
@@ -1483,7 +1483,7 @@ const MessageBranchPicker: FC<{ className?: string }> = ({ className }) => {
       )}
     >
       <BranchPickerPrimitive.Previous asChild>
-        <TooltipIconButton tooltip="上一项" variant="ghost" className="size-6 p-0 hover:bg-slate-200 dark:hover:bg-slate-700">
+        <TooltipIconButton tooltip="上一项" variant="ghost" className="size-6 p-0 hover:bg-[color:var(--color-control-bg-hover)]">
           <ChevronLeftIcon className="size-3.5" />
         </TooltipIconButton>
       </BranchPickerPrimitive.Previous>
@@ -1491,7 +1491,7 @@ const MessageBranchPicker: FC<{ className?: string }> = ({ className }) => {
         <BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
       </span>
       <BranchPickerPrimitive.Next asChild>
-        <TooltipIconButton tooltip="下一项" variant="ghost" className="size-6 p-0 hover:bg-slate-200 dark:hover:bg-slate-700">
+        <TooltipIconButton tooltip="下一项" variant="ghost" className="size-6 p-0 hover:bg-[color:var(--color-control-bg-hover)]">
           <ChevronRightIcon className="size-3.5" />
         </TooltipIconButton>
       </BranchPickerPrimitive.Next>
@@ -1505,7 +1505,7 @@ const EditComposer: FC = () => {
 
   return (
     <ComposerPrimitive.Root className="relative col-start-2 min-w-0">
-      <div className="wrap-break-word peer grid rounded-[var(--radius-shell)] bg-slate-100/80 px-4 py-2 text-[15px] leading-7 text-slate-900 shadow-sm dark:bg-slate-800/80 dark:text-slate-100">
+      <div className="wrap-break-word peer grid rounded-[var(--radius-shell)] bg-[color:var(--chela-message-user-bg)] px-4 py-2 text-[15px] leading-7 text-[color:var(--chela-message-user-text)] shadow-[var(--chela-message-user-shadow)]">
         <div className="pointer-events-none col-start-1 row-start-1 invisible break-words whitespace-pre-wrap">
           {text + "\u200b"}
         </div>
@@ -1532,7 +1532,7 @@ const UserMessage: FC = () => {
 
       <ComposerPrimitive.If editing={false}>
         <div className="relative col-start-2 min-w-0">
-          <div className="wrap-break-word peer rounded-[var(--radius-shell)] bg-slate-100/80 dark:bg-slate-800/80 px-4 py-2 text-[15px] leading-7 text-slate-900 dark:text-slate-100 shadow-sm empty:hidden">
+          <div className="wrap-break-word peer rounded-[var(--radius-shell)] bg-[color:var(--chela-message-user-bg)] px-4 py-2 text-[15px] leading-7 text-[color:var(--chela-message-user-text)] shadow-[var(--chela-message-user-shadow)] empty:hidden">
             <MessagePrimitive.Parts />
           </div>
           <div className="mt-1 flex min-h-6 justify-end">

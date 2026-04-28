@@ -21,8 +21,8 @@ export function AppBootingScreen() {
 export function AppBootErrorScreen({ message }: { message: string }) {
   return (
     <main className="grid h-screen place-items-center bg-[#f0f0f0] px-6 text-gray-400">
-      <div className="max-w-lg rounded-xl border border-rose-400/20 bg-rose-50 px-6 py-4 shadow-sm">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-rose-300">
+      <div className="max-w-lg rounded-xl border border-[color:var(--chela-status-error-text)]/20 bg-[color:var(--chela-status-error-bg)] px-6 py-4 shadow-sm">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--chela-status-error-text)]/50">
           Renderer Error
         </p>
         <h1 className="mt-2 text-lg font-medium text-gray-800">

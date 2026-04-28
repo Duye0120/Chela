@@ -128,7 +128,7 @@ export function CommitPlanCard({
     <div
       className={cn(
         "rounded-[var(--radius-shell)] border border-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] px-3.5 py-3 shadow-[var(--color-control-shadow)] transition-all relative overflow-hidden",
-        isCommitted && "bg-emerald-50/60 dark:bg-emerald-950/20",
+        isCommitted && "bg-[color:var(--chela-status-success-bg)]/60",
         isBusy && "opacity-95 pointer-events-none",
       )}
     >
@@ -217,7 +217,7 @@ export function CommitPlanCard({
       ) : null}
 
       {group.error ? (
-        <div className="mt-2 rounded-[var(--radius-shell)] bg-rose-500/8 px-2.5 py-2 text-[12px] leading-5 text-rose-700">
+        <div className="mt-2 rounded-[var(--radius-shell)] bg-[color:var(--chela-status-error-bg)] px-2.5 py-2 text-[12px] leading-5 text-[color:var(--chela-status-error-text)]">
           {group.error}
         </div>
       ) : null}

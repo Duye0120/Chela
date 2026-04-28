@@ -600,7 +600,7 @@ export function KeysSection({
                           : "未配置"
                       }
                       className={`inline-block h-2 w-2 rounded-full ${workspace.sourceDraft.enabled
-                          ? "bg-emerald-500"
+                          ? "bg-[color:var(--chela-status-success-text)]"
                           : "bg-zinc-400"
                         }`}
                     />
@@ -945,8 +945,8 @@ export function KeysSection({
                   {fetchModelsResult ? (
                     <div
                       className={`mb-2 rounded-[var(--radius-shell)] px-3 py-2 text-[12px] ${fetchModelsResult.kind === "success"
-                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                          : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                          ? "bg-[color:var(--chela-status-success-bg)] text-[color:var(--chela-status-success-text)]"
+                          : "bg-[color:var(--chela-status-warning-bg)] text-[color:var(--chela-status-warning-text)]"
                         }`}
                     >
                       {fetchModelsResult.kind === "success"
@@ -1114,7 +1114,7 @@ export function KeysSection({
                 ) : testResult ? (
                   <span
                     className={
-                      testResult.success ? "text-emerald-600" : "text-amber-600"
+                      testResult.success ? "text-[color:var(--chela-status-success-text)]" : "text-[color:var(--chela-status-warning-text)]"
                     }
                   >
                     {testResult.success

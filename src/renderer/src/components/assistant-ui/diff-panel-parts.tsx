@@ -146,7 +146,7 @@ export function DiffSourceSelect({
     <SelectRoot value={selectedSource} onValueChange={(value) => onChange(value as GitDiffSource)}>
       <SelectTrigger
         variant="ghost"
-        className="h-7 w-full rounded-[var(--radius-shell)] px-2.5 text-[12px] border-0 bg-secondary/50 hover:bg-secondary/80 justify-between items-center"
+        className="h-7 w-full rounded-[var(--radius-shell)] px-2.5 text-[12px] border-0 bg-[color:var(--color-control-bg)] hover:bg-[color:var(--color-control-bg-hover)] justify-between items-center"
       >
         <span className="truncate font-medium text-foreground">
           {selectedMeta.label} <span className="text-muted-foreground font-normal ml-1">({selectedSnapshot.totalFiles})</span>
