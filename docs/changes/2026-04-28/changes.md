@@ -292,3 +292,27 @@
 - `pnpm exec tsx tests/settings-navigation-regression.test.ts` 通过。
 - `git diff --check` 通过，仅输出当前 Windows 换行提示。
 - Chrome DevTools 打开 `http://127.0.0.1:5173/` 未出现新的 `ReferenceError` 渲染崩溃；普通浏览器环境显示预期的 Electron preload 注入诊断，控制台仅有 `favicon.ico` 404。
+
+## Diff Panel 手动提交表单
+
+时间：2026-04-28 15:41:28
+
+改了什么：
+- 在 diff panel 的提交区域新增手动提交表单，支持填写 title 和 description。
+- 新增 `ManualCommitPanel` 独立组件，负责手动提交输入框、提交按钮、错误展示和提交中状态。
+- `DiffWorkbenchContent` 增加手动提交草稿、错误、提交中状态；用户选中文件后可直接提交所选文件。
+- 手动提交开始时会让正在返回的提交计划生成结果失效，避免旧生成结果覆盖手动流程。
+
+为什么改：
+- diff panel 原先依赖生成提交计划后才能编辑 title 和 description；API 断开或异常时缺少手动兜底。
+- 手动提交表单让提交内容输入和 AI 生成能力并列可用，保留现有计划生成入口。
+
+涉及文件：
+- `src/renderer/src/components/assistant-ui/diff-panel.tsx`
+- `src/renderer/src/components/assistant-ui/diff-panel-manual-commit.tsx`
+- `docs/changes/2026-04-28/changes.md`
+
+结果：
+- 选中文件后，提交区域显示手动提交表单。
+- title 为空或未选文件时提交按钮禁用。
+- 手动提交成功后清空表单、清空生成计划并刷新 diff 快照。

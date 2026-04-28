@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   RefreshCwIcon,
   XIcon,
@@ -35,6 +35,10 @@ import {
   type CommitPlanCardState,
 } from "@renderer/components/assistant-ui/diff-panel-commit-plan";
 import {
+  ManualCommitPanel,
+  type ManualCommitDraft,
+} from "@renderer/components/assistant-ui/diff-panel-manual-commit";
+import {
   DIFF_SOURCES,
   DIFF_SOURCE_META,
   DiffFileCard,
@@ -62,6 +66,7 @@ type DiffWorkbenchDraft = {
   selectedDiffSource: GitDiffSource;
   commitPlanGroups: CommitPlanCardState[];
   commitPlanSkillUsage: RuntimeSkillUsage | null;
+  manualCommitDraft: ManualCommitDraft;
 };
 
 const DEFAULT_DIFF_WORKBENCH_DRAFT: DiffWorkbenchDraft = {
@@ -69,6 +74,10 @@ const DEFAULT_DIFF_WORKBENCH_DRAFT: DiffWorkbenchDraft = {
   selectedDiffSource: "all",
   commitPlanGroups: [],
   commitPlanSkillUsage: null,
+  manualCommitDraft: {
+    title: "",
+    description: "",
+  },
 };
 
 let diffWorkbenchDraft: DiffWorkbenchDraft = { ...DEFAULT_DIFF_WORKBENCH_DRAFT };
@@ -106,19 +115,29 @@ export function DiffWorkbenchContent({
   const [commitPlanSkillUsage, setCommitPlanSkillUsage] = useState(
     diffWorkbenchDraft.commitPlanSkillUsage,
   );
+  const [manualCommitTitle, setManualCommitTitle] = useState(
+    diffWorkbenchDraft.manualCommitDraft.title,
+  );
+  const [manualCommitDescription, setManualCommitDescription] = useState(
+    diffWorkbenchDraft.manualCommitDraft.description,
+  );
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [isManualCommitting, setIsManualCommitting] = useState(false);
   const [isCommittingAll, setIsCommittingAll] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [isStaging, setIsStaging] = useState(false);
   const [commitPlanError, setCommitPlanError] = useState<string | null>(null);
+  const [manualCommitError, setManualCommitError] = useState<string | null>(null);
   const [commitAllProgress, setCommitAllProgress] = useState({ current: 0, total: 0 });
+  const commitPlanGenerationIdRef = useRef(0);
 
   // ── Effects ─────────────────────────────────────────────────────────
   useEffect(() => {
     setSelectedPaths(new Set());
     setSelectedPathsChanged(false);
     setCommitPlanError(null);
+    setManualCommitError(null);
   }, [selectedDiffSource, overview]);
 
   useEffect(() => {
@@ -135,11 +154,17 @@ export function DiffWorkbenchContent({
       selectedDiffSource,
       commitPlanGroups,
       commitPlanSkillUsage,
+      manualCommitDraft: {
+        title: manualCommitTitle,
+        description: manualCommitDescription,
+      },
     };
   }, [
     commitPlanGroups,
     commitPlanSkillUsage,
     layout,
+    manualCommitDescription,
+    manualCommitTitle,
     selectedDiffSource,
   ]);
 
@@ -245,19 +270,29 @@ export function DiffWorkbenchContent({
     );
     if (files.length === 0) return;
 
+    const generationId = commitPlanGenerationIdRef.current + 1;
+    commitPlanGenerationIdRef.current = generationId;
     setIsGeneratingPlan(true);
     try {
       const result = await generateCommitPlan(files);
+      if (commitPlanGenerationIdRef.current !== generationId) {
+        return;
+      }
       setCommitPlanGroups(result.groups);
       setCommitPlanSkillUsage(result.skillUsage);
       setSelectedPathsChanged(false);
     } catch (err) {
+      if (commitPlanGenerationIdRef.current !== generationId) {
+        return;
+      }
       const message = getErrorMessage(err, "生成提交计划失败");
       setCommitPlanError(message);
       // eslint-disable-next-line no-console
       console.error("[DiffPanel] generateCommitPlan failed:", message);
     } finally {
-      setIsGeneratingPlan(false);
+      if (commitPlanGenerationIdRef.current === generationId) {
+        setIsGeneratingPlan(false);
+      }
     }
   }, [overview, selectedDiffSource, selectedPaths]);
 
@@ -278,6 +313,49 @@ export function DiffWorkbenchContent({
       error: null,
     }));
   }, [patchCommitPlanGroup]);
+
+  const handleManualTitleChange = useCallback((value: string) => {
+    setManualCommitError(null);
+    setManualCommitTitle(value.replace(/\r?\n/g, " "));
+  }, []);
+
+  const handleManualDescriptionChange = useCallback((value: string) => {
+    setManualCommitError(null);
+    setManualCommitDescription(value);
+  }, []);
+
+  const handleManualCommit = useCallback(async () => {
+    const title = manualCommitTitle.trim();
+    const paths = Array.from(selectedPaths);
+    if (!title || paths.length === 0) return;
+
+    commitPlanGenerationIdRef.current += 1;
+    setIsGeneratingPlan(false);
+    setCommitPlanError(null);
+    setManualCommitError(null);
+    setIsManualCommitting(true);
+
+    try {
+      await window.desktopApi.git.commit({
+        message: buildCommitMessage({
+          title: manualCommitTitle,
+          description: manualCommitDescription,
+        }),
+        paths,
+      });
+      setManualCommitTitle("");
+      setManualCommitDescription("");
+      setCommitPlanGroups([]);
+      setCommitPlanSkillUsage(null);
+      setSelectedPathsChanged(false);
+      await onRefresh();
+    } catch (err) {
+      const message = getErrorMessage(err, "手动提交失败");
+      setManualCommitError(message);
+    } finally {
+      setIsManualCommitting(false);
+    }
+  }, [manualCommitDescription, manualCommitTitle, onRefresh, selectedPaths]);
 
   const handleStagePlanGroup = useCallback(async (groupId: string) => {
     const group = commitPlanGroups.find((item) => item.id === groupId);
@@ -395,7 +473,15 @@ export function DiffWorkbenchContent({
   const hasBusyPlanGroup = commitPlanGroups.some(
     (group) => group.status === "staging" || group.status === "committing",
   );
-  const isPlanBusy = isGeneratingPlan || hasBusyPlanGroup || isCommittingAll;
+  const hasManualCommitDraft =
+    manualCommitTitle.trim().length > 0 || manualCommitDescription.trim().length > 0;
+  const showManualCommitPanel =
+    selectedPaths.size > 0 ||
+    hasManualCommitDraft ||
+    manualCommitError !== null ||
+    isManualCommitting;
+  const isManualCommitBlocked = hasBusyPlanGroup || isCommittingAll;
+  const isPlanBusy = isGeneratingPlan || hasBusyPlanGroup || isCommittingAll || isManualCommitting;
   const canGeneratePlan = selectedFiles.length > 0 && !isPlanBusy;
   const canCommitAll =
     commitPlanGroups.length > 0 &&
@@ -421,16 +507,19 @@ export function DiffWorkbenchContent({
   const visibleCommitPlanSkillUsage =
     commitPlanSkillUsage ?? (isGeneratingPlan ? pendingCommitPlanSkillUsage : null);
   const showCommitPlanSection =
-    commitPlanGroups.length > 0 || isGeneratingPlan || commitPlanError !== null;
+    commitPlanGroups.length > 0 ||
+    isGeneratingPlan ||
+    commitPlanError !== null ||
+    showManualCommitPanel;
 
   const stageSelectionControl =
     selectedDiffSource === "unstaged" || selectedDiffSource === "all" ? (
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
-            variant="secondary"
+            variant="ghost"
             size="icon"
-            className="size-7 rounded-[var(--radius-shell)]"
+            className="size-7 rounded-[var(--radius-shell)] text-muted-foreground hover:text-foreground"
             onClick={handleStageSelected}
             disabled={selectedPaths.size === 0 || isStaging}
             aria-label="暂存选中文件"
@@ -444,9 +533,9 @@ export function DiffWorkbenchContent({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
-            variant="secondary"
+            variant="ghost"
             size="icon"
-            className="size-7 rounded-[var(--radius-shell)]"
+            className="size-7 rounded-[var(--radius-shell)] text-muted-foreground hover:text-foreground"
             onClick={handleUnstageSelected}
             disabled={selectedPaths.size === 0 || isStaging}
             aria-label="取消暂存选中文件"
@@ -582,12 +671,11 @@ export function DiffWorkbenchContent({
               </div>
             </div>
           ) : (
-            <div className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-2.5 text-[12px] leading-5 text-muted-foreground shadow-[var(--color-control-shadow)]">
-              <p className="font-medium text-foreground">
-                {selectedPaths.size > 0 ? "已选文件，点击右上角生成计划。" : "先勾选文件，再生成计划。"}
-              </p>
-              <p className="mt-1">计划会按当前勾选的文件生成。</p>
-            </div>
+            <p className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2.5 py-2 text-[11px] leading-5 text-muted-foreground">
+              {selectedPaths.size > 0
+                ? `已选 ${selectedPaths.size} 个文件，可生成计划或直接手动提交`
+                : "请先勾选文件，再生成提交计划"}
+            </p>
           )
         ) : (
           <div className="flex flex-col gap-2">
@@ -607,6 +695,21 @@ export function DiffWorkbenchContent({
           </div>
         )}
       </div>
+
+      {showManualCommitPanel ? (
+        <ManualCommitPanel
+          className="mt-2"
+          title={manualCommitTitle}
+          description={manualCommitDescription}
+          selectedFileCount={selectedPaths.size}
+          disabled={isManualCommitBlocked}
+          isCommitting={isManualCommitting}
+          error={manualCommitError}
+          onTitleChange={handleManualTitleChange}
+          onDescriptionChange={handleManualDescriptionChange}
+          onCommit={handleManualCommit}
+        />
+      ) : null}
     </div>
   );
 
