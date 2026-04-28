@@ -539,6 +539,62 @@ export type RunSource = "user" | "renderer" | "system" | "subagent";
 
 export type RunKind = "chat" | "compact" | "memory_refresh" | "system" | "subagent";
 
+// ── Trace Types ────────────────────────────────────────────────
+
+export type TraceEventType =
+  | "run_started"
+  | "run_created"
+  | "run_state_changed"
+  | "run_cancel_requested"
+  | "run_completed"
+  | "run_aborted"
+  | "run_failed"
+  | "tool_started"
+  | "tool_executing"
+  | "tool_completed"
+  | "tool_failed"
+  | "tool_policy_evaluated"
+  | "approval_requested"
+  | "approval_resolved"
+  | "message_user"
+  | "message_assistant";
+
+export type TraceNodeStatus = "pending" | "success" | "error" | "cancelled";
+
+export type TraceNode = {
+  id: string;
+  runId: string;
+  sessionId: string;
+  type: TraceEventType;
+  timestamp: number;
+  parentId: string | null;
+  children: TraceNode[];
+  data: Record<string, unknown>;
+  durationMs?: number;
+  status?: TraceNodeStatus;
+  label?: string;
+};
+
+export type TraceTree = {
+  runId: string;
+  sessionId: string;
+  rootNodes: TraceNode[];
+  startedAt: number;
+  endedAt?: number;
+  metadata?: Record<string, unknown>;
+};
+
+export type TraceRunSummary = {
+  runId: string;
+  sessionId: string;
+  nodeCount: number;
+  startedAt: number;
+  endedAt?: number;
+  durationMs?: number;
+  toolCallCount: number;
+  errorCount: number;
+};
+
 export type ChatMessageMeta = Record<string, unknown> & {
   skillUsages?: RuntimeSkillUsage[];
   runChangeSummary?: RunChangeSummary | null;
@@ -872,7 +928,7 @@ export type TrimSessionMessagesInput = {
   messageId: string;
 };
 
-export type RightPanelView = "diff";
+export type RightPanelView = "diff" | "trace";
 
 export type RightPanelState = {
   open: boolean;
