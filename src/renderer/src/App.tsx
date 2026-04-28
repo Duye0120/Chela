@@ -26,6 +26,7 @@ import {
 import { TracePanel } from "@renderer/components/assistant-ui/trace-panel";
 import {
   SettingsView,
+  SETTINGS_SECTIONS,
   type SettingsSection,
 } from "@renderer/components/assistant-ui/settings-view";
 import { Sidebar } from "@renderer/components/assistant-ui/sidebar";
@@ -64,17 +65,7 @@ const MIN_THREAD_CONTENT_WIDTH = 320;
 const RIGHT_PANEL_GAP_PX = 8;
 const ROOT_UI_THEME_DATASET = "theme";
 const SETTINGS_ROUTE_PREFIX = "/settings";
-const SETTINGS_SECTION_IDS: SettingsSection[] = [
-  "general",
-  "network",
-  "ai_model",
-  "workspace",
-  "memory",
-  "skills",
-  "interface",
-  "archived",
-  "system",
-];
+const SETTINGS_SECTION_IDS = SETTINGS_SECTIONS.map((section) => section.id);
 
 function resolveSettingsSectionFromPath(pathname: string): SettingsSection | null {
   if (!pathname.startsWith(SETTINGS_ROUTE_PREFIX)) {
@@ -1794,7 +1785,7 @@ export default function App() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => openSettingsView("system")}
+                  onClick={() => openSettingsView("archived")}
                   className="rounded-[var(--radius-shell)]"
                 >
                   查看已归档
