@@ -241,8 +241,15 @@ const RunCard = memo(function RunCard({
   const isRunning = run.status === "running";
 
   const stepCount = run.steps.length;
-  const toolCount = run.steps.filter((s) => s.kind === "tool_call").length;
-  const thinkingCount = run.steps.filter((s) => s.kind === "thinking").length;
+  let toolCount = 0;
+  let thinkingCount = 0;
+  for (const step of run.steps) {
+    if (step.kind === "tool_call") {
+      toolCount += 1;
+    } else if (step.kind === "thinking") {
+      thinkingCount += 1;
+    }
+  }
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="mb-2">
@@ -331,7 +338,7 @@ export function TracePanel({ sessionId, onClose, className }: TracePanelProps) {
 
   const handleEvent = useCallback((event: AgentEvent) => {
     if (event.sessionId !== sessionId) return;
-    const runId = (event as any).runId;
+    const runId = event.runId;
     if (!runId) return;
 
     setRuns((prev) => {
@@ -448,15 +455,19 @@ export function TracePanel({ sessionId, onClose, className }: TracePanelProps) {
           }
           const current = next.get(runId)!;
           // Find the last executing thinking step
-          const thinkingIdx = [...current.steps].reverse().findIndex(
-            (s) => s.kind === "thinking" && s.status === "executing",
-          );
+          let thinkingIdx = -1;
+          for (let index = current.steps.length - 1; index >= 0; index -= 1) {
+            const step = current.steps[index];
+            if (step.kind === "thinking" && step.status === "executing") {
+              thinkingIdx = index;
+              break;
+            }
+          }
           if (thinkingIdx >= 0) {
-            const realIdx = current.steps.length - 1 - thinkingIdx;
             const updatedSteps = [...current.steps];
-            const step = { ...updatedSteps[realIdx] };
+            const step = { ...updatedSteps[thinkingIdx] };
             step.thinkingText = (step.thinkingText ?? "") + event.delta;
-            updatedSteps[realIdx] = step;
+            updatedSteps[thinkingIdx] = step;
             next.set(runId, { ...current, steps: updatedSteps });
           } else {
             // Create new thinking step
@@ -506,7 +517,12 @@ export function TracePanel({ sessionId, onClose, className }: TracePanelProps) {
   }, [runs]);
 
   const totalCount = runs.size;
-  const runningCount = [...runs.values()].filter((r) => r.status === "running").length;
+  let runningCount = 0;
+  for (const run of runs.values()) {
+    if (run.status === "running") {
+      runningCount += 1;
+    }
+  }
 
   if (collapsed) {
     return (

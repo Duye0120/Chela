@@ -76,6 +76,13 @@ function getCompactStatusCopy(summary: ContextUsageSummary) {
   return "暂时不需要压缩。";
 }
 
+const SNAPSHOT_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
+  month: "numeric",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 function formatSnapshotTimestamp(value: string | null) {
   if (!value) {
     return "—";
@@ -86,12 +93,7 @@ function formatSnapshotTimestamp(value: string | null) {
     return "—";
   }
 
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  return SNAPSHOT_TIMESTAMP_FORMATTER.format(date);
 }
 
 function formatCompactedCount(summary: ContextUsageSummary) {

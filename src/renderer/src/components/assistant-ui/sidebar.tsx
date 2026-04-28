@@ -165,14 +165,20 @@ function SidebarImpl({
 
   const projectSessionsById = useMemo(() => {
     const next = new Map<string, ChatSessionSummary[]>();
-    const regularSummaries = summaries.filter((summary) => !summary.archived);
+    for (const group of groups) {
+      next.set(group.id, []);
+    }
 
-    groups.forEach((group) => {
-      next.set(
-        group.id,
-        regularSummaries.filter((summary) => summary.groupId === group.id),
-      );
-    });
+    for (const summary of summaries) {
+      if (summary.archived || !summary.groupId) {
+        continue;
+      }
+
+      const groupSessions = next.get(summary.groupId);
+      if (groupSessions) {
+        groupSessions.push(summary);
+      }
+    }
 
     return next;
   }, [groups, summaries]);

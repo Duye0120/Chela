@@ -10,11 +10,19 @@ type TreeNode = {
   isDirectory: boolean;
   file?: GitDiffFile;
   children: Record<string, TreeNode>;
+  childrenList: TreeNode[];
   allChildPaths: string[];
 };
 
 function buildTree(files: GitDiffFile[]): TreeNode[] {
-  const root: TreeNode = { name: "root", path: "", isDirectory: true, children: {}, allChildPaths: [] };
+  const root: TreeNode = {
+    name: "root",
+    path: "",
+    isDirectory: true,
+    children: {},
+    childrenList: [],
+    allChildPaths: [],
+  };
 
   for (const file of files) {
     const parts = file.path.split("/");
@@ -33,6 +41,7 @@ function buildTree(files: GitDiffFile[]): TreeNode[] {
           isDirectory: !isFile,
           file: isFile ? file : undefined,
           children: {},
+          childrenList: [],
           allChildPaths: []
         };
       }
@@ -50,6 +59,7 @@ function buildTree(files: GitDiffFile[]): TreeNode[] {
         node.name = `${node.name}/${child.name}`;
         node.path = child.path;
         node.children = child.children;
+        node.childrenList = child.childrenList;
         compress(node);
         return;
       }
@@ -87,9 +97,10 @@ function buildTree(files: GitDiffFile[]): TreeNode[] {
       }
       return a.name.localeCompare(b.name);
     });
+    node.childrenList = children;
     for (const child of children) {
       if (child.isDirectory) {
-        child.children = Object.fromEntries(toArray(child).map(c => [c.name, c]));
+        toArray(child);
       }
     }
     return children;
@@ -123,6 +134,16 @@ let dragSelectValue = true;
 let isDraggingCheckbox = false;
 let lastDragY: number | null = null;
 let dragRafId: number | null = null;
+
+function getSelectedPathCount(paths: string[], selectedPaths: Set<string>) {
+  let count = 0;
+  for (const path of paths) {
+    if (selectedPaths.has(path)) {
+      count += 1;
+    }
+  }
+  return count;
+}
 
 if (typeof window !== "undefined") {
   const cleanupDrag = () => {
@@ -191,7 +212,7 @@ const TreeItem = memo(function TreeItem({
   const isDir = node.isDirectory;
   const status = node.file?.status;
 
-  const checkedCount = node.allChildPaths.filter(p => selectedPaths.has(p)).length;
+  const checkedCount = getSelectedPathCount(node.allChildPaths, selectedPaths);
   const isChecked = checkedCount > 0 && checkedCount === node.allChildPaths.length;
   const isIndeterminate = checkedCount > 0 && checkedCount < node.allChildPaths.length;
 
@@ -290,7 +311,7 @@ const TreeItem = memo(function TreeItem({
 
       {isDir && expanded && (
         <div className="flex flex-col">
-          {Object.values(node.children).map((child) => (
+          {node.childrenList.map((child) => (
             <TreeItem
               key={child.path}
               node={child}
@@ -310,16 +331,8 @@ const TreeItem = memo(function TreeItem({
   if (prevProps.onSelectFile !== nextProps.onSelectFile) return false;
   if (prevProps.onToggleSelection !== nextProps.onToggleSelection) return false;
 
-  const getCheckedCount = (paths: string[], selected: Set<string>) => {
-    let count = 0;
-    for (const p of paths) {
-      if (selected.has(p)) count++;
-    }
-    return count;
-  };
-
-  const prevCount = getCheckedCount(prevProps.node.allChildPaths, prevProps.selectedPaths);
-  const nextCount = getCheckedCount(nextProps.node.allChildPaths, nextProps.selectedPaths);
+  const prevCount = getSelectedPathCount(prevProps.node.allChildPaths, prevProps.selectedPaths);
+  const nextCount = getSelectedPathCount(nextProps.node.allChildPaths, nextProps.selectedPaths);
 
   return prevCount === nextCount;
 });
@@ -350,6 +363,7 @@ export function FileTreeView({
           isDirectory: false,
           file,
           children: {},
+          childrenList: [],
           allChildPaths: [file.path]
         };
       });

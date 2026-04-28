@@ -73,7 +73,13 @@ function isRuntimeSkillUsage(value: unknown): value is RuntimeSkillUsage {
 
 export function extractRuntimeSkillUsages(value: unknown): RuntimeSkillUsage[] {
   if (Array.isArray(value)) {
-    return value.filter(isRuntimeSkillUsage).map((item) => ({ ...item }));
+    const usages: RuntimeSkillUsage[] = [];
+    for (const item of value) {
+      if (isRuntimeSkillUsage(item)) {
+        usages.push({ ...item });
+      }
+    }
+    return usages;
   }
 
   if (isRuntimeSkillUsage(value)) {

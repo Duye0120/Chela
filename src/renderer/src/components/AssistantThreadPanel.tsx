@@ -105,7 +105,13 @@ function createResponse(
 }
 
 function getLatestThinkingStep(steps: AgentStep[]) {
-  return [...steps].reverse().find((step) => step.kind === "thinking");
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    const step = steps[index];
+    if (step.kind === "thinking") {
+      return step;
+    }
+  }
+  return undefined;
 }
 
 function mergeRuntimeSkillUsages(
@@ -579,7 +585,14 @@ function toThreadMessage(message: ChatMessage): ThreadMessageLike | null {
 }
 
 function extractUserText(messages: readonly ThreadMessageLike[]) {
-  const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
+  let latestUserMessage: ThreadMessageLike | undefined;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "user") {
+      latestUserMessage = message;
+      break;
+    }
+  }
   if (!latestUserMessage) return "";
 
   if (typeof latestUserMessage.content === "string") {

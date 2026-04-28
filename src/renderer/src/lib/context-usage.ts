@@ -2,6 +2,8 @@ import type { ContextSummary } from "@shared/contracts";
 
 export type ContextUsageSummary = ContextSummary;
 
+const TOKEN_COUNT_FORMATTER = new Intl.NumberFormat("zh-CN");
+
 export const EMPTY_CONTEXT_USAGE_SUMMARY: ContextUsageSummary = {
   state: "unknown",
   contextWindow: null,
@@ -41,7 +43,7 @@ export function formatTokenCount(value: number | null | undefined) {
     return "—";
   }
 
-  return new Intl.NumberFormat("zh-CN").format(value);
+  return TOKEN_COUNT_FORMATTER.format(value);
 }
 
 function formatRatioPercent(ratio: number | null) {

@@ -267,7 +267,15 @@ export function WorkspaceSection({
     [soulStatus],
   );
 
-  const loadedCount = soulItems.filter((item) => item.exists).length;
+  const loadedCount = useMemo(() => {
+    let count = 0;
+    for (const item of soulItems) {
+      if (item.exists) {
+        count += 1;
+      }
+    }
+    return count;
+  }, [soulItems]);
 
   const handleSelectWorkspace = useCallback(
     (item: WorkspaceListItem) => {

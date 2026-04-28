@@ -1,6 +1,11 @@
 import type { ChatSession, ChatSessionSummary, SelectedFile } from "@shared/contracts";
 import { summarizeSession } from "@shared/contracts";
 
+const SESSION_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 export function deriveSessionTitle(text: string, attachments: SelectedFile[]) {
   const trimmed = text.trim();
 
@@ -37,10 +42,7 @@ export function mergeAttachments(current: SelectedFile[], incoming: SelectedFile
 }
 
 export function formatTime(iso: string) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(iso));
+  return SESSION_TIME_FORMATTER.format(new Date(iso));
 }
 
 export function formatRelativeTime(iso: string) {
