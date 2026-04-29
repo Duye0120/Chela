@@ -184,11 +184,20 @@ const desktopApi: DesktopApi = {
       invokeIpc(IPC_CHANNELS.mcpRestartServer, serverName),
     disconnectServer: (serverName: string) =>
       invokeIpc(IPC_CHANNELS.mcpDisconnectServer, serverName),
+    openConfig: () => invokeIpc(IPC_CHANNELS.mcpOpenConfig),
+    saveServer: (draft) => invokeIpc(IPC_CHANNELS.mcpSaveServer, draft),
+    deleteServer: (serverName: string) =>
+      invokeIpc(IPC_CHANNELS.mcpDeleteServer, serverName),
   },
   plugins: {
     listStatus: () => invokeIpc(IPC_CHANNELS.pluginsListStatus),
     setEnabled: (pluginId: string, enabled: boolean) =>
       invokeIpc(IPC_CHANNELS.pluginsSetEnabled, pluginId, enabled),
+    openRootDirectory: () => invokeIpc(IPC_CHANNELS.pluginsOpenRootDirectory),
+    openDirectory: (pluginId: string) =>
+      invokeIpc(IPC_CHANNELS.pluginsOpenDirectory, pluginId),
+    openManifest: (pluginId: string) =>
+      invokeIpc(IPC_CHANNELS.pluginsOpenManifest, pluginId),
   },
 
   // ── Providers / Models ─────────────────────────────────────

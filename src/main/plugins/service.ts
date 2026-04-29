@@ -62,3 +62,14 @@ export function setPluginEnabled(input: PluginStatusInput & {
   return listPluginStatuses(input);
 }
 
+export function findPluginStatus(
+  input: PluginStatusInput,
+  pluginId: string,
+): PluginStatus {
+  const plugin = listPluginStatuses(input).plugins.find((item) => item.id === pluginId);
+  if (!plugin) {
+    throw new Error(`未找到插件：${pluginId}`);
+  }
+  return plugin;
+}
+

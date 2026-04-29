@@ -1,16 +1,22 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { McpServerStatus } from "../shared/contracts.js";
 import type { McpConfig, McpServerConfig } from "./config.js";
+
+type McpTransport = StdioClientTransport | StreamableHTTPClientTransport;
 
 export type McpConnection = {
   name: string;
   client: Client;
-  transport: StdioClientTransport;
+  transport: McpTransport;
   connected: boolean;
+  type: "stdio" | "streamable-http";
   command: string;
   args: string[];
+  url: string | null;
   cwd: string | null;
+  headerCount: number | null;
   startedAt: number;
   updatedAt: number;
   lastError: string | null;
@@ -29,10 +35,13 @@ export class McpConnectionManager {
       configured: current?.configured ?? true,
       disabled: current?.disabled ?? false,
       connected: current?.connected ?? false,
+      type: current?.type ?? "stdio",
       status: current?.status ?? "disconnected",
       command: current?.command ?? null,
       args: current?.args ?? [],
+      url: current?.url ?? null,
       cwd: current?.cwd ?? null,
+      headerCount: current?.headerCount ?? null,
       toolCount: current?.toolCount ?? null,
       resourceCount: current?.resourceCount ?? null,
       startedAt: current?.startedAt ?? null,
@@ -49,29 +58,37 @@ export class McpConnectionManager {
     await this.disconnectServer(name);
 
     const startedAt = Date.now();
+    const type = config.type === "streamable-http" ? "streamable-http" : "stdio";
+    const headers = type === "streamable-http" ? resolveHttpHeaders(config) : null;
     this.setStatus(name, {
       configured: true,
       disabled: config.disabled === true,
       connected: false,
+      type,
       status: config.disabled ? "disabled" : "connecting",
-      command: config.command,
+      command: type === "stdio" ? config.command ?? null : null,
       args: config.args ?? [],
+      url: type === "streamable-http" ? config.url ?? null : null,
       cwd: config.cwd ?? null,
+      headerCount: headers ? Object.keys(headers).length : null,
       startedAt,
       lastError: null,
       toolCount: null,
       resourceCount: null,
     });
 
-    const transport = new StdioClientTransport({
-      command: config.command,
-      args: config.args,
-      env: config.env
-        ? ({ ...process.env, ...config.env } as Record<string, string>)
-        : undefined,
-      cwd: config.cwd,
-      stderr: "pipe",
-    });
+    const transport =
+      type === "streamable-http"
+        ? new StreamableHTTPClientTransport(new URL(config.url ?? ""), {
+            requestInit: headers ? { headers } : undefined,
+          })
+        : new StdioClientTransport({
+            command: config.command ?? "",
+            args: config.args,
+            env: resolveStdioEnv(config),
+            cwd: config.cwd,
+            stderr: "pipe",
+          });
 
     const client = new Client(
       { name: "chela-desktop-agent", version: "0.1.0" },
@@ -95,9 +112,12 @@ export class McpConnectionManager {
       client,
       transport,
       connected: true,
-      command: config.command,
+      type,
+      command: config.command ?? "",
       args: config.args ?? [],
+      url: config.url ?? null,
       cwd: config.cwd ?? null,
+      headerCount: headers ? Object.keys(headers).length : null,
       startedAt,
       updatedAt: Date.now(),
       lastError: null,
@@ -198,14 +218,20 @@ export class McpConnectionManager {
           configured: true,
           disabled: serverConfig.disabled === true,
           connected,
+          type: serverConfig.type === "streamable-http" ? "streamable-http" : "stdio",
           status: serverConfig.disabled
             ? "disabled"
             : connected
               ? "connected"
               : current?.status ?? "disconnected",
-          command: serverConfig.command,
+          command: serverConfig.type === "streamable-http" ? null : serverConfig.command ?? null,
           args: serverConfig.args ?? [],
+          url: serverConfig.type === "streamable-http" ? serverConfig.url ?? null : null,
           cwd: serverConfig.cwd ?? null,
+          headerCount:
+            serverConfig.type === "streamable-http"
+              ? Object.keys(resolveHttpHeaders(serverConfig)).length
+              : null,
           toolCount: conn?.toolCount ?? current?.toolCount ?? null,
           resourceCount: conn?.resourceCount ?? current?.resourceCount ?? null,
           startedAt: conn?.startedAt ?? current?.startedAt ?? null,
@@ -217,4 +243,39 @@ export class McpConnectionManager {
 
     return [...statuses.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
+}
+
+function resolveStdioEnv(config: McpServerConfig): Record<string, string> | undefined {
+  const env: Record<string, string> = {};
+  if (config.envPassthrough && config.envPassthrough.length > 0) {
+    for (const name of config.envPassthrough) {
+      const value = process.env[name];
+      if (typeof value === "string") {
+        env[name] = value;
+      }
+    }
+  } else if (config.env) {
+    Object.assign(env, process.env);
+  }
+  if (config.env) {
+    Object.assign(env, config.env);
+  }
+  return Object.keys(env).length > 0 ? env : undefined;
+}
+
+function resolveHttpHeaders(config: McpServerConfig): Record<string, string> {
+  const headers: Record<string, string> = { ...(config.headers ?? {}) };
+  if (config.bearerTokenEnvVar) {
+    const token = process.env[config.bearerTokenEnvVar];
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+  }
+  for (const [headerName, envName] of Object.entries(config.headersFromEnv ?? {})) {
+    const value = process.env[envName];
+    if (value) {
+      headers[headerName] = value;
+    }
+  }
+  return headers;
 }

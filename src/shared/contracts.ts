@@ -465,15 +465,34 @@ export type McpServerStatus = {
   configured: boolean;
   disabled: boolean;
   connected: boolean;
+  type: "stdio" | "streamable-http";
   status: "connected" | "connecting" | "disconnected" | "failed" | "disabled";
   command: string | null;
   args: string[];
+  url: string | null;
   cwd: string | null;
+  headerCount: number | null;
   toolCount: number | null;
   resourceCount: number | null;
   startedAt: number | null;
   updatedAt: number | null;
   lastError: string | null;
+};
+
+export type McpServerConfigDraft = {
+  originalName?: string | null;
+  name: string;
+  type: "stdio" | "streamable-http";
+  command: string;
+  args: string[];
+  env: Record<string, string> | null;
+  envPassthrough: string[];
+  cwd: string | null;
+  url: string | null;
+  bearerTokenEnvVar: string | null;
+  headers: Record<string, string> | null;
+  headersFromEnv: Record<string, string> | null;
+  disabled: boolean;
 };
 
 export type PluginStatus = {
@@ -911,6 +930,7 @@ export type SendMessageOrigin = "user" | "resume_interrupted_approval";
 export type SendMessageInput = AgentRunScope & {
   text: string;
   attachments: SelectedFile[];
+  modelEntryId?: string;
   origin?: SendMessageOrigin;
 };
 
@@ -1197,10 +1217,16 @@ export type DesktopApi = {
     reloadConfig: () => Promise<McpServerStatus[]>;
     restartServer: (serverName: string) => Promise<McpServerStatus[]>;
     disconnectServer: (serverName: string) => Promise<McpServerStatus[]>;
+    openConfig: () => Promise<void>;
+    saveServer: (draft: McpServerConfigDraft) => Promise<McpServerStatus[]>;
+    deleteServer: (serverName: string) => Promise<McpServerStatus[]>;
   };
   plugins: {
     listStatus: () => Promise<PluginStatusBundle>;
     setEnabled: (pluginId: string, enabled: boolean) => Promise<PluginStatusBundle>;
+    openRootDirectory: () => Promise<void>;
+    openDirectory: (pluginId: string) => Promise<void>;
+    openManifest: (pluginId: string) => Promise<void>;
   };
   providers: {
     listSources: () => Promise<ProviderSource[]>;

@@ -10,6 +10,7 @@ import {
   validateMemoryListPayload,
   validateMemorySearchLimitPayload,
   validateMemorySearchQueryPayload,
+  validateMcpServerConfigDraftPayload,
   validatePluginEnabledPayload,
   validatePluginIdPayload,
   validateProviderApiKeyPayload,
@@ -357,6 +358,78 @@ assert.throws(
 
 assert.equal(validateWorkspacePathPayload("D:\\a_github\\first_pi_agent"), "D:\\a_github\\first_pi_agent");
 assert.equal(validateServerNamePayload(IPC_CHANNELS.mcpRestartServer, "filesystem"), "filesystem");
+assert.deepEqual(
+  validateMcpServerConfigDraftPayload({
+    originalName: null,
+    name: "filesystem",
+    type: "stdio",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "D:\\a_project"],
+    env: { NODE_ENV: "production" },
+    envPassthrough: [],
+    cwd: null,
+    url: null,
+    bearerTokenEnvVar: null,
+    headers: {},
+    headersFromEnv: {},
+    disabled: false,
+  }),
+  {
+    originalName: null,
+    name: "filesystem",
+    type: "stdio",
+    command: "npx",
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "D:\\a_project"],
+    env: { NODE_ENV: "production" },
+    envPassthrough: [],
+    cwd: null,
+    url: null,
+    bearerTokenEnvVar: null,
+    headers: {},
+    headersFromEnv: {},
+    disabled: false,
+  },
+);
+assert.deepEqual(
+  validateMcpServerConfigDraftPayload({
+    originalName: null,
+    name: "remote",
+    type: "streamable-http",
+    command: "",
+    args: [],
+    env: null,
+    envPassthrough: [],
+    cwd: null,
+    url: "https://mcp.example.com/mcp",
+    bearerTokenEnvVar: "MCP_BEARER_TOKEN",
+    headers: { "X-Chela": "1" },
+    headersFromEnv: { "X-Api-Key": "MCP_API_KEY" },
+    disabled: false,
+  }).type,
+  "streamable-http",
+);
+assert.throws(
+  () =>
+    validateMcpServerConfigDraftPayload({
+      name: "bad\nname",
+      type: "stdio",
+      command: "npx",
+      args: [],
+      env: {},
+      envPassthrough: [],
+      cwd: null,
+      url: null,
+      bearerTokenEnvVar: null,
+      headers: {},
+      headersFromEnv: {},
+      disabled: false,
+    }),
+  (error) =>
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "INVALID_IPC_PAYLOAD" &&
+    String((error as { message?: unknown }).message).includes("draft.name"),
+);
 
 assert.throws(
   () => validatePluginIdPayload(IPC_CHANNELS.pluginsSetEnabled, "plugin\nbad"),
@@ -377,6 +450,8 @@ assert.throws(
 );
 
 assert.equal(validatePluginIdPayload(IPC_CHANNELS.pluginsSetEnabled, "demo-plugin"), "demo-plugin");
+assert.equal(validatePluginIdPayload(IPC_CHANNELS.pluginsOpenDirectory, "demo-plugin"), "demo-plugin");
+assert.equal(validatePluginIdPayload(IPC_CHANNELS.pluginsOpenManifest, "demo-plugin"), "demo-plugin");
 assert.equal(validatePluginEnabledPayload(false), false);
 
 console.log("ipc contract regression tests passed");

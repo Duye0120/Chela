@@ -3,6 +3,7 @@ import type {
   MemoryAddInput,
   MemoryListInput,
   MemoryListSort,
+  McpServerConfigDraft,
   ProviderSourceDraft,
   Settings,
 } from "../../shared/contracts.js";
@@ -63,6 +64,22 @@ const MEMORY_LIST_SORTS: readonly MemoryListSort[] = [
   "confidence_desc",
 ];
 const GIT_COMMIT_KEYS = new Set(["message", "paths"]);
+const MCP_SERVER_DRAFT_KEYS = new Set([
+  "originalName",
+  "name",
+  "type",
+  "command",
+  "args",
+  "env",
+  "envPassthrough",
+  "cwd",
+  "url",
+  "bearerTokenEnvVar",
+  "headers",
+  "headersFromEnv",
+  "disabled",
+]);
+const MCP_TRANSPORT_TYPES = ["stdio", "streamable-http"] as const;
 
 export function invalidIpcPayload(channel: string, path: string, expected: string): IpcErrorPayload {
   return {
@@ -122,14 +139,14 @@ export function validateProviderSourceDraftPayload(
   const input = expectPlainObject(value, channel, "draft");
   assertKnownKeys(input, PROVIDER_SOURCE_DRAFT_KEYS, channel, "draft");
 
-  if ("id" in input) {
+  if ("id" in input && input.id !== undefined) {
     expectNonEmptyString(input.id, channel, "draft.id");
   }
   expectNonEmptyString(input.name, channel, "draft.name");
   expectEnum(input.providerType, PROVIDER_TYPES, channel, "draft.providerType");
   expectEnum(input.mode, PROVIDER_MODES, channel, "draft.mode");
   expectBoolean(input.enabled, channel, "draft.enabled");
-  if ("baseUrl" in input) {
+  if ("baseUrl" in input && input.baseUrl !== undefined) {
     expectNullableString(input.baseUrl, channel, "draft.baseUrl");
   }
 
@@ -232,6 +249,100 @@ export function validateServerNamePayload(channel: string, value: unknown): stri
   expectNonEmptyString(value, channel, "serverName");
   expectSafeSingleLineString(value, channel, "serverName");
   return value;
+}
+
+export function validateMcpServerConfigDraftPayload(
+  value: unknown,
+): McpServerConfigDraft {
+  const input = expectPlainObject(value, IPC_CHANNELS.mcpSaveServer, "draft");
+  assertKnownKeys(input, MCP_SERVER_DRAFT_KEYS, IPC_CHANNELS.mcpSaveServer, "draft");
+
+  const originalName = input.originalName;
+  if ("originalName" in input && input.originalName !== undefined) {
+    expectNullableString(originalName, IPC_CHANNELS.mcpSaveServer, "draft.originalName");
+    if (typeof originalName === "string") {
+      expectSafeSingleLineString(originalName, IPC_CHANNELS.mcpSaveServer, "draft.originalName");
+    }
+  }
+  const name = input.name;
+  expectNonEmptyString(name, IPC_CHANNELS.mcpSaveServer, "draft.name");
+  expectSafeSingleLineString(name as string, IPC_CHANNELS.mcpSaveServer, "draft.name");
+  const type = input.type;
+  expectEnum(type, MCP_TRANSPORT_TYPES, IPC_CHANNELS.mcpSaveServer, "draft.type");
+  const command = input.command;
+  expectString(command, IPC_CHANNELS.mcpSaveServer, "draft.command");
+  if (type === "stdio") {
+    expectNonEmptyString(command, IPC_CHANNELS.mcpSaveServer, "draft.command");
+  }
+  expectSafeSingleLineString(command as string, IPC_CHANNELS.mcpSaveServer, "draft.command");
+  if (!Array.isArray(input.args)) {
+    throw invalidIpcPayload(IPC_CHANNELS.mcpSaveServer, "draft.args", "字符串数组");
+  }
+  const args = input.args.map((item, index) => {
+    expectString(item, IPC_CHANNELS.mcpSaveServer, `draft.args.${index}`);
+    expectSafeSingleLineString(item as string, IPC_CHANNELS.mcpSaveServer, `draft.args.${index}`);
+    return item as string;
+  });
+  const env = input.env;
+  if (env !== null) {
+    validateStringRecord(env, IPC_CHANNELS.mcpSaveServer, "draft.env");
+  }
+  const envPassthrough = input.envPassthrough;
+  if (!Array.isArray(envPassthrough)) {
+    throw invalidIpcPayload(IPC_CHANNELS.mcpSaveServer, "draft.envPassthrough", "字符串数组");
+  }
+  const envPassthroughValues = envPassthrough.map((item, index) => {
+    expectNonEmptyString(item, IPC_CHANNELS.mcpSaveServer, `draft.envPassthrough.${index}`);
+    expectSafeSingleLineString(item, IPC_CHANNELS.mcpSaveServer, `draft.envPassthrough.${index}`);
+    return item;
+  });
+  const cwd = input.cwd;
+  expectNullableString(cwd, IPC_CHANNELS.mcpSaveServer, "draft.cwd");
+  if (typeof cwd === "string") {
+    expectSafeSingleLineString(cwd, IPC_CHANNELS.mcpSaveServer, "draft.cwd");
+  }
+  const url = input.url;
+  expectNullableString(url, IPC_CHANNELS.mcpSaveServer, "draft.url");
+  if (type === "streamable-http") {
+    expectNonEmptyString(url, IPC_CHANNELS.mcpSaveServer, "draft.url");
+  }
+  if (typeof url === "string") {
+    expectSafeSingleLineString(url, IPC_CHANNELS.mcpSaveServer, "draft.url");
+  }
+  const bearerTokenEnvVar = input.bearerTokenEnvVar;
+  expectNullableString(bearerTokenEnvVar, IPC_CHANNELS.mcpSaveServer, "draft.bearerTokenEnvVar");
+  if (typeof bearerTokenEnvVar === "string") {
+    expectSafeSingleLineString(bearerTokenEnvVar, IPC_CHANNELS.mcpSaveServer, "draft.bearerTokenEnvVar");
+  }
+  const headers = input.headers;
+  if (headers !== null) {
+    validateStringRecord(headers, IPC_CHANNELS.mcpSaveServer, "draft.headers");
+  }
+  const headersFromEnv = input.headersFromEnv;
+  if (headersFromEnv !== null) {
+    validateStringRecord(headersFromEnv, IPC_CHANNELS.mcpSaveServer, "draft.headersFromEnv");
+  }
+  const disabled = input.disabled;
+  expectBoolean(disabled, IPC_CHANNELS.mcpSaveServer, "draft.disabled");
+
+  return {
+    originalName:
+      typeof originalName === "string" || originalName === null
+        ? originalName
+      : undefined,
+    name: name as string,
+    type,
+    command: command as string,
+    args,
+    env: env === null ? null : (env as Record<string, string>),
+    envPassthrough: envPassthroughValues,
+    cwd: typeof cwd === "string" ? cwd : null,
+    url: typeof url === "string" ? url : null,
+    bearerTokenEnvVar: typeof bearerTokenEnvVar === "string" ? bearerTokenEnvVar : null,
+    headers: headers === null ? null : (headers as Record<string, string>),
+    headersFromEnv: headersFromEnv === null ? null : (headersFromEnv as Record<string, string>),
+    disabled: disabled as boolean,
+  };
 }
 
 export function validatePluginIdPayload(channel: string, value: unknown): string {
@@ -337,6 +448,18 @@ function validateMemoryMetadata(value: unknown, channel: string, path: string): 
   }
 }
 
+function validateStringRecord(value: unknown, channel: string, path: string): void {
+  const input = expectPlainObject(value, channel, path);
+  for (const [key, nested] of Object.entries(input)) {
+    if (!key.trim()) {
+      throw invalidIpcPayload(channel, path, "非空 key 的字符串对象");
+    }
+    expectSafeSingleLineString(key, channel, `${path}.${key}`);
+    expectString(nested, channel, `${path}.${key}`);
+    expectSafeSingleLineString(nested as string, channel, `${path}.${key}`);
+  }
+}
+
 function validateMemoryMetadataValue(value: unknown, channel: string, path: string): void {
   if (
     typeof value === "string" ||
@@ -367,13 +490,13 @@ function assertKnownKeys(input: PlainRecord, allowedKeys: Set<string>, channel: 
   }
 }
 
-function expectString(value: unknown, channel: string, path: string): void {
+function expectString(value: unknown, channel: string, path: string): asserts value is string {
   if (typeof value !== "string") {
     throw invalidIpcPayload(channel, path, "字符串");
   }
 }
 
-function expectNonEmptyString(value: unknown, channel: string, path: string): void {
+function expectNonEmptyString(value: unknown, channel: string, path: string): asserts value is string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw invalidIpcPayload(channel, path, "非空字符串");
   }
@@ -396,38 +519,51 @@ function validateGitPath(value: unknown, channel: string, path: string): void {
   expectSafeSingleLineString(value, channel, path);
 }
 
-function expectOptionalString(value: unknown, channel: string, path: string): void {
+function expectOptionalString(
+  value: unknown,
+  channel: string,
+  path: string,
+): asserts value is string | undefined {
   if (value !== undefined && typeof value !== "string") {
     throw invalidIpcPayload(channel, path, "字符串");
   }
 }
 
-function expectNullableString(value: unknown, channel: string, path: string): void {
+function expectNullableString(
+  value: unknown,
+  channel: string,
+  path: string,
+): asserts value is string | null {
   if (value !== null && typeof value !== "string") {
     throw invalidIpcPayload(channel, path, "字符串或 null");
   }
 }
 
-function expectNumber(value: unknown, channel: string, path: string): void {
+function expectNumber(value: unknown, channel: string, path: string): asserts value is number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw invalidIpcPayload(channel, path, "有限数字");
   }
 }
 
-function expectPositiveInteger(value: unknown, channel: string, path: string): void {
+function expectPositiveInteger(value: unknown, channel: string, path: string): asserts value is number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
     throw invalidIpcPayload(channel, path, "正整数");
   }
 }
 
-function expectBoolean(value: unknown, channel: string, path: string): void {
+function expectBoolean(value: unknown, channel: string, path: string): asserts value is boolean {
   if (typeof value !== "boolean") {
     throw invalidIpcPayload(channel, path, "布尔值");
   }
 }
 
-function expectEnum(value: unknown, allowedValues: readonly string[], channel: string, path: string): void {
-  if (typeof value !== "string" || !allowedValues.includes(value)) {
+function expectEnum<T extends string>(
+  value: unknown,
+  allowedValues: readonly T[],
+  channel: string,
+  path: string,
+): asserts value is T {
+  if (typeof value !== "string" || !(allowedValues as readonly string[]).includes(value)) {
     throw invalidIpcPayload(channel, path, allowedValues.join(" / "));
   }
 }

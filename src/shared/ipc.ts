@@ -76,10 +76,16 @@ export const IPC_CHANNELS = {
   mcpReloadConfig: "mcp:reload-config",
   mcpRestartServer: "mcp:restart-server",
   mcpDisconnectServer: "mcp:disconnect-server",
+  mcpOpenConfig: "mcp:open-config",
+  mcpSaveServer: "mcp:save-server",
+  mcpDeleteServer: "mcp:delete-server",
 
   // Plugins
   pluginsListStatus: "plugins:list-status",
   pluginsSetEnabled: "plugins:set-enabled",
+  pluginsOpenRootDirectory: "plugins:open-root-directory",
+  pluginsOpenDirectory: "plugins:open-directory",
+  pluginsOpenManifest: "plugins:open-manifest",
 
   // Providers
   providersListSources: "providers:list-sources",

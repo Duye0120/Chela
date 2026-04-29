@@ -50,6 +50,23 @@ await withTempDir((dir) => {
     JSON.stringify({ id: "bad plugin", name: "", version: "1.0.0" }),
     "utf-8",
   );
+  fs.mkdirSync(path.join(rootDir, "duplicate"), { recursive: true });
+  fs.writeFileSync(
+    path.join(rootDir, "duplicate", "plugin.json"),
+    JSON.stringify({
+      id: "demo-plugin",
+      name: "Duplicate Demo Plugin",
+      version: "1.0.0",
+      permissions: {
+        tools: [],
+        mcpServers: [],
+        uiPanels: [],
+        workflows: [],
+      },
+      workflows: [],
+    }),
+    "utf-8",
+  );
 
   const first = listPluginStatuses({ rootDir, statePath });
   assert.equal(first.plugins.length, 1);
@@ -58,7 +75,8 @@ await withTempDir((dir) => {
   assert.equal(first.plugins[0].toolCount, 1);
   assert.equal(first.plugins[0].mcpServerCount, 1);
   assert.equal(first.plugins[0].workflowCount, 1);
-  assert.equal(first.errors.length, 1);
+  assert.equal(first.errors.length, 2);
+  assert.ok(first.errors.some((error) => error.message.includes("已被")));
 
   const updated = setPluginEnabled({
     rootDir,

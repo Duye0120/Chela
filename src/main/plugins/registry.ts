@@ -31,6 +31,7 @@ export function scanPluginDirectory(rootDir: string): PluginScanResult {
 
   const plugins: ScannedPlugin[] = [];
   const errors: PluginScanError[] = [];
+  const pluginIds = new Map<string, string>();
   for (const entry of fs.readdirSync(rootDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) {
       continue;
@@ -44,6 +45,16 @@ export function scanPluginDirectory(rootDir: string): PluginScanResult {
     try {
       const result = validateChelaPluginManifest(readJsonFile(manifestPath));
       if (result.ok) {
+        const existingManifestPath = pluginIds.get(result.manifest.id);
+        if (existingManifestPath) {
+          errors.push({
+            directory,
+            manifestPath,
+            message: `plugin id "${result.manifest.id}" 已被 ${existingManifestPath} 使用。`,
+          });
+          continue;
+        }
+        pluginIds.set(result.manifest.id, manifestPath);
         plugins.push({ directory, manifestPath, manifest: result.manifest });
       } else {
         errors.push({
