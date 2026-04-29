@@ -394,6 +394,9 @@ export type RunChangeSummaryFile = {
   additions: number;
   deletions: number;
   changeKind: "added" | "updated" | "reverted";
+  patch?: string;
+  kind?: GitDiffFile["kind"];
+  previewPath?: string;
 };
 
 export type RunChangeSummary = {

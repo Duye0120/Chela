@@ -295,6 +295,31 @@
 - `git diff --check -- src/renderer/src/components/AssistantThreadPanel.tsx docs/changes/2026-04-29/changes.md` 通过，仅输出既有 Windows LF/CRLF 换行提示。
 - 未运行 build，也未运行全量 check。
 
+## 聊天消息变更摘要复用 diff panel 展开视图
+
+时间：2026-04-29 19:15:37
+
+改了什么：
+- `RunChangeSummaryFile` 增加可选 `patch`、`kind`、`previewPath` 字段，用于把 run 结束时已有的 Git diff 渲染信息带到聊天消息 metadata。
+- run 变更摘要构建时保留对应文件的 patch 与文件类型；新增、更新、恢复场景都会带上可展示的 diff 数据。
+- 聊天页的 session 变更摘要在有 patch 时复用 `DiffFileCard`，支持逐文件展开并使用和右侧 diff panel 一致的 diff 渲染；旧历史消息没有 patch 时继续回退到原摘要列表。
+- 回归测试补充断言，确认 run 摘要会保留 diff patch 与文件类型。
+
+为什么改：
+- 用户反馈 session 修改文件后聊天消息里展示的 diff 只是普通文字列表，不能像 diff panel 一样展开查看具体差异。
+
+涉及文件：
+- `src/shared/contracts.ts`
+- `src/main/chat/run-change-summary.ts`
+- `src/renderer/src/components/assistant-ui/thread-run-change-summary.tsx`
+- `tests/run-change-summary-regression.test.ts`
+- `docs/changes/2026-04-29/changes.md`
+
+结果：
+- `git diff --check -- src/shared/contracts.ts src/main/chat/run-change-summary.ts src/renderer/src/components/assistant-ui/thread-run-change-summary.tsx tests/run-change-summary-regression.test.ts` 通过，仅输出既有 Windows LF/CRLF 换行提示。
+- 尝试运行 `pnpm exec tsx tests/run-change-summary-regression.test.ts`，但当前 Codex 桌面环境的 Node 初始化触发 `Assertion failed: ncrypto::CSPRNG(nullptr, 0)`，测试进程未进入断言阶段。
+- 未运行 build，也未运行全量 check。
+
 ## 过程摘要等 run 完成后再进入已处理态
 
 时间：2026-04-29 17:52:06

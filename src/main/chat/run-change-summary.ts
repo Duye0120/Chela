@@ -140,6 +140,9 @@ function compareFileChange(
       additions: afterFile.additions,
       deletions: afterFile.deletions,
       changeKind: "added",
+      patch: afterFile.patch,
+      kind: afterFile.kind,
+      previewPath: afterFile.previewPath,
     };
   }
 
@@ -150,6 +153,9 @@ function compareFileChange(
       additions: beforeFile.additions,
       deletions: beforeFile.deletions,
       changeKind: "reverted",
+      patch: beforeFile.patch,
+      kind: beforeFile.kind,
+      previewPath: beforeFile.previewPath,
     };
   }
 
@@ -176,6 +182,9 @@ function compareFileChange(
     additions: Math.abs(additionsDelta),
     deletions: Math.abs(deletionsDelta),
     changeKind,
+    patch: after.patch,
+    kind: after.kind,
+    previewPath: after.previewPath,
   };
 }
 

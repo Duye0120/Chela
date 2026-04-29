@@ -18,6 +18,15 @@ function diffFile(
   return {
     path: filePath,
     status: "modified",
+    patch: [
+      `diff --git a/${filePath} b/${filePath}`,
+      `--- a/${filePath}`,
+      `+++ b/${filePath}`,
+      "@@ -1 +1 @@",
+      "-before",
+      "+after",
+    ].join("\n"),
+    kind: "text",
     additions,
     deletions,
   };
@@ -59,6 +68,8 @@ const filtered = buildRunChangeSummary(before, after, {
 });
 assert.equal(filtered?.fileCount, 1);
 assert.equal(filtered?.files[0]?.path, "src/current-run.ts");
+assert.equal(filtered?.files[0]?.kind, "text");
+assert.match(filtered?.files[0]?.patch ?? "", /diff --git/);
 assert.equal(filtered?.additions, 12);
 assert.equal(filtered?.deletions, 2);
 

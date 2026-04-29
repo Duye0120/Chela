@@ -1,7 +1,8 @@
 import { useState, type FC } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
-import type { RunChangeSummary } from "@shared/contracts";
+import type { GitDiffFile, RunChangeSummary } from "@shared/contracts";
+import { DiffFileCard } from "@renderer/components/assistant-ui/diff-panel-parts";
 import { cn } from "@renderer/lib/utils";
 
 const runChangeLabels: Record<
@@ -33,6 +34,24 @@ function getFileName(filePath: string) {
   return normalized.split("/").pop() || normalized;
 }
 
+function toDiffFile(
+  file: RunChangeSummary["files"][number],
+): GitDiffFile | null {
+  if (!file.patch || !file.kind) {
+    return null;
+  }
+
+  return {
+    path: file.path,
+    status: file.status,
+    patch: file.patch,
+    kind: file.kind,
+    additions: file.additions,
+    deletions: file.deletions,
+    previewPath: file.previewPath,
+  };
+}
+
 export const AssistantMessageRunChangeSummary: FC = () => {
   const summary = useAuiState((s) => {
     const custom = s.message.metadata?.custom as
@@ -43,6 +62,7 @@ export const AssistantMessageRunChangeSummary: FC = () => {
     return custom?.runChangeSummary ?? null;
   });
   const [expanded, setExpanded] = useState(true);
+  const [expandedDiffPaths, setExpandedDiffPaths] = useState<Set<string>>(new Set());
 
   if (!summary || summary.fileCount === 0) {
     return null;
@@ -98,34 +118,72 @@ export const AssistantMessageRunChangeSummary: FC = () => {
             <ChevronUpIcon className="ml-auto size-3.5 text-[color:var(--chela-text-tertiary)]" />
           </button>
 
-          <div className="max-h-[260px] overflow-y-auto py-1">
+          <div className="max-h-[520px] overflow-y-auto p-2">
             {summary.files.map((file) => (
-              <div
+              <RunChangeFileRow
                 key={`${file.changeKind}:${file.path}`}
-                className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2 text-[12px] leading-5 transition hover:bg-[color:var(--color-control-bg)]"
-              >
-                <span className="shrink-0 rounded-full bg-[color:var(--color-control-bg)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--chela-text-secondary)]">
-                  {runChangeLabels[file.changeKind]}
-                </span>
-                <div className="min-w-0">
-                  <code className="block truncate font-mono text-[12px] font-medium text-[color:var(--chela-text-primary)]">
-                    {file.path}
-                  </code>
-                  <span className="text-[11px] text-[color:var(--chela-text-tertiary)]">
-                    {runChangeStatusLabels[file.status]}
-                  </span>
-                </div>
-                <span className="font-mono text-[12px] font-semibold text-[color:var(--color-diff-add-text)]">
-                  {formatSignedCount(file.additions, "+")}
-                </span>
-                <span className="font-mono text-[12px] font-semibold text-[color:var(--color-diff-del-text)]">
-                  {formatSignedCount(file.deletions, "-")}
-                </span>
-              </div>
+                file={file}
+                expanded={expandedDiffPaths.has(file.path)}
+                onExpandedChange={(open) => {
+                  setExpandedDiffPaths((current) => {
+                    const next = new Set(current);
+                    if (open) {
+                      next.add(file.path);
+                    } else {
+                      next.delete(file.path);
+                    }
+                    return next;
+                  });
+                }}
+              />
             ))}
           </div>
         </div>
       ) : null}
+    </div>
+  );
+};
+
+const RunChangeFileRow: FC<{
+  file: RunChangeSummary["files"][number];
+  expanded: boolean;
+  onExpandedChange: (open: boolean) => void;
+}> = ({ file, expanded, onExpandedChange }) => {
+  const diffFile = toDiffFile(file);
+
+  if (diffFile) {
+    return (
+      <div className="mb-2 last:mb-0">
+        <DiffFileCard
+          file={diffFile}
+          expanded={expanded}
+          onExpandedChange={onExpandedChange}
+          layout="vertical"
+          className="bg-[color:var(--color-control-panel-bg)]"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2 text-[12px] leading-5 transition hover:bg-[color:var(--color-control-bg)]">
+      <span className="shrink-0 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--chela-text-secondary)]">
+        {runChangeLabels[file.changeKind]}
+      </span>
+      <div className="min-w-0">
+        <code className="block truncate font-mono text-[12px] font-medium text-[color:var(--chela-text-primary)]">
+          {file.path}
+        </code>
+        <span className="text-[11px] text-[color:var(--chela-text-tertiary)]">
+          {runChangeStatusLabels[file.status]}
+        </span>
+      </div>
+      <span className="font-mono text-[12px] font-semibold text-[color:var(--color-diff-add-text)]">
+        {formatSignedCount(file.additions, "+")}
+      </span>
+      <span className="font-mono text-[12px] font-semibold text-[color:var(--color-diff-del-text)]">
+        {formatSignedCount(file.deletions, "-")}
+      </span>
     </div>
   );
 };
