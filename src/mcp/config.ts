@@ -1,11 +1,18 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import type { McpServerConfigDraft } from "../shared/contracts.js";
 
 export type McpServerConfig = {
-  command: string;
+  type?: "stdio" | "streamable-http";
+  command?: string;
   args?: string[];
   env?: Record<string, string>;
+  envPassthrough?: string[];
   cwd?: string;
+  url?: string;
+  bearerTokenEnvVar?: string;
+  headers?: Record<string, string>;
+  headersFromEnv?: Record<string, string>;
   disabled?: boolean;
 };
 
@@ -14,6 +21,10 @@ export type McpConfig = {
 };
 
 const MCP_CONFIG_FILE = "mcp.json";
+
+export function getMcpConfigPath(workspacePath: string): string {
+  return join(workspacePath, MCP_CONFIG_FILE);
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -87,9 +98,20 @@ function normalizeServerConfig(
     return null;
   }
 
+  const type =
+    value.type === "streamable-http" || value.transport === "streamable-http" || value.url
+      ? "streamable-http"
+      : "stdio";
   const command = typeof value.command === "string" ? value.command.trim() : "";
-  if (!command) {
+  const url = typeof value.url === "string" ? value.url.trim() : "";
+  if (type === "stdio" && !command) {
     warnMcpConfig(configPath, "MCP server 缺少有效 command，已忽略。", {
+      serverName,
+    });
+    return null;
+  }
+  if (type === "streamable-http" && !url) {
+    warnMcpConfig(configPath, "MCP HTTP server 缺少有效 url，已忽略。", {
       serverName,
     });
     return null;
@@ -97,16 +119,29 @@ function normalizeServerConfig(
 
   const args = normalizeStringArray(value.args);
   const env = normalizeStringRecord(value.env);
+  const envPassthrough = normalizeStringArray(value.envPassthrough);
+  const headers = normalizeStringRecord(value.headers);
+  const headersFromEnv = normalizeStringRecord(value.headersFromEnv);
+  const bearerTokenEnvVar =
+    typeof value.bearerTokenEnvVar === "string" && value.bearerTokenEnvVar.trim()
+      ? value.bearerTokenEnvVar.trim()
+      : undefined;
   const cwd =
     typeof value.cwd === "string" && value.cwd.trim()
       ? value.cwd.trim()
       : undefined;
 
   return {
+    type,
     command,
     args,
     env,
+    envPassthrough,
     cwd,
+    url,
+    bearerTokenEnvVar,
+    headers,
+    headersFromEnv,
     disabled: value.disabled === true,
   };
 }
@@ -115,7 +150,7 @@ function normalizeServerConfig(
  * Read and parse the mcp.json config from workspace.
  */
 export function loadMcpConfig(workspacePath: string): McpConfig {
-  const configPath = join(workspacePath, MCP_CONFIG_FILE);
+  const configPath = getMcpConfigPath(workspacePath);
   if (!existsSync(configPath)) {
     return { mcpServers: {} };
   }
@@ -178,6 +213,117 @@ export function loadMcpConfig(workspacePath: string): McpConfig {
     });
     return { mcpServers: {} };
   }
+}
+
+function readEditableMcpConfig(workspacePath: string): Record<string, unknown> {
+  const configPath = getMcpConfigPath(workspacePath);
+  if (!existsSync(configPath)) {
+    return { mcpServers: {} };
+  }
+  const parsed = JSON.parse(readFileSync(configPath, "utf-8")) as unknown;
+  if (!isPlainObject(parsed)) {
+    throw new Error("mcp.json 必须是对象。");
+  }
+  const servers = (parsed.mcpServers ?? (parsed as { servers?: unknown }).servers) as unknown;
+  if (servers !== undefined && !isPlainObject(servers)) {
+    throw new Error("mcp.json 的 mcpServers 必须是对象。");
+  }
+  return {
+    ...parsed,
+    mcpServers: servers && isPlainObject(servers) ? { ...servers } : {},
+  };
+}
+
+function writeEditableMcpConfig(workspacePath: string, config: Record<string, unknown>): void {
+  const configPath = getMcpConfigPath(workspacePath);
+  mkdirSync(workspacePath, { recursive: true });
+  const tempPath = `${configPath}.tmp`;
+  writeFileSync(tempPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
+  renameSync(tempPath, configPath);
+}
+
+export function saveMcpServerConfig(
+  workspacePath: string,
+  draft: McpServerConfigDraft,
+): McpConfig {
+  const config = readEditableMcpConfig(workspacePath);
+  const servers = isPlainObject(config.mcpServers) ? { ...config.mcpServers } : {};
+  const originalName = draft.originalName?.trim();
+  const nextName = draft.name.trim();
+  const existingServer =
+    originalName && isPlainObject(servers[originalName])
+      ? (servers[originalName] as Record<string, unknown>)
+      : null;
+
+  if (originalName && originalName !== nextName) {
+    delete servers[originalName];
+  }
+
+  const nextConfig: McpServerConfig = {
+    type: draft.type,
+  };
+  if (draft.type === "stdio") {
+    nextConfig.command = draft.command.trim();
+  } else {
+    nextConfig.url = draft.url?.trim() ?? "";
+  }
+  const args = draft.args.map((item) => item.trim()).filter(Boolean);
+  if (draft.type === "stdio" && args.length > 0) {
+    nextConfig.args = args;
+  }
+  const env = draft.env === null ? normalizeStringRecord(existingServer?.env) : normalizeStringRecord(draft.env);
+  if (draft.type === "stdio" && env) {
+    nextConfig.env = env;
+  }
+  const envPassthrough = draft.envPassthrough.map((item) => item.trim()).filter(Boolean);
+  if (draft.type === "stdio" && envPassthrough.length > 0) {
+    nextConfig.envPassthrough = envPassthrough;
+  }
+  const cwd = draft.cwd?.trim();
+  if (draft.type === "stdio" && cwd) {
+    nextConfig.cwd = cwd;
+  }
+  if (draft.type === "streamable-http") {
+    const headers =
+      draft.headers === null
+        ? normalizeStringRecord(existingServer?.headers)
+        : normalizeStringRecord(draft.headers);
+    if (headers) {
+      nextConfig.headers = headers;
+    }
+    const headersFromEnv =
+      draft.headersFromEnv === null
+        ? normalizeStringRecord(existingServer?.headersFromEnv)
+        : normalizeStringRecord(draft.headersFromEnv);
+    if (headersFromEnv) {
+      nextConfig.headersFromEnv = headersFromEnv;
+    }
+    const bearerTokenEnvVar = draft.bearerTokenEnvVar?.trim();
+    if (bearerTokenEnvVar) {
+      nextConfig.bearerTokenEnvVar = bearerTokenEnvVar;
+    }
+  }
+  if (draft.disabled) {
+    nextConfig.disabled = true;
+  }
+
+  servers[nextName] = nextConfig as unknown as Record<string, unknown>;
+  writeEditableMcpConfig(workspacePath, {
+    ...config,
+    mcpServers: servers,
+  });
+  return loadMcpConfig(workspacePath);
+}
+
+export function deleteMcpServerConfig(workspacePath: string, serverName: string): McpConfig {
+  const config = readEditableMcpConfig(workspacePath);
+  const servers = isPlainObject(config.mcpServers) ? { ...config.mcpServers } : {};
+  delete servers[serverName];
+  writeEditableMcpConfig(workspacePath, {
+    ...config,
+    mcpServers: servers,
+  });
+  return loadMcpConfig(workspacePath);
 }
 
 /**
