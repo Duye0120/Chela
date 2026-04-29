@@ -400,7 +400,130 @@ function getStepGroupStatusStep(group: AgentStep[]) {
   return runningStep ?? errorStep ?? cancelledStep ?? last;
 }
 
-function buildAssistantParts(steps: AgentStep[], finalText: string): ThreadAssistantMessagePart[] {
+const MUTATING_FILE_TOOLS = new Set(["file_edit", "edit_file", "file_write"]);
+
+function normalizeRunChangePath(value: string) {
+  const normalized = value
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .replace(/^\/+/, "");
+
+  return normalized || null;
+}
+
+function addRunChangePath(paths: Set<string>, value: unknown) {
+  if (typeof value === "string") {
+    const normalized = normalizeRunChangePath(value);
+    if (normalized) {
+      paths.add(normalized);
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      addRunChangePath(paths, item);
+    }
+  }
+}
+
+function getRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function addStructuredRunChangePaths(paths: Set<string>, value: unknown) {
+  const record = getRecord(value);
+  if (!record) {
+    return;
+  }
+
+  addRunChangePath(paths, record.path);
+  addRunChangePath(paths, record.filePath);
+  addRunChangePath(paths, record.paths);
+  addRunChangePath(paths, record.filePaths);
+}
+
+function collectMessageTouchedPaths(steps: AgentStep[] | undefined) {
+  const paths = new Set<string>();
+
+  const visit = (step: AgentStep) => {
+    for (const child of step.children ?? []) {
+      visit(child);
+    }
+
+    if (
+      step.kind !== "tool_call" ||
+      !step.toolName ||
+      !MUTATING_FILE_TOOLS.has(step.toolName) ||
+      step.status !== "success" ||
+      step.toolResult === undefined
+    ) {
+      return;
+    }
+
+    addStructuredRunChangePaths(paths, step.toolArgs);
+    addStructuredRunChangePaths(paths, getRecord(step.toolResult)?.details);
+  };
+
+  for (const step of steps ?? []) {
+    visit(step);
+  }
+
+  return paths;
+}
+
+function isTouchedRunChangePath(filePath: string, touchedPaths: Set<string>) {
+  const normalized = normalizeRunChangePath(filePath);
+  if (!normalized) {
+    return false;
+  }
+
+  for (const touchedPath of touchedPaths) {
+    if (touchedPath === normalized || touchedPath.endsWith(`/${normalized}`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function filterRunChangeSummaryForMessage(
+  summary: RunChangeSummary | null | undefined,
+  steps: AgentStep[] | undefined,
+): RunChangeSummary | null {
+  if (!summary?.files.length) {
+    return null;
+  }
+
+  const touchedPaths = collectMessageTouchedPaths(steps);
+  if (touchedPaths.size === 0) {
+    return null;
+  }
+
+  const files = summary.files.filter((file) =>
+    isTouchedRunChangePath(file.path, touchedPaths),
+  );
+  if (files.length === 0) {
+    return null;
+  }
+
+  return {
+    fileCount: files.length,
+    additions: files.reduce((sum, file) => sum + file.additions, 0),
+    deletions: files.reduce((sum, file) => sum + file.deletions, 0),
+    files,
+  };
+}
+
+function buildAssistantParts(
+  steps: AgentStep[],
+  finalText: string,
+  runStatus: AgentResponse["status"] = "completed",
+): ThreadAssistantMessagePart[] {
   const parts: ActivityThreadAssistantMessagePart[] = [];
   let toolGroup: AgentStep[] = [];
   const processEntries: ProcessGroupEntry[] = [];
@@ -474,6 +597,12 @@ function buildAssistantParts(steps: AgentStep[], finalText: string): ThreadAssis
 
   if (processEntries.length > 0) {
     const statusStep = processStatusStep ?? steps[steps.length - 1];
+    const isRunActive = runStatus === "running";
+    const processStatus = isRunActive
+      ? { type: "running" as const }
+      : statusStep
+        ? toPartStatus(statusStep)
+        : { type: "complete" as const };
     parts.push({
       type: "tool-call",
       toolCallId: `process-group-${processEntries[0].id}-${processEntries.length}`,
@@ -490,13 +619,17 @@ function buildAssistantParts(steps: AgentStep[], finalText: string): ThreadAssis
         details: {
           entries: processEntries,
           startedAt: processStartedAt,
-          endedAt: statusStep?.status === "executing" ? undefined : processEndedAt,
+          endedAt: isRunActive || statusStep?.status === "executing"
+            ? undefined
+            : processEndedAt,
         },
       },
       isError: processEntries.some((entry) => entry.status === "error"),
-      status: statusStep ? toPartStatus(statusStep) : { type: "complete" },
+      status: processStatus,
       startedAt: processStartedAt,
-      endedAt: statusStep?.status === "executing" ? undefined : processEndedAt,
+      endedAt: isRunActive || statusStep?.status === "executing"
+        ? undefined
+        : processEndedAt,
     });
   }
 
@@ -530,7 +663,15 @@ function toThreadMessage(message: ChatMessage): ThreadMessageLike | null {
   const skillUsages = extractRuntimeSkillUsages(message.meta?.skillUsages);
 
   if (message.role === "assistant") {
-    const parts = buildAssistantParts(message.steps ?? [], message.content);
+    const parts = buildAssistantParts(
+      message.steps ?? [],
+      message.content,
+      message.status === "error" ? "error" : "completed",
+    );
+    const runChangeSummary = filterRunChangeSummaryForMessage(
+      message.meta?.runChangeSummary as RunChangeSummary | null | undefined,
+      message.steps,
+    );
     if (parts.length === 0) {
       return null;
     }
@@ -547,8 +688,8 @@ function toThreadMessage(message: ChatMessage): ThreadMessageLike | null {
       metadata: {
         custom: {
           rawMessageId: message.id,
-          ...(message.meta?.runChangeSummary
-            ? { runChangeSummary: message.meta.runChangeSummary as RunChangeSummary }
+          ...(runChangeSummary
+            ? { runChangeSummary }
             : {}),
           ...(skillUsages.length > 0 ? { skillUsages } : {}),
         },
@@ -1063,7 +1204,11 @@ function SessionRuntime({
       const publish = () => {
         if (settled) return;
 
-        const parts = buildAssistantParts(response.steps, response.finalText);
+        const parts = buildAssistantParts(
+          response.steps,
+          response.finalText,
+          response.status,
+        );
         if (parts.length === 0) {
           return;
         }
@@ -1108,7 +1253,11 @@ function SessionRuntime({
           }
         }
 
-        const parts = buildAssistantParts(response.steps, response.finalText);
+        const parts = buildAssistantParts(
+          response.steps,
+          response.finalText,
+          response.status,
+        );
         if (nextStatus === "cancelled" && !response.finalText.trim()) {
           // 无论之前有没有 thinking/tool_call，只要取消时还没产出最终文本，
           // 都在末尾补一句占位，避免 UI 没有任何「已取消」指示。
@@ -1308,6 +1457,7 @@ function SessionRuntime({
           runId,
           text,
           attachments: pendingAttachments,
+          modelEntryId: currentModelId,
           origin: resolveSendMessageOrigin(internalRun),
         })
         .catch((error) => {
@@ -1323,6 +1473,7 @@ function SessionRuntime({
   }), [
     advanceRunFeedback,
     beginRunFeedback,
+    currentModelId,
     desktopApi,
     finishRunFeedback,
   ]);

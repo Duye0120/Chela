@@ -1,4 +1,9 @@
-import { bindHandleToRun, getHandle, initAgent } from "../agent.js";
+import {
+  bindHandleToRun,
+  getHandle,
+  initAgent,
+  type AgentHandle,
+} from "../agent.js";
 import { ElectronAdapter } from "../adapter.js";
 import { PRIMARY_AGENT_OWNER } from "../agent-owners.js";
 import { harnessRuntime } from "../harness/singleton.js";
@@ -15,6 +20,19 @@ import { requireMainWindow } from "../window.js";
 import { BUS_EVENTS, bus } from "../event-bus.js";
 import type { ChatRunContext } from "./types.js";
 import type { SendMessageInput } from "../../shared/contracts.js";
+import type { ResolvedRuntimeModel } from "../model-resolution.js";
+
+function isHandlePromptRuntimeCurrent(
+  handle: AgentHandle,
+  resolvedModel: ResolvedRuntimeModel,
+): boolean {
+  return (
+    handle.promptRuntime.sourceName === resolvedModel.source.name &&
+    handle.promptRuntime.providerType === resolvedModel.source.providerType &&
+    handle.promptRuntime.modelName === resolvedModel.entry.name &&
+    handle.promptRuntime.modelId === resolvedModel.entry.modelId
+  );
+}
 
 export function createChatRunContext(input: SendMessageInput): ChatRunContext {
   const settings = getSettings();
@@ -23,7 +41,8 @@ export function createChatRunContext(input: SendMessageInput): ChatRunContext {
     throw new Error("会话不存在，无法继续发送。");
   }
 
-  const requestedModelEntryId = settings.modelRouting.chat.modelId;
+  const requestedModelEntryId =
+    input.modelEntryId?.trim() || settings.modelRouting.chat.modelId;
   const failoverResult = resolveWithFailover(requestedModelEntryId);
   const runScope = {
     sessionId: input.sessionId,
@@ -141,6 +160,7 @@ export async function prepareChatRun(context: ChatRunContext): Promise<void> {
     !handle ||
     handle.modelEntryId !== resolvedModel.entry.id ||
     handle.runtimeSignature !== resolvedModel.runtimeSignature ||
+    !isHandlePromptRuntimeCurrent(handle, resolvedModel) ||
     handle.thinkingLevel !== settings.thinkingLevel
   ) {
     harnessRuntime.assertRunActive(runScope);

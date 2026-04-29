@@ -251,6 +251,8 @@ export function buildRuntimeCapabilitySection(
       "以下是当前运行时的真实能力与边界，以此为准：",
       `当前模型：${input.modelName}（${input.modelId}）`,
       `当前 source：${input.sourceName} / ${input.providerType}`,
+      "当用户询问当前模型、source、provider 或是否发生模型切换时，必须逐字依据本节的当前模型与当前 source 回答；不要根据历史消息、训练知识、搜索结果或模型自称另行推断。",
+      "不要猜测“底层模型”、不要把当前模型改写成同 source 下的其它模型；如果本节写的是 mimo-v2.5-pro，就只能回答 mimo-v2.5-pro。",
       `视觉输入：${input.supportsVision ? "支持" : "不支持"}`,
       `工具调用：${input.supportsToolCalling ? "支持" : "不支持"}`,
       input.contextWindow ? `上下文窗口：约 ${input.contextWindow} tokens` : "",
