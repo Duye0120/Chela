@@ -348,3 +348,32 @@
 - 折叠时在 `collapse()` 后补一次 `resize("0%")`，确保 panel 目标宽度明确为 0。
 - 原因：折叠动画中间帧的 `onResize` 会读到非 0 宽度，把 `sidebarCollapsed` 写回 `false`，导致侧栏来回弹并重新展开。
 - 涉及文件：`src/renderer/src/App.tsx`、`docs/changes/2026-04-28/changes.md`。
+
+拖拽线条隐藏（2026-04-28 17:39:27）：
+- 将侧栏与主内容之间的 `ResizableHandle` 从 1px 可见热区改为 24px 透明热区。
+- 去掉该 handle 的 focus ring，拖拽时保留命中面积和拖拽能力，视觉上隐藏竖线。
+- 原因：当前 UI 偏好用背景和留白表达层级，侧栏拖拽时出现硬竖线会破坏干净的界面观感。
+- 涉及文件：`src/renderer/src/App.tsx`、`docs/changes/2026-04-28/changes.md`。
+
+## TODO 索引同步与下一阶段计划
+
+时间：2026-04-28 18:34:29
+
+改了什么：
+- 将 `docs/todos/README.md` 的底层基建 Phase 1-6 状态同步为已完成。
+- 将 Memory / RAG 工程实施收尾数量从 2 条修正为 3 条。
+- 将 AGENTS.md 约束违反项修正为 3/3 已修复。
+- 新增 `docs/plans/next-product-push-2026-04-28.md`，沉淀明天的产品推进计划。
+
+为什么改：
+- roadmap 已记录 Phase 2-6 完成，TODO 索引仍停留在 Phase 2 启动状态。
+- 当前阶段需要从底层基建转入 Browser Preview / DOM Inspector、Agent Core 真恢复、记忆信号驱动和 UI 回归稳定。
+
+涉及文件：
+- `docs/todos/README.md`
+- `docs/plans/next-product-push-2026-04-28.md`
+- `docs/changes/2026-04-28/changes.md`
+
+结果：
+- TODO 索引与底层基建 roadmap 状态一致。
+- 明天的推进顺序、验收标准、验证方式和主要风险已有独立计划文档。

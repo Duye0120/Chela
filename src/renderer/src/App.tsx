@@ -1604,7 +1604,7 @@ export default function App() {
               />
             </aside>
           </ResizablePanel>
-          <ResizableHandle className="-mx-px w-px" />
+          <ResizableHandle className="-mx-3 w-6 bg-transparent opacity-0 focus-visible:ring-0" />
           <ResizablePanel id="shell-main">
             <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
               <div
