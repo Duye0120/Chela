@@ -2,6 +2,12 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "@mariozechner/pi-ai";
 import { getMemdirStore, type MemdirEntry } from "../memory/service.js";
 import { formatMemorySaveResultText } from "./memory-result.js";
+import { getChelaMemoryService } from "../memory/rag-service.js";
+import {
+  buildMemoryVectorAddInput,
+  shouldPersistMemoryToVectorStore,
+  type MemoryVectorPersistResult,
+} from "./memory-vector.js";
 
 const memorySaveParameters = Type.Object({
   summary: Type.String({
@@ -33,8 +39,33 @@ const memoryListParameters = Type.Object({
   ),
 });
 
-type MemorySaveDetails = { saved: MemdirEntry };
+type MemorySaveDetails = {
+  saved: MemdirEntry;
+  vector: MemoryVectorPersistResult;
+};
 type MemoryListDetails = { count: number; topics: string[] };
+
+async function persistMemoryToVectorStore(
+  entry: MemdirEntry,
+  detail?: string,
+): Promise<MemoryVectorPersistResult> {
+  if (!shouldPersistMemoryToVectorStore(entry.status)) {
+    return {
+      status: "skipped",
+      reason: `${entry.status} 不重复写入向量库`,
+    };
+  }
+
+  try {
+    await getChelaMemoryService().add(buildMemoryVectorAddInput(entry, detail));
+    return { status: "written" };
+  } catch (error) {
+    return {
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 export function createMemorySaveTool(
   _sessionId: string,
@@ -54,15 +85,16 @@ export function createMemorySaveTool(
         detail: params.detail,
         source: params.source ?? "agent",
       });
+      const vector = await persistMemoryToVectorStore(entry, params.detail);
 
       return {
         content: [
           {
             type: "text",
-            text: formatMemorySaveResultText(entry),
+            text: formatMemorySaveResultText({ ...entry, vector }),
           },
         ],
-        details: { saved: entry },
+        details: { saved: entry, vector },
       };
     },
   };
