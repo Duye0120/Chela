@@ -108,13 +108,14 @@ export async function prepareChatRun(context: ChatRunContext): Promise<void> {
   });
   context.runCreated = true;
 
-  if (origin === "user") {
+  if (origin === "user" || origin === "guided") {
     appendUserMessageEvent({
       sessionId: input.sessionId,
       text: input.text,
       attachments: input.attachments,
       modelEntryId: resolvedModel.entry.id,
       thinkingLevel: settings.thinkingLevel,
+      sendOrigin: origin,
     });
     bus.emit(BUS_EVENTS.MESSAGE_USER, {
       sessionId: input.sessionId,

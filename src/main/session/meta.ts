@@ -89,6 +89,8 @@ function normalizeTimestamp(
 function normalizeQueuedMessage(
   message: Partial<QueuedMessage>,
 ): QueuedMessage {
+  const source = message.source === "guided" ? "guided" : "queued";
+
   return {
     id:
       typeof message.id === "string" && message.id.trim()
@@ -96,6 +98,7 @@ function normalizeQueuedMessage(
         : `queued-${randomUUID()}`,
     text: typeof message.text === "string" ? message.text.trim() : "",
     createdAt: normalizeTimestamp(message.createdAt),
+    source,
   };
 }
 
@@ -117,6 +120,7 @@ function migrateLegacyRedirectDraft(meta: PersistedSessionMeta): QueuedMessage[]
         meta.pendingRedirectUpdatedAt,
         normalizeTimestamp(meta.updatedAt),
       ),
+      source: "queued",
     },
   ];
 }

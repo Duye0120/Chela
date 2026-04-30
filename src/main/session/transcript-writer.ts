@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   RunKind,
   SelectedFile,
+  SendMessageOrigin,
   SessionTranscriptEvent,
 } from "../../shared/contracts.js";
 import { appendLine } from "./io.js";
@@ -62,6 +63,7 @@ export function appendUserMessageEvent(input: {
   attachments: SelectedFile[];
   modelEntryId: string;
   thinkingLevel: string;
+  sendOrigin?: SendMessageOrigin;
 }): { message: ChatMessage; title: string } {
   const meta = readMeta(input.sessionId);
   if (!meta) {
@@ -82,6 +84,7 @@ export function appendUserMessageEvent(input: {
     meta: {
       attachmentIds: input.attachments.map((attachment) => attachment.id),
       attachments: input.attachments,
+      sendOrigin: input.sendOrigin ?? "user",
     },
   };
 

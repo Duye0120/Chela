@@ -542,11 +542,13 @@ export function listPersistedQueuedMessages(sessionId: string): QueuedMessage[] 
 export function enqueuePersistedQueuedMessage(
   sessionId: string,
   text: string,
+  source: QueuedMessage["source"] = "queued",
 ): QueuedMessage {
   const nextQueuedMessage: QueuedMessage = {
     id: `queued-${randomUUID()}`,
     text,
     createdAt: new Date().toISOString(),
+    source,
   };
 
   const meta = updateSessionMeta(sessionId, (currentMeta) => {

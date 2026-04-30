@@ -81,8 +81,12 @@ export function listSessionQueuedMessages(sessionId: string) {
   return listPersistedQueuedMessages(sessionId);
 }
 
-export function enqueueSessionQueuedMessage(sessionId: string, text: string) {
-  return enqueuePersistedQueuedMessage(sessionId, text);
+export function enqueueSessionQueuedMessage(
+  sessionId: string,
+  text: string,
+  source?: Parameters<typeof enqueuePersistedQueuedMessage>[2],
+) {
+  return enqueuePersistedQueuedMessage(sessionId, text, source);
 }
 
 export function moveSessionQueuedMessageToFront(

@@ -649,6 +649,7 @@ export type TraceRunSummary = {
 export type ChatMessageMeta = Record<string, unknown> & {
   skillUsages?: RuntimeSkillUsage[];
   runChangeSummary?: RunChangeSummary | null;
+  sendOrigin?: SendMessageOrigin;
 };
 
 export type ChatMessage = {
@@ -928,7 +929,7 @@ export type InterruptedApprovalGroup = {
   approvals: InterruptedApprovalNotice[];
 };
 
-export type SendMessageOrigin = "user" | "resume_interrupted_approval";
+export type SendMessageOrigin = "user" | "guided" | "resume_interrupted_approval";
 
 export type SendMessageInput = AgentRunScope & {
   text: string;
@@ -941,6 +942,7 @@ export type QueuedMessage = {
   id: string;
   text: string;
   createdAt: string;
+  source?: "queued" | "guided";
 };
 
 export type SessionTodoStatus = "pending" | "in_progress" | "completed";
@@ -955,6 +957,7 @@ export type SessionTodoItem = {
 export type EnqueueQueuedMessageInput = {
   sessionId: string;
   text: string;
+  source?: QueuedMessage["source"];
 };
 
 export type TriggerQueuedMessageInput = {

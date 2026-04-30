@@ -112,6 +112,21 @@ function attachRunChangeSummary(
   };
 }
 
+function attachSendOrigin(
+  context: ChatRunContext,
+  assistantMessage: ChatMessage | null,
+): void {
+  const sendOrigin = context.input.origin ?? "user";
+  if (!assistantMessage || sendOrigin !== "guided") {
+    return;
+  }
+
+  assistantMessage.meta = {
+    ...(assistantMessage.meta ?? {}),
+    sendOrigin,
+  };
+}
+
 export async function finalizeCompletedChatRun(
   context: ChatRunContext,
 ): Promise<void> {
@@ -121,6 +136,7 @@ export async function finalizeCompletedChatRun(
   );
   const runChangeSummary = await resolveRunChangeSummary(context, assistantMessage);
   attachRunChangeSummary(assistantMessage, runChangeSummary);
+  attachSendOrigin(context, assistantMessage);
   if (assistantMessage) {
     appendAssistantMessageEvent({
       sessionId: context.input.sessionId,
@@ -188,6 +204,7 @@ export async function finalizeFailedChatRun(
     );
     const runChangeSummary = await resolveRunChangeSummary(context, cancelledMessage);
     attachRunChangeSummary(cancelledMessage, runChangeSummary);
+    attachSendOrigin(context, cancelledMessage);
     if (cancelledMessage && context.transcriptStarted) {
       appendAssistantMessageEvent({
         sessionId: context.input.sessionId,
@@ -243,6 +260,7 @@ export async function finalizeFailedChatRun(
   );
   const runChangeSummary = await resolveRunChangeSummary(context, failedMessage);
   attachRunChangeSummary(failedMessage, runChangeSummary);
+  attachSendOrigin(context, failedMessage);
   if (failedMessage && context.transcriptStarted) {
     appendAssistantMessageEvent({
       sessionId: context.input.sessionId,
