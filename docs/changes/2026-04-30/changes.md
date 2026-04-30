@@ -77,11 +77,14 @@
 - 调整 `memory_save` 保存语义为 `saved / duplicate / merged / conflict` 四态。
 - 新增 memory 模糊去重纯模块，先覆盖精确重复、包含式补充、数字/时间冲突。
 - 新增 memory 工具返回文案，明确输出状态、结果和下一步，告诉 Agent 本次 `memory_save` 已闭环。
-- 新增回归测试覆盖连续 memory 工具调用计数、四态判断和四态返回文案，并接入 `test:regression`。
+- `memory_save` 在 memdir 写入后同步写入 Chela 向量库；`duplicate` 状态跳过向量写入。
+- 工具结果新增向量库状态：写入成功、跳过、写入失败。
+- 新增回归测试覆盖连续 memory 工具调用计数、四态判断、向量库写入构造和四态返回文案，并接入 `test:regression`。
 
 为什么改：
 - memory 处理时部分模型会反复执行“思考 -> memory_save 工具调用 -> 回到模型”链路，底层 ReAct 循环需要项目侧上限兜底。
 - 记忆内容存在模糊边界，存储层需要区分重复、补充升级和事实冲突，工具返回也需要给 Agent 明确的成功 / 跳过 / 合并 / 冲突信号。
+- 设置页展示的是 Chela 向量记忆库，旧 `memory_save` 只写 memdir 文件记忆，导致工具显示 saved 但向量库统计仍为 0。
 
 涉及文件：
 - `src/main/agent-loop-guard.ts`
@@ -90,9 +93,11 @@
 - `src/main/memory/service.ts`
 - `src/main/tools/memory.ts`
 - `src/main/tools/memory-result.ts`
+- `src/main/tools/memory-vector.ts`
 - `tests/agent-loop-guard-regression.test.ts`
 - `tests/memory-dedupe-regression.test.ts`
 - `tests/memory-tool-regression.test.ts`
+- `tests/memory-vector-regression.test.ts`
 - `package.json`
 - `docs/changes/2026-04-30/changes.md`
 
@@ -102,3 +107,5 @@
 - `memory_save` 对精确重复返回 `duplicate` 并跳过写入。
 - 新记忆比旧记忆更具体时返回 `merged` 并用新摘要替换索引。
 - 相近记忆存在数字/时间冲突时返回 `conflict`，保留新条目并标记可能冲突。
+- `saved / merged / conflict` 会写入向量库，设置页刷新后能看到向量记忆数量变化。
+- `duplicate` 会显示向量库跳过原因，避免重复向量记录。
