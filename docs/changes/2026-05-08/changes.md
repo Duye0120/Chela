@@ -68,3 +68,30 @@
   - `pnpm exec tsx tests/harness-readiness-recorder-regression.test.ts` passed
   - `pnpm exec tsx tests/harness-readiness-regression.test.ts` passed
 - 安全边界：未改 UI、未改 provider、未改 `package.json` / `pnpm-lock.yaml`、未做全仓 build/check。
+
+## Runtime Service Status / Readiness Recorder Health MVP
+
+- 时间：2026-05-08 20:48 +0800
+- 改了什么：
+  - 扩展 `RuntimeServiceLifecycle` 的状态能力，新增 `getStatusReport()`，汇总 enabled service 的 group、criticality、status、启动耗时、错误摘要和 totals。
+  - 在 lifecycle 中保留 start failure 的 `errorMessage`，并让 service-level `health()` 探针失败时降级为 `degraded`，不让状态查询把主流程抛崩。
+  - 给 `ReadinessTraceRecorder` 增加写入失败记录、`onWriteError` 回调和 `getHealth()`，readiness JSONL 写盘失败时降级但不影响 bus emit。
+  - 在 `harness-readiness/service.ts` 中接入 recorder health，并给 Electron `userData` 不可用的 dev/test 场景增加明确 fallback 到 `process.cwd()/artifacts/readiness`。
+  - 更新 `bootstrap/services.ts` 启动日志，输出 runtime service status report，而不是只输出一次性的 states map。
+  - 扩展 `tests/runtime-services-regression.test.ts` 与 `tests/harness-readiness-recorder-regression.test.ts`，覆盖 status report、health 探针失败降级、readiness 写盘失败降级。
+- 为什么改：补齐后台 Runtime 框架 MVP 中“启动、停止、状态、错误记录”和 readiness 写入失败可观测性的缺口，同时保持 readiness 为 optional，不因 JSONL 写入失败影响应用启动。
+- 涉及文件：
+  - `src/main/runtime-services/types.ts`
+  - `src/main/runtime-services/lifecycle.ts`
+  - `src/main/bootstrap/services.ts`
+  - `src/main/harness-readiness/service.ts`
+  - `src/main/harness-readiness/trace-recorder.ts`
+  - `tests/runtime-services-regression.test.ts`
+  - `tests/harness-readiness-recorder-regression.test.ts`
+  - `docs/changes/2026-05-08/changes.md`
+- 验证结果：
+  - `pnpm exec tsx tests/runtime-services-regression.test.ts` passed
+  - `pnpm exec tsx tests/runtime-paths-regression.test.ts` passed
+  - `pnpm exec tsx tests/harness-readiness-recorder-regression.test.ts` passed
+  - `pnpm exec tsx tests/harness-readiness-regression.test.ts` passed
+- 未做：未运行 `pnpm build`、未运行全仓 check、未实现 Observability Dispatcher 或 Analysis Sidecar Runner；本轮只补 spec 下一段 MVP 缺口。
