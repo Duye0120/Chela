@@ -3,11 +3,14 @@ import { join } from "node:path";
 
 import { bus } from "../event-bus.js";
 import { appLogger } from "../logger.js";
+import { ObservabilityDispatcher } from "../observability/dispatcher.js";
+import { ReadinessObservabilitySink } from "../observability/sinks/readiness-sink.js";
 import { resolveRuntimePaths } from "../runtime-paths.js";
 import type { RuntimeServiceHealth } from "../runtime-services/types.js";
 import { ReadinessTraceRecorder } from "./trace-recorder.js";
 
 let readinessTraceRecorder: ReadinessTraceRecorder | undefined;
+let readinessDispatcher: ObservabilityDispatcher | undefined;
 
 export function initReadinessTraceRecorder(): void {
   if (readinessTraceRecorder) {
@@ -15,7 +18,6 @@ export function initReadinessTraceRecorder(): void {
   }
   const paths = resolveRuntimePaths(resolveRuntimeUserDataDir());
   readinessTraceRecorder = new ReadinessTraceRecorder({
-    bus,
     filePath: paths.readinessTracePath,
     onWriteError: (error) => {
       appLogger.warn({
@@ -25,19 +27,32 @@ export function initReadinessTraceRecorder(): void {
       });
     },
   });
-  readinessTraceRecorder.init();
+  readinessDispatcher = new ObservabilityDispatcher({
+    bus,
+    sinks: [new ReadinessObservabilitySink({ recorder: readinessTraceRecorder })],
+    onSinkError: (sink, error) => {
+      appLogger.warn({
+        scope: "observability.dispatcher",
+        message: `Observability sink 降级: ${sink.name}`,
+        error,
+      });
+    },
+  });
+  readinessDispatcher.start();
 }
 
 export function stopReadinessTraceRecorder(): void {
+  readinessDispatcher?.stop();
+  readinessDispatcher = undefined;
   readinessTraceRecorder?.stop();
   readinessTraceRecorder = undefined;
 }
 
 export function getReadinessTraceRecorderHealth(): RuntimeServiceHealth {
-  if (!readinessTraceRecorder) {
+  if (!readinessDispatcher) {
     return { status: "stopped", updatedAt: Date.now() };
   }
-  return readinessTraceRecorder.getHealth();
+  return readinessDispatcher.getHealth();
 }
 
 function resolveRuntimeUserDataDir(): string {

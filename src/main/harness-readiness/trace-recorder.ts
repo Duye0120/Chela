@@ -20,7 +20,7 @@ export const READINESS_BUS_EVENTS = {
 } as const;
 
 type ReadinessBusEventName = (typeof READINESS_BUS_EVENTS)[keyof typeof READINESS_BUS_EVENTS];
-type BusLike = {
+export type ReadinessBusLike = {
   onAny(handler: (event: string, data: unknown) => void): () => void;
 };
 
@@ -59,7 +59,7 @@ const EVENT_TYPES: Partial<Record<ReadinessBusEventName, string>> = {
 export type ReadinessTraceRecorderOptions = {
   store?: ReadinessTraceStore;
   filePath?: string;
-  bus?: BusLike;
+  bus?: ReadinessBusLike;
   now?: () => number;
   onWriteError?: (error: unknown) => void;
 };
@@ -67,7 +67,7 @@ export type ReadinessTraceRecorderOptions = {
 export class ReadinessTraceRecorder {
   private readonly store: ReadinessTraceStore;
   private readonly now: () => number;
-  private readonly bus?: BusLike;
+  private readonly bus?: ReadinessBusLike;
   private unsubscribe?: () => void;
   private sequence = 0;
   private readonly pendingWrites = new Set<Promise<void>>();
@@ -95,19 +95,7 @@ export class ReadinessTraceRecorder {
     }
 
     this.unsubscribe = this.bus.onAny((eventName, payload) => {
-      const event = this.toReadinessEvent(eventName as ReadinessBusEventName, payload);
-      if (!event) {
-        return;
-      }
-      const write = this.store
-        .appendEvent(event)
-        .catch((error: unknown) => {
-          this.recordWriteFailure(error);
-        })
-        .finally(() => {
-          this.pendingWrites.delete(write);
-        });
-      this.pendingWrites.add(write);
+      this.recordBusEvent(eventName, payload);
     });
   }
 
@@ -118,6 +106,14 @@ export class ReadinessTraceRecorder {
 
   async flush(): Promise<void> {
     await Promise.all(Array.from(this.pendingWrites));
+  }
+
+  recordBusEvent(eventName: string, payload: unknown): void {
+    const event = this.toReadinessEvent(eventName as ReadinessBusEventName, payload);
+    if (!event) {
+      return;
+    }
+    this.appendEvent(event);
   }
 
   getHealth(): RuntimeServiceHealth {
@@ -169,6 +165,18 @@ export class ReadinessTraceRecorder {
     this.lastWriteError = error;
     this.lastWriteErrorAt = this.now();
     this.onWriteError?.(error);
+  }
+
+  private appendEvent(event: ReadinessTraceEvent): void {
+    const write = this.store
+      .appendEvent(event)
+      .catch((error: unknown) => {
+        this.recordWriteFailure(error);
+      })
+      .finally(() => {
+        this.pendingWrites.delete(write);
+      });
+    this.pendingWrites.add(write);
   }
 }
 
