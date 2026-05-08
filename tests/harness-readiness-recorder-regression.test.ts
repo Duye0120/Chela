@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import type { BusEventName } from "../src/main/event-bus.js";
 import { ReadinessTraceRecorder } from "../src/main/harness-readiness/trace-recorder.js";
 import { ReadinessTraceStore } from "../src/main/harness-readiness/trace-store.js";
+import type { ReadinessTraceEvent } from "../src/main/harness-readiness/types.js";
 
 const TEST_EVENTS = {
   MESSAGE_USER: "message:user",
@@ -88,6 +89,43 @@ async function main(): Promise<void> {
     assert.equal(events.length, 4);
     assert.equal(JSON.stringify(events).includes("sk-secret"), false);
     assert.equal(JSON.stringify(events).includes("do not leak"), false);
+
+    const writeErrors: string[] = [];
+    const failingStore = {
+      appendEvent: async () => {
+        throw new Error("disk full");
+      },
+    } satisfies Pick<ReadinessTraceStore, "appendEvent">;
+    const subscriptions: Array<(event: string, data: unknown) => void> = [];
+    const failingRecorder = new ReadinessTraceRecorder({
+      store: failingStore as ReadinessTraceStore,
+      now: () => now++,
+      onWriteError: (error) => writeErrors.push(error instanceof Error ? error.message : String(error)),
+      bus: {
+        onAny(handler) {
+          subscriptions.push(handler);
+          return () => undefined;
+        },
+      },
+    });
+    failingRecorder.init();
+    subscriptions[0]?.(TEST_EVENTS.RUN_CREATED, {
+      sessionId: "session-2",
+      runId: "run-2",
+      runKind: "chat",
+    });
+    await failingRecorder.flush();
+    assert.deepEqual(writeErrors, ["disk full"]);
+    assert.equal(failingRecorder.getHealth().status, "degraded");
+    assert.match(failingRecorder.getHealth().message ?? "", /disk full/);
+
+    const stoppedRecorder = new ReadinessTraceRecorder({
+      store: {
+        appendEvent: async (_event: ReadinessTraceEvent) => undefined,
+      } as ReadinessTraceStore,
+      now: () => now++,
+    });
+    assert.equal(stoppedRecorder.getHealth().status, "stopped");
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

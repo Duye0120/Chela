@@ -66,6 +66,14 @@ async function main(): Promise<void> {
   await optionalLifecycle.start();
   assert.deepEqual(optionalErrors, ["optional-bad"]);
   assert.equal(optionalLifecycle.getStates().find((state) => state.definition.name === "optional-bad")?.status, "degraded");
+  const optionalStatusReport = await optionalLifecycle.getStatusReport();
+  assert.equal(optionalStatusReport.status, "degraded");
+  assert.equal(optionalStatusReport.totals.degraded, 1);
+  assert.equal(optionalStatusReport.totals.healthy, 1);
+  assert.equal(
+    optionalStatusReport.services.find((service) => service.name === "optional-bad")?.errorMessage,
+    "optional fail",
+  );
 
   const rollback: string[] = [];
   const criticalLifecycle = new RuntimeServiceLifecycle([
@@ -74,6 +82,37 @@ async function main(): Promise<void> {
   ]);
   await assert.rejects(() => criticalLifecycle.start(), /critical fail/);
   assert.deepEqual(rollback, ["start", "stop"]);
+
+  const healthLifecycle = new RuntimeServiceLifecycle(
+    [
+      {
+        name: "healthy",
+        group: "core",
+        criticality: "critical",
+        start: () => undefined,
+        health: () => ({ status: "healthy", message: "ready", updatedAt: 2000 }),
+      },
+      {
+        name: "health-bad",
+        group: "observability",
+        criticality: "optional",
+        start: () => undefined,
+        health: () => {
+          throw new Error("probe failed");
+        },
+      },
+    ],
+    { now: () => 3000 },
+  );
+  await healthLifecycle.start();
+  const healthStatusReport = await healthLifecycle.getStatusReport();
+  assert.equal(healthStatusReport.status, "degraded");
+  assert.equal(healthStatusReport.services.find((service) => service.name === "healthy")?.message, "ready");
+  assert.equal(healthStatusReport.services.find((service) => service.name === "health-bad")?.status, "degraded");
+  assert.equal(
+    healthStatusReport.services.find((service) => service.name === "health-bad")?.message,
+    "health check failed: probe failed",
+  );
 
   console.log("runtime services regression tests passed");
 }
