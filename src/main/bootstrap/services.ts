@@ -11,7 +11,11 @@ import { initReflectionService, stopReflectionService } from "../reflection/serv
 import { initPersonalityDrift } from "../reflection/personality-drift.js";
 import { startWebhookServer, stopWebhookServer } from "../webhook.js";
 import { initTraceService, stopTraceService } from "../trace/service.js";
-import { initReadinessTraceRecorder, stopReadinessTraceRecorder } from "../harness-readiness/service.js";
+import {
+  getReadinessTraceRecorderHealth,
+  initReadinessTraceRecorder,
+  stopReadinessTraceRecorder,
+} from "../harness-readiness/service.js";
 import { appLogger } from "../logger.js";
 import { RuntimeServiceLifecycle } from "../runtime-services/lifecycle.js";
 import type { RuntimeServiceDefinition } from "../runtime-services/types.js";
@@ -46,6 +50,7 @@ const BACKGROUND_SERVICES: RuntimeServiceDefinition[] = [
     dependsOn: ["trace-service"],
     start: initReadinessTraceRecorder,
     stop: stopReadinessTraceRecorder,
+    health: getReadinessTraceRecorderHealth,
   },
 ];
 
@@ -73,15 +78,21 @@ export async function startBackgroundServices(): Promise<void> {
   }
 
   await backgroundServiceLifecycle.start();
+  const statusReport = await backgroundServiceLifecycle.getStatusReport();
   appLogger.info({
     scope: "bootstrap.services",
     message: "后台服务启动完成",
     data: {
-      services: backgroundServiceLifecycle.getStates().map((state) => ({
-        name: state.definition.name,
-        group: state.definition.group,
-        status: state.status,
-        startDurationMs: state.startDurationMs,
+      status: statusReport.status,
+      totals: statusReport.totals,
+      services: statusReport.services.map((service) => ({
+        name: service.name,
+        group: service.group,
+        criticality: service.criticality,
+        status: service.status,
+        startDurationMs: service.startDurationMs,
+        message: service.message,
+        errorMessage: service.errorMessage,
       })),
     },
   });
