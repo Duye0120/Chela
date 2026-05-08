@@ -95,3 +95,26 @@
   - `pnpm exec tsx tests/harness-readiness-recorder-regression.test.ts` passed
   - `pnpm exec tsx tests/harness-readiness-regression.test.ts` passed
 - 未做：未运行 `pnpm build`、未运行全仓 check、未实现 Observability Dispatcher 或 Analysis Sidecar Runner；本轮只补 spec 下一段 MVP 缺口。
+
+## Observability Dispatcher MVP
+
+- 时间：2026-05-08 21:01 +0800
+- 改了什么：
+  - 新增 `src/main/observability/dispatcher.ts`，实现最小 `ObservabilityDispatcher`：统一订阅 `bus.onAny`、分发给 sinks、隔离同步/异步 sink 错误、记录 degraded health、支持 `stop()` 和 `flush()`。
+  - 新增 `src/main/observability/sinks/readiness-sink.ts`，把 readiness recorder 包成 sink，复用 `ReadinessTraceRecorder` 的事件映射和 JSONL 写入逻辑。
+  - 调整 `ReadinessTraceRecorder`，抽出 `recordBusEvent()` 供 dispatcher/sink 复用；原 `init()` 仍保留，测试或旧用法仍可直接注入 bus。
+  - 调整 `harness-readiness/service.ts`，把产品态 readiness 订阅链路改为 `event-bus -> ObservabilityDispatcher -> ReadinessObservabilitySink -> ReadinessTraceRecorder`。
+  - 新增 `tests/observability-dispatcher-regression.test.ts`，覆盖 handler 错误隔离、async sink 降级、readiness JSONL 等价输出、stop 后不再处理新事件。
+- 为什么改：落地 spec Phase 3 的最小观测分发器，把 readiness 从直接散落 `bus.onAny` 的模式收口到 dispatcher，同时不触碰 TraceService UI 链路、不引入 Phase 4 sidecar。
+- 涉及文件：
+  - `src/main/observability/dispatcher.ts`
+  - `src/main/observability/sinks/readiness-sink.ts`
+  - `src/main/harness-readiness/trace-recorder.ts`
+  - `src/main/harness-readiness/service.ts`
+  - `tests/observability-dispatcher-regression.test.ts`
+  - `docs/changes/2026-05-08/changes.md`
+- 验证结果：
+  - `pnpm exec tsx tests/observability-dispatcher-regression.test.ts` passed
+  - `pnpm exec tsx tests/harness-readiness-recorder-regression.test.ts` passed
+  - `pnpm exec tsx tests/harness-readiness-regression.test.ts` passed
+- 未做：未改 TraceService UI 链路、未接 metrics/audit、未实现 Analysis Sidecar Runner、未改 `package.json` / `pnpm-lock.yaml`、未运行 `pnpm build`。
