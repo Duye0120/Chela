@@ -1,6 +1,7 @@
 import { createReadinessEvent } from "./sanitize.js";
 import { ReadinessTraceStore } from "./trace-store.js";
 import type { ReadinessComponent, ReadinessTraceEvent, ReadinessTraceStatus } from "./types.js";
+import type { RuntimeServiceHealth } from "../runtime-services/types.js";
 
 export const READINESS_BUS_EVENTS = {
   RUN_CREATED: "run:created",
@@ -60,6 +61,7 @@ export type ReadinessTraceRecorderOptions = {
   filePath?: string;
   bus?: BusLike;
   now?: () => number;
+  onWriteError?: (error: unknown) => void;
 };
 
 export class ReadinessTraceRecorder {
@@ -69,15 +71,18 @@ export class ReadinessTraceRecorder {
   private unsubscribe?: () => void;
   private sequence = 0;
   private readonly pendingWrites = new Set<Promise<void>>();
+  private readonly onWriteError?: (error: unknown) => void;
+  private lastWriteError?: unknown;
+  private lastWriteErrorAt?: number;
 
   constructor(options: ReadinessTraceRecorderOptions = {}) {
-    const filePath = options.filePath ?? process.env.CHELA_READINESS_TRACE_PATH;
-    if (!options.store && !filePath) {
+    if (!options.store && !options.filePath) {
       throw new Error("ReadinessTraceRecorder requires store or filePath");
     }
-    this.store = options.store ?? new ReadinessTraceStore(filePath!);
+    this.store = options.store ?? new ReadinessTraceStore(options.filePath!);
     this.bus = options.bus;
     this.now = options.now ?? Date.now;
+    this.onWriteError = options.onWriteError;
   }
 
   init(): void {
@@ -94,9 +99,14 @@ export class ReadinessTraceRecorder {
       if (!event) {
         return;
       }
-      const write = this.store.appendEvent(event).finally(() => {
-        this.pendingWrites.delete(write);
-      });
+      const write = this.store
+        .appendEvent(event)
+        .catch((error: unknown) => {
+          this.recordWriteFailure(error);
+        })
+        .finally(() => {
+          this.pendingWrites.delete(write);
+        });
       this.pendingWrites.add(write);
     });
   }
@@ -108,6 +118,21 @@ export class ReadinessTraceRecorder {
 
   async flush(): Promise<void> {
     await Promise.all(Array.from(this.pendingWrites));
+  }
+
+  getHealth(): RuntimeServiceHealth {
+    if (this.lastWriteError) {
+      return {
+        status: "degraded",
+        message: `readiness trace write failed: ${errorToMessage(this.lastWriteError)}`,
+        updatedAt: this.lastWriteErrorAt ?? this.now(),
+      };
+    }
+
+    return {
+      status: this.unsubscribe ? "healthy" : "stopped",
+      updatedAt: this.now(),
+    };
   }
 
   toReadinessEvent(eventName: ReadinessBusEventName, payload: unknown): ReadinessTraceEvent | null {
@@ -138,6 +163,12 @@ export class ReadinessTraceRecorder {
       policyViolation: policyViolationForEvent(eventName, payload),
       data: safeDataForEvent(eventName, payload),
     });
+  }
+
+  private recordWriteFailure(error: unknown): void {
+    this.lastWriteError = error;
+    this.lastWriteErrorAt = this.now();
+    this.onWriteError?.(error);
   }
 }
 
@@ -211,4 +242,8 @@ function readString(value: unknown): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function errorToMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
