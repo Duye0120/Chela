@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, join } from "node:path";
 import { app } from "electron";
 import type {
+  RightPanelView,
   RightPanelState,
   SessionGroup,
   SessionGroupCreateInput,
@@ -55,6 +56,10 @@ function readJsonFile<T>(filePath: string, fallback: T): T {
   }
 }
 
+function normalizeRightPanelView(value: unknown): RightPanelView {
+  return value === "trace" || value === "browser" ? value : "diff";
+}
+
 function normalizeRightPanelState(
   parsed: Partial<WindowUiState> & {
     rightPanelOpen?: boolean;
@@ -71,7 +76,9 @@ function normalizeRightPanelState(
         : typeof parsed.rightPanelOpen === "boolean"
           ? parsed.rightPanelOpen
           : false;
-  const activeView = parsedRightPanel?.activeView === "diff" ? "diff" : "diff";
+  const activeView = normalizeRightPanelView(
+    parsedRightPanel?.activeView ?? parsed.rightPanelActiveView,
+  );
   const widthCandidate =
     typeof parsedRightPanel?.width === "number" && Number.isFinite(parsedRightPanel.width)
       ? parsedRightPanel.width
@@ -131,7 +138,7 @@ export function setRightPanelState(partial: Partial<RightPanelState>): void {
   ui.rightPanel = {
     ...ui.rightPanel,
     ...partial,
-    activeView: "diff",
+    activeView: normalizeRightPanelView(partial.activeView ?? ui.rightPanel.activeView),
   };
   ui.diffPanelOpen = ui.rightPanel.open && ui.rightPanel.activeView === "diff";
   writeUiState(ui);

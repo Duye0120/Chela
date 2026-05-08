@@ -41,7 +41,12 @@ export async function enqueueQueuedMessage(
     throw new Error("排队消息不能为空。");
   }
 
-  return enqueueSessionQueuedMessage(input.sessionId, nextText, input.source);
+  return enqueueSessionQueuedMessage(input.sessionId, {
+    text: nextText,
+    displayText: input.displayText,
+    browserContextItems: input.browserContextItems,
+    source: input.source,
+  });
 }
 
 export async function triggerQueuedMessage(

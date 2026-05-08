@@ -11,106 +11,82 @@ import { initReflectionService, stopReflectionService } from "../reflection/serv
 import { initPersonalityDrift } from "../reflection/personality-drift.js";
 import { startWebhookServer, stopWebhookServer } from "../webhook.js";
 import { initTraceService, stopTraceService } from "../trace/service.js";
+import { initReadinessTraceRecorder, stopReadinessTraceRecorder } from "../harness-readiness/service.js";
 import { appLogger } from "../logger.js";
+import { RuntimeServiceLifecycle } from "../runtime-services/lifecycle.js";
+import type { RuntimeServiceDefinition } from "../runtime-services/types.js";
 
-type BackgroundServiceDefinition = {
-  name: string;
-  start: () => void | Promise<void>;
-  stop?: () => void;
-};
-
-const BACKGROUND_SERVICES: BackgroundServiceDefinition[] = [
-  { name: "bus-audit", start: initBusAuditLog, stop: stopBusAuditLog },
-  { name: "metrics", start: initMetrics, stop: stopMetrics },
-  { name: "self-diagnosis", start: initSelfDiagnosis, stop: stopSelfDiagnosis },
-  { name: "active-learning", start: initActiveLearning, stop: stopActiveLearning },
-  { name: "personality-drift", start: initPersonalityDrift },
+const BACKGROUND_SERVICES: RuntimeServiceDefinition[] = [
+  { name: "bus-audit", group: "observability", criticality: "optional", start: initBusAuditLog, stop: stopBusAuditLog },
+  { name: "metrics", group: "observability", criticality: "optional", start: initMetrics, stop: stopMetrics },
+  { name: "self-diagnosis", group: "observability", criticality: "optional", start: initSelfDiagnosis, stop: stopSelfDiagnosis },
+  { name: "active-learning", group: "agent", criticality: "optional", start: initActiveLearning, stop: stopActiveLearning },
+  { name: "personality-drift", group: "agent", criticality: "optional", start: initPersonalityDrift },
   {
     name: "emotional-state-machine",
+    group: "agent",
+    criticality: "optional",
     start: initEmotionalStateMachine,
     stop: stopEmotionalStateMachine,
   },
   {
     name: "reflection-service",
+    group: "agent",
+    criticality: "optional",
     start: initReflectionService,
     stop: stopReflectionService,
   },
-  { name: "scheduler", start: () => scheduler.start(), stop: () => scheduler.stop() },
-  { name: "webhook", start: () => startWebhookServer(), stop: stopWebhookServer },
-  { name: "trace-service", start: initTraceService, stop: stopTraceService },
+  { name: "scheduler", group: "core", criticality: "critical", start: () => scheduler.start(), stop: () => scheduler.stop() },
+  { name: "webhook", group: "integration", criticality: "optional", start: () => startWebhookServer(), stop: stopWebhookServer },
+  { name: "trace-service", group: "observability", criticality: "critical", start: initTraceService, stop: stopTraceService },
+  {
+    name: "readiness-trace-recorder",
+    group: "observability",
+    criticality: "optional",
+    dependsOn: ["trace-service"],
+    start: initReadinessTraceRecorder,
+    stop: stopReadinessTraceRecorder,
+  },
 ];
 
-const startedBackgroundServices = new Set<string>();
+const backgroundServiceLifecycle = new RuntimeServiceLifecycle(BACKGROUND_SERVICES, {
+  onError: (service, error) => {
+    appLogger.error({
+      scope: "bootstrap.services",
+      message: `后台服务启动失败: ${service.name}`,
+      data: { service: service.name, group: service.group, criticality: service.criticality },
+      error,
+    });
+  },
+  onRollbackError: (service, error) => {
+    appLogger.warn({
+      scope: "bootstrap.services",
+      message: `后台服务停止或回滚失败: ${service.name}`,
+      error,
+    });
+  },
+});
 
 export async function startBackgroundServices(): Promise<void> {
-  if (startedBackgroundServices.size === BACKGROUND_SERVICES.length) {
+  if (backgroundServiceLifecycle.isStarted()) {
     return;
   }
 
-  const startedThisRound: BackgroundServiceDefinition[] = [];
-
-  try {
-    for (const service of BACKGROUND_SERVICES) {
-      if (startedBackgroundServices.has(service.name)) {
-        continue;
-      }
-
-      await service.start();
-      startedBackgroundServices.add(service.name);
-      startedThisRound.push(service);
-    }
-  } catch (error) {
-    appLogger.error({
-      scope: "bootstrap.services",
-      message: "后台服务启动失败，已开始回滚已启动服务",
-      data: {
-        startedServices: startedThisRound.map((service) => service.name),
-      },
-      error,
-    });
-
-    for (const service of [...startedThisRound].reverse()) {
-      try {
-        service.stop?.();
-      } catch (stopError) {
-        appLogger.warn({
-          scope: "bootstrap.services",
-          message: `后台服务回滚失败: ${service.name}`,
-          error: stopError,
-        });
-      } finally {
-        startedBackgroundServices.delete(service.name);
-      }
-    }
-
-    throw error;
-  }
-
+  await backgroundServiceLifecycle.start();
   appLogger.info({
     scope: "bootstrap.services",
     message: "后台服务启动完成",
     data: {
-      services: [...startedBackgroundServices],
+      services: backgroundServiceLifecycle.getStates().map((state) => ({
+        name: state.definition.name,
+        group: state.definition.group,
+        status: state.status,
+        startDurationMs: state.startDurationMs,
+      })),
     },
   });
 }
 
-export function stopBackgroundServices(): void {
-  for (const service of [...BACKGROUND_SERVICES].reverse()) {
-    if (!startedBackgroundServices.has(service.name)) {
-      continue;
-    }
-
-    try {
-      service.stop?.();
-    } catch (error) {
-      appLogger.warn({
-        scope: "bootstrap.services",
-        message: `后台服务停止失败: ${service.name}`,
-        error,
-      });
-    } finally {
-      startedBackgroundServices.delete(service.name);
-    }
-  }
+export async function stopBackgroundServices(): Promise<void> {
+  await backgroundServiceLifecycle.stop();
 }

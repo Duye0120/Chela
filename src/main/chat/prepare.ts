@@ -109,17 +109,19 @@ export async function prepareChatRun(context: ChatRunContext): Promise<void> {
   context.runCreated = true;
 
   if (origin === "user" || origin === "guided") {
+    const displayText = input.displayText?.trim() || input.text;
     appendUserMessageEvent({
       sessionId: input.sessionId,
-      text: input.text,
+      text: displayText,
       attachments: input.attachments,
       modelEntryId: resolvedModel.entry.id,
       thinkingLevel: settings.thinkingLevel,
       sendOrigin: origin,
+      browserContextItems: input.browserContextItems,
     });
     bus.emit(BUS_EVENTS.MESSAGE_USER, {
       sessionId: input.sessionId,
-      text: input.text,
+      text: displayText,
     });
   }
 

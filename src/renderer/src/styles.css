@@ -397,6 +397,129 @@ optgroup {
   .step-bar-pulse {
     animation: bar-pulse 2s ease-in-out infinite;
   }
+
+  .chela-ascii-boot-screen {
+    display: grid;
+    min-height: 100vh;
+    overflow: hidden;
+    place-items: center;
+    background:
+      radial-gradient(circle at 50% 42%, rgb(255 255 255 / 0.7), transparent 34rem),
+      var(--chela-bg-secondary);
+    color: var(--chela-text-primary);
+  }
+
+  .chela-ascii-boot {
+    position: relative;
+    display: flex;
+    width: 100%;
+    height: 100vh;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .chela-dot-claw {
+    --dot-size: clamp(5px, 0.68vw, 8px);
+    position: relative;
+    width: min(980px, calc(100vw - 1.5rem));
+    aspect-ratio: 1009 / 720;
+    transform: translateY(-2.4rem) rotate(-2.2deg);
+    filter: drop-shadow(0 18px 38px rgb(15 23 42 / 0.09));
+  }
+
+  .chela-dot-claw__matrix,
+  .chela-dot-claw__group {
+    position: absolute;
+    inset: 0;
+  }
+
+  .chela-dot-claw__matrix {
+    z-index: 2;
+  }
+
+  .chela-dot-claw__group {
+    transform-origin: center;
+  }
+
+  .chela-dot-claw__group--body {
+    z-index: 3;
+    animation: chela-dot-claw-body 8.4s ease-in-out infinite;
+  }
+
+  .chela-dot-claw__group--upper {
+    z-index: 4;
+    animation: chela-dot-claw-upper 8.4s ease-in-out infinite;
+    transform-origin: 62% 34%;
+  }
+
+  .chela-dot-claw__group--lower {
+    z-index: 4;
+    animation: chela-dot-claw-lower 8.4s ease-in-out infinite;
+    transform-origin: 72% 60%;
+  }
+
+  .chela-dot-claw__dot {
+    position: absolute;
+    width: var(--dot-size);
+    height: var(--dot-size);
+    border-radius: 1px;
+    transform: translate(-50%, -50%);
+    will-change: transform, opacity;
+  }
+
+  .chela-dot-claw__dot--claw {
+    background: color-mix(
+      in srgb,
+      var(--chela-text-primary) 78%,
+      var(--chela-accent) 22%
+    );
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--chela-accent) 12%, transparent);
+    animation: chela-dot-claw 8.4s ease-in-out infinite;
+  }
+
+  .chela-ascii-boot__copy {
+    position: absolute;
+    left: 50%;
+    bottom: 1.15rem;
+    z-index: 5;
+    display: flex;
+    max-width: min(460px, calc(100vw - 1.25rem));
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: var(--radius-shell);
+    background: color-mix(in srgb, var(--chela-bg-surface) 82%, transparent);
+    padding: 0.9rem 1rem;
+    text-align: center;
+    box-shadow: var(--color-control-shadow);
+    backdrop-filter: blur(8px);
+    transform: translateX(-50%);
+  }
+
+  .chela-ascii-boot__eyebrow {
+    margin: 0;
+    font-family: var(--app-code-font-family);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--chela-text-tertiary);
+  }
+
+  .chela-ascii-boot__copy h1 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--chela-text-primary);
+  }
+
+  .chela-ascii-boot__copy p {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: var(--chela-text-secondary);
+  }
+
 }
 
 @keyframes blink {
@@ -407,6 +530,62 @@ optgroup {
 @keyframes bar-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
+}
+
+@keyframes chela-dot-claw-body {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-0.35%);
+  }
+}
+
+@keyframes chela-dot-claw-upper {
+  0%, 100% {
+    transform: translate(0, 0) rotate(-1.8deg);
+  }
+  50% {
+    transform: translate(0.35%, 0.7%) rotate(2.4deg);
+  }
+}
+
+@keyframes chela-dot-claw-lower {
+  0%, 100% {
+    transform: translate(0, 0) rotate(1.6deg);
+  }
+  50% {
+    transform: translate(-0.25%, -0.45%) rotate(-1.8deg);
+  }
+}
+
+@keyframes chela-dot-claw {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(0.88);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chela-dot-claw__group,
+  .chela-dot-claw__dot {
+    animation: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .chela-dot-claw {
+    --dot-size: clamp(4px, 0.9vw, 7px);
+    width: min(980px, calc(100vw - 0.75rem));
+    transform: translateY(-2.2rem) rotate(-2deg);
+  }
+
+  .chela-ascii-boot__copy {
+    bottom: 0.75rem;
+    max-width: calc(100vw - 0.75rem);
+  }
 }
 
 /* Fallback focus ring for elements without component-level focus styling */

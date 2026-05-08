@@ -344,6 +344,22 @@ export type SoulFilesStatus = {
   claude: { exists: boolean; sizeBytes: number };
 };
 
+export type WorkspaceFileEntry = {
+  name: string;
+  relativePath: string;
+  kind: "directory" | FileKind;
+  sizeBytes: number | null;
+  updatedAt: string | null;
+};
+
+export type WorkspaceDirectoryListing = {
+  workspacePath: string;
+  relativePath: string;
+  parentPath: string | null;
+  entries: WorkspaceFileEntry[];
+  truncated: boolean;
+};
+
 export type SelectedFile = {
   id: string;
   name: string;
@@ -373,6 +389,44 @@ export type ClipboardFilePayload = {
 export type MessageUsage = {
   inputTokens: number;
   outputTokens: number;
+};
+
+export type BrowserElementRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type BrowserElementStyles = {
+  display?: string | null;
+  position?: string | null;
+  width?: string | null;
+  height?: string | null;
+  backgroundColor?: string | null;
+  color?: string | null;
+  fontSize?: string | null;
+  padding?: string | null;
+  margin?: string | null;
+};
+
+export type BrowserInterviewElement = {
+  sourceUrl?: string | null;
+  selector: string;
+  tagName: string;
+  id?: string | null;
+  className?: string | null;
+  textContent?: string | null;
+  outerHTML?: string | null;
+  boundingRect?: BrowserElementRect | null;
+  styles?: BrowserElementStyles | null;
+};
+
+export type BrowserContextItem = {
+  id: string;
+  label: string;
+  createdAt: string;
+  element: BrowserInterviewElement;
 };
 
 export type DiagnosticLogId = "app" | "audit";
@@ -671,6 +725,7 @@ export type ChatMessageMeta = Record<string, unknown> & {
   skillUsages?: RuntimeSkillUsage[];
   runChangeSummary?: RunChangeSummary | null;
   sendOrigin?: SendMessageOrigin;
+  browserContextItems?: BrowserContextItem[];
 };
 
 export type ChatMessage = {
@@ -972,6 +1027,8 @@ export type SendMessageOrigin = "user" | "guided" | "resume_interrupted_approval
 
 export type SendMessageInput = AgentRunScope & {
   text: string;
+  displayText?: string;
+  browserContextItems?: BrowserContextItem[];
   attachments: SelectedFile[];
   modelEntryId?: string;
   origin?: SendMessageOrigin;
@@ -980,6 +1037,8 @@ export type SendMessageInput = AgentRunScope & {
 export type QueuedMessage = {
   id: string;
   text: string;
+  displayText?: string;
+  browserContextItems?: BrowserContextItem[];
   createdAt: string;
   source?: "queued" | "guided";
 };
@@ -996,6 +1055,8 @@ export type SessionTodoItem = {
 export type EnqueueQueuedMessageInput = {
   sessionId: string;
   text: string;
+  displayText?: string;
+  browserContextItems?: BrowserContextItem[];
   source?: QueuedMessage["source"];
 };
 
@@ -1022,7 +1083,7 @@ export type TrimSessionMessagesInput = {
   messageId: string;
 };
 
-export type RightPanelView = "diff" | "trace";
+export type RightPanelView = "diff" | "trace" | "browser";
 
 export type RightPanelState = {
   open: boolean;
@@ -1295,6 +1356,8 @@ export type DesktopApi = {
     getSoul: () => Promise<SoulFilesStatus>;
     pickFolder: () => Promise<string | null>;
     openFolder: () => Promise<void>;
+    listDirectory: (relativePath?: string) => Promise<WorkspaceDirectoryListing>;
+    readFilePreview: (relativePath: string) => Promise<FilePreviewResult>;
   };
   terminal: {
     create: (options?: { cwd?: string }) => Promise<string>;

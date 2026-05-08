@@ -165,6 +165,7 @@ export function createMainWindow(): BrowserWindow {
       preload: getPreloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
+      webviewTag: true,
       sandbox: !isDev,
       devTools: isDev,
     },

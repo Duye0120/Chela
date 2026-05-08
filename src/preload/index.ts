@@ -225,6 +225,10 @@ const desktopApi: DesktopApi = {
     getSoul: () => invokeIpc(IPC_CHANNELS.workspaceGetSoul),
     pickFolder: () => invokeIpc(IPC_CHANNELS.workspacePickFolder),
     openFolder: () => invokeIpc(IPC_CHANNELS.workspaceOpenFolder),
+    listDirectory: (relativePath?: string) =>
+      invokeIpc(IPC_CHANNELS.workspaceListDirectory, relativePath),
+    readFilePreview: (relativePath: string) =>
+      invokeIpc(IPC_CHANNELS.workspaceReadFilePreview, relativePath),
   },
 
   // ── Terminal (wired in Phase 7) ───────────────────────────

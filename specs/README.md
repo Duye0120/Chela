@@ -99,10 +99,10 @@ Harness 基线要求文档把下面 4 个约束写清楚：
 | F1 | — | Telegram Bot Adapter | `future` | `未实现` |
 | F2 | — | Sub-agent / Multi-agent | `future` | `部分落地（预留入口）` |
 | F3 | — | Plan mode（先规划再执行） | `future` | `部分落地（预留入口）` |
-| F4 | — | MCP Server 管理 UI | `future` | `未实现` |
+| F4 | — | MCP Server 管理 UI | `future` | `baseline 已落地（Settings MCP 区支持 stdio / Streamable HTTP 配置、状态、重载、重启、断开）` |
 | F5 | — | ~~Cron / 定时任务~~ → 已纳入 spec-16 Scheduler | `→ spec-16` | `部分落地（scheduler baseline）` |
 | F6 | — | ~~心跳 / 后台常驻~~ → 已纳入 spec-16 Event Bus | `→ spec-16` | `部分落地（Event Bus + background services baseline）` |
-| F7 | — | Workspace 文件浏览器 | `future` | `未实现` |
+| F7 | — | Workspace 文件浏览器 | `future` | `baseline 已落地（Settings Workspace 区支持目录浏览与文本预览）` |
 | F8 | — | Sub-agent 预处理（轻量模型做工具结果过滤/摘要，减少主 context 占用） | `future` | `部分落地（预留入口）` |
 
 ## 工作流程

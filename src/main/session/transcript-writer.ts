@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  BrowserContextItem,
   ChatMessage,
   RunKind,
   SelectedFile,
@@ -64,6 +65,7 @@ export function appendUserMessageEvent(input: {
   modelEntryId: string;
   thinkingLevel: string;
   sendOrigin?: SendMessageOrigin;
+  browserContextItems?: BrowserContextItem[];
 }): { message: ChatMessage; title: string } {
   const meta = readMeta(input.sessionId);
   if (!meta) {
@@ -85,6 +87,9 @@ export function appendUserMessageEvent(input: {
       attachmentIds: input.attachments.map((attachment) => attachment.id),
       attachments: input.attachments,
       sendOrigin: input.sendOrigin ?? "user",
+      ...(input.browserContextItems && input.browserContextItems.length > 0
+        ? { browserContextItems: input.browserContextItems }
+        : {}),
     },
   };
 

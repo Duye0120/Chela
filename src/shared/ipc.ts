@@ -109,6 +109,8 @@ export const IPC_CHANNELS = {
   workspaceGetSoul: "workspace:get-soul",
   workspacePickFolder: "workspace:pick-folder",
   workspaceOpenFolder: "workspace:open-folder",
+  workspaceListDirectory: "workspace:list-directory",
+  workspaceReadFilePreview: "workspace:read-file-preview",
 
   // Terminal (main ↔ renderer)
   terminalCreate: "terminal:create",

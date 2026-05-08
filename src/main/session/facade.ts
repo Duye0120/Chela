@@ -1,4 +1,8 @@
-import type { ChatSession, ChatSessionSummary } from "../../shared/contracts.js";
+import type {
+  ChatSession,
+  ChatSessionSummary,
+  EnqueueQueuedMessageInput,
+} from "../../shared/contracts.js";
 import {
   archivePersistedSession,
   createPersistedSession,
@@ -83,10 +87,9 @@ export function listSessionQueuedMessages(sessionId: string) {
 
 export function enqueueSessionQueuedMessage(
   sessionId: string,
-  text: string,
-  source?: Parameters<typeof enqueuePersistedQueuedMessage>[2],
+  input: Omit<EnqueueQueuedMessageInput, "sessionId">,
 ) {
-  return enqueuePersistedQueuedMessage(sessionId, text, source);
+  return enqueuePersistedQueuedMessage(sessionId, input);
 }
 
 export function moveSessionQueuedMessageToFront(

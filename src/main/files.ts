@@ -1,12 +1,15 @@
-import { basename, extname, join } from "node:path";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { basename, extname, join, relative, resolve } from "node:path";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { app, dialog, type BrowserWindow } from "electron";
 import type {
   ClipboardFilePayload,
   FileKind,
   FilePreviewResult,
   SelectedFile,
+  WorkspaceDirectoryListing,
+  WorkspaceFileEntry,
 } from "../shared/contracts.js";
+import { isPathAllowed, isPathForbiddenRead } from "./security.js";
 
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico"]);
 const TEXT_EXTENSIONS = new Set([
@@ -37,6 +40,7 @@ const TEXT_EXTENSIONS = new Set([
   "env",
 ]);
 const MAX_PREVIEW_CHARACTERS = 6_000;
+const MAX_WORKSPACE_DIRECTORY_ENTRIES = 250;
 const MIME_EXTENSION_MAP = new Map<string, string>([
   ["image/png", "png"],
   ["image/jpeg", "jpg"],
@@ -69,6 +73,25 @@ const TEXT_MIME_TYPES = new Set([
 
 function getExtension(filePath: string) {
   return extname(filePath).replace(/^\./, "").toLowerCase();
+}
+
+function toWorkspaceRelativePath(workspacePath: string, targetPath: string) {
+  return relative(workspacePath, targetPath).replace(/\\/g, "/");
+}
+
+function normalizeWorkspaceRelativePath(relativePath?: string) {
+  return (relativePath ?? "").replace(/\\/g, "/").replace(/^\/+/, "").trim();
+}
+
+function resolveWorkspaceFilePath(workspacePath: string, relativePath?: string) {
+  const normalizedRelativePath = normalizeWorkspaceRelativePath(relativePath);
+  const absolutePath = resolve(workspacePath, normalizedRelativePath || ".");
+
+  if (!isPathAllowed(absolutePath, workspacePath)) {
+    throw new Error("路径超出 workspace 范围。");
+  }
+
+  return { absolutePath, normalizedRelativePath };
 }
 
 function inferFileKind(extension: string, mimeType?: string): FileKind {
@@ -265,6 +288,101 @@ export async function readFilePreview(filePath: string): Promise<FilePreviewResu
       error: error instanceof Error ? error.message : "读取文件预览失败。",
     };
   }
+}
+
+export async function listWorkspaceDirectory(
+  workspacePath: string,
+  relativePath?: string,
+): Promise<WorkspaceDirectoryListing> {
+  const { absolutePath } = resolveWorkspaceFilePath(workspacePath, relativePath);
+  const currentStat = await stat(absolutePath);
+  if (!currentStat.isDirectory()) {
+    throw new Error("目标路径不是目录。");
+  }
+
+  const dirents = await readdir(absolutePath, { withFileTypes: true });
+  const limitedDirents = dirents.slice(0, MAX_WORKSPACE_DIRECTORY_ENTRIES);
+  const entries = await Promise.all(
+    limitedDirents.map(async (dirent): Promise<WorkspaceFileEntry> => {
+      const absoluteEntryPath = join(absolutePath, dirent.name);
+      const relativeEntryPath = toWorkspaceRelativePath(workspacePath, absoluteEntryPath);
+      let entryStat: Awaited<ReturnType<typeof stat>> | null = null;
+      try {
+        entryStat = await stat(absoluteEntryPath);
+      } catch {
+        entryStat = null;
+      }
+
+      const extension = getExtension(dirent.name);
+      const kind = dirent.isDirectory() ? "directory" : inferFileKind(extension);
+
+      return {
+        name: dirent.name,
+        relativePath: relativeEntryPath,
+        kind,
+        sizeBytes: dirent.isDirectory() ? null : entryStat?.size ?? null,
+        updatedAt: entryStat?.mtime ? entryStat.mtime.toISOString() : null,
+      };
+    }),
+  );
+
+  const sortedEntries = entries.sort((a, b) => {
+    if (a.kind === "directory" && b.kind !== "directory") {
+      return -1;
+    }
+    if (a.kind !== "directory" && b.kind === "directory") {
+      return 1;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
+  const currentRelativePath = toWorkspaceRelativePath(workspacePath, absolutePath);
+  const normalizedCurrent = currentRelativePath === "" ? "" : currentRelativePath;
+  const parentPath =
+    normalizedCurrent === ""
+      ? null
+      : toWorkspaceRelativePath(workspacePath, resolve(absolutePath, ".."));
+
+  return {
+    workspacePath,
+    relativePath: normalizedCurrent,
+    parentPath,
+    entries: sortedEntries,
+    truncated: dirents.length > MAX_WORKSPACE_DIRECTORY_ENTRIES,
+  };
+}
+
+export async function readWorkspaceFilePreview(
+  workspacePath: string,
+  relativePath: string,
+): Promise<FilePreviewResult> {
+  const { absolutePath, normalizedRelativePath } = resolveWorkspaceFilePath(
+    workspacePath,
+    relativePath,
+  );
+
+  if (isPathForbiddenRead(absolutePath)) {
+    return {
+      path: normalizedRelativePath,
+      truncated: false,
+      error: "该文件受敏感读取保护。",
+    };
+  }
+
+  const fileStat = await stat(absolutePath);
+  if (!fileStat.isFile()) {
+    return {
+      path: normalizedRelativePath,
+      truncated: false,
+      error: "目标路径不是文件。",
+    };
+  }
+
+  const preview = await readFilePreview(absolutePath);
+  return {
+    ...preview,
+    path: normalizedRelativePath,
+  };
 }
 
 export async function readImageDataUrl(filePath: string): Promise<string | null> {

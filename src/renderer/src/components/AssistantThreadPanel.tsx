@@ -21,6 +21,7 @@ import type {
   GitBranchSummary,
   InterruptedApprovalGroup,
   PendingApprovalGroup,
+  QueuedMessage,
   RunChangeSummary,
   RuntimeSkillUsage,
   SendMessageOrigin,
@@ -44,6 +45,11 @@ import {
   toInterruptedApprovalReloadConfig,
   type InterruptedApprovalReloadConfig,
 } from "@renderer/lib/interrupted-approval-run-config";
+import {
+  buildBrowserContextPrompt,
+  getBrowserContextItems,
+  type BrowserContextItem,
+} from "@renderer/lib/browser-interview";
 
 type AssistantThreadPanelProps = {
   session: ChatSession;
@@ -66,8 +72,18 @@ type AssistantThreadPanelProps = {
   interruptedApprovalGroups: InterruptedApprovalGroup[];
   onDismissInterruptedApproval: (runId: string) => void | Promise<void>;
   onResumeInterruptedApproval: (runId: string) => Promise<string>;
+  browserContextItems: BrowserContextItem[];
+  onRemoveBrowserContextItem: (itemId: string) => void;
+  onClearBrowserContextItems: () => void;
   visible: boolean;
   disableGlobalSideEffects: boolean;
+};
+
+type ComposerQueuedMessageRequest = {
+  text: string;
+  displayText?: string;
+  browserContextItems?: BrowserContextItem[];
+  source?: QueuedMessage["source"];
 };
 
 const CONNECTING_STAGE_DELAY_MS = 220;
@@ -734,6 +750,10 @@ function toThreadMessage(message: ChatMessage): ThreadMessageLike | null {
     metadata: {
       custom: {
         rawMessageId: message.id,
+        ...(Array.isArray(message.meta?.browserContextItems) &&
+          message.meta.browserContextItems.length > 0
+          ? { browserContextItems: message.meta.browserContextItems }
+          : {}),
         ...(message.meta?.sendOrigin === "guided"
           ? { sendOrigin: "guided" }
           : {}),
@@ -776,6 +796,24 @@ function getLatestUserMessageSendOrigin(
   }
 
   return "user";
+}
+
+function getLatestUserMessageBrowserContextItems(
+  messages: readonly ThreadMessageLike[],
+): BrowserContextItem[] {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== "user") {
+      continue;
+    }
+
+    const custom = message.metadata?.custom as
+      | { browserContextItems?: unknown }
+      | undefined;
+    return getBrowserContextItems(custom?.browserContextItems);
+  }
+
+  return [];
 }
 
 function createRunQueue() {
@@ -857,6 +895,9 @@ function SessionRuntime({
   interruptedApprovalGroups,
   onDismissInterruptedApproval,
   onResumeInterruptedApproval,
+  browserContextItems,
+  onRemoveBrowserContextItem,
+  onClearBrowserContextItems,
   visible,
   disableGlobalSideEffects,
 }: AssistantThreadPanelProps) {
@@ -865,6 +906,8 @@ function SessionRuntime({
   const latestReloadSessionRef = useRef(onReloadSession);
   const draftPersistTimerRef = useRef<number | null>(null);
   const latestRunStateChangeRef = useRef(onRunStateChange);
+  const latestBrowserContextItemsRef = useRef(browserContextItems);
+  const latestClearBrowserContextItemsRef = useRef(onClearBrowserContextItems);
   const activeRunUnsubscribeRef = useRef<(() => void) | null>(null);
   const pendingApprovalRequestSerialRef = useRef(0);
   const pendingApprovalSignatureRef = useRef("");
@@ -934,6 +977,14 @@ function SessionRuntime({
   useEffect(() => {
     latestRunStateChangeRef.current = onRunStateChange;
   }, [onRunStateChange]);
+
+  useEffect(() => {
+    latestBrowserContextItemsRef.current = browserContextItems;
+  }, [browserContextItems]);
+
+  useEffect(() => {
+    latestClearBrowserContextItemsRef.current = onClearBrowserContextItems;
+  }, [onClearBrowserContextItems]);
 
   const refreshPendingApprovalGroups = useCallback(
     async (sessionId: string) => {
@@ -1138,11 +1189,13 @@ function SessionRuntime({
   }, []);
 
   const handleEnqueueQueuedMessage = useCallback(
-    async (text: string, source: "queued" | "guided" = "queued") => {
+    async (input: ComposerQueuedMessageRequest) => {
       const queuedMessage = await desktopApi.chat.enqueueQueuedMessage({
         sessionId: latestSessionRef.current.id,
-        text,
-        source,
+        text: input.text,
+        displayText: input.displayText,
+        browserContextItems: input.browserContextItems,
+        source: input.source ?? "queued",
       });
       await latestReloadSessionRef.current(latestSessionRef.current.id);
       return queuedMessage.id;
@@ -1163,11 +1216,14 @@ function SessionRuntime({
   );
 
   const handleGuideQueuedMessage = useCallback(
-    async (text: string) => {
+    async (input: ComposerQueuedMessageRequest) => {
       // 先把新消息入队并移到队首，再触发取消。
       // 顺序不能颠倒：如果 cancel 在 trigger 移到队首之前完成，run 结束后
       // 自动派发 effect 会看到旧队首并误派发，引导就失效了。
-      const queuedId = await handleEnqueueQueuedMessage(text, "guided");
+      const queuedId = await handleEnqueueQueuedMessage({
+        ...input,
+        source: "guided",
+      });
       await handleTriggerQueuedMessage(queuedId);
       cancelRunRef.current?.();
     },
@@ -1191,14 +1247,24 @@ function SessionRuntime({
         sessionId: currentSession.id,
         runId,
       };
-      const text = internalRun?.prompt ?? extractUserText(messages);
+      const browserContextItemsForRun = internalRun
+        ? []
+        : latestBrowserContextItemsRef.current.length > 0
+          ? latestBrowserContextItemsRef.current
+          : getLatestUserMessageBrowserContextItems(messages);
+      const userText = internalRun?.prompt ?? extractUserText(messages);
+      const text = internalRun?.prompt ??
+        buildBrowserContextPrompt(
+          userText,
+          browserContextItemsForRun,
+        );
       const sendOrigin = internalRun
         ? resolveSendMessageOrigin(internalRun)
         : getLatestUserMessageSendOrigin(messages);
       const pendingAttachments = internalRun ? [] : currentSession.attachments;
       const title =
         !internalRun && currentSession.messages.length === 0
-          ? deriveSessionTitle(text, pendingAttachments)
+          ? deriveSessionTitle(userText, pendingAttachments)
           : currentSession.title;
       const sessionAfterUserMessage: ChatSession = {
         ...currentSession,
@@ -1210,6 +1276,9 @@ function SessionRuntime({
 
       if (!internalRun) {
         latestPersistSessionRef.current(sessionAfterUserMessage);
+        if (browserContextItemsForRun.length > 0) {
+          latestClearBrowserContextItemsRef.current();
+        }
       }
       activeRunScopeRef.current = runScope;
       latestRunStateChangeRef.current(currentSession.id, true);
@@ -1493,6 +1562,8 @@ function SessionRuntime({
           sessionId: currentSession.id,
           runId,
           text,
+          displayText: internalRun ? undefined : userText,
+          browserContextItems: browserContextItemsForRun,
           attachments: pendingAttachments,
           modelEntryId: currentModelId,
           origin: sendOrigin,
@@ -1548,6 +1619,9 @@ function SessionRuntime({
         onDismissInterruptedApproval={onDismissInterruptedApproval}
         onResumeInterruptedApproval={onResumeInterruptedApproval}
         pendingApprovalGroups={pendingApprovalGroups}
+        browserContextItems={browserContextItems}
+        onRemoveBrowserContextItem={onRemoveBrowserContextItem}
+        onClearBrowserContextItems={onClearBrowserContextItems}
         onResolvePendingApproval={async (requestId, allowed) => {
           await desktopApi.agent.confirmResponse({
             requestId,

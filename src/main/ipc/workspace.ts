@@ -7,11 +7,18 @@ import {
   type OpenDialogOptions,
 } from "electron";
 import { IPC_CHANNELS } from "../../shared/ipc.js";
+import {
+  listWorkspaceDirectory,
+  readWorkspaceFilePreview,
+} from "../files.js";
 import { getSoulFilesStatus } from "../soul.js";
 import { getSettings, updateSettings } from "../settings.js";
 import { getMainWindow } from "../window.js";
 import { handleIpc } from "./handle.js";
-import { validateWorkspacePathPayload } from "./schema.js";
+import {
+  validateWorkspacePathPayload,
+  validateWorkspaceRelativePathPayload,
+} from "./schema.js";
 
 export function registerWorkspaceIpc(): void {
   handleIpc(IPC_CHANNELS.workspaceChange, async (_event, path: string) => {
@@ -46,4 +53,23 @@ export function registerWorkspaceIpc(): void {
       throw new Error(result);
     }
   });
+  handleIpc(IPC_CHANNELS.workspaceListDirectory, async (_event, relativePath?: string) =>
+    listWorkspaceDirectory(
+      getSettings().workspace,
+      validateWorkspaceRelativePathPayload(
+        IPC_CHANNELS.workspaceListDirectory,
+        relativePath,
+        { allowEmpty: true },
+      ),
+    ),
+  );
+  handleIpc(IPC_CHANNELS.workspaceReadFilePreview, async (_event, relativePath: string) =>
+    readWorkspaceFilePreview(
+      getSettings().workspace,
+      validateWorkspaceRelativePathPayload(
+        IPC_CHANNELS.workspaceReadFilePreview,
+        relativePath,
+      ),
+    ),
+  );
 }

@@ -30,6 +30,7 @@ import {
   ChevronRightIcon,
   CopyIcon,
   LoaderCircleIcon,
+  MousePointer2Icon,
   PencilIcon,
   RotateCcwIcon,
   SendHorizonalIcon,
@@ -120,6 +121,21 @@ import {
 } from "@renderer/lib/thinking-levels";
 import type { ChatRunStage } from "@renderer/lib/chat-run-status";
 import { cn } from "@renderer/lib/utils";
+import {
+  BROWSER_CONTEXT_FALLBACK_INSTRUCTION,
+  describeBrowserContextItem,
+  getBrowserContextItems,
+  type BrowserContextItem,
+} from "@renderer/lib/browser-interview";
+
+const EMPTY_BROWSER_CONTEXT_ITEMS: BrowserContextItem[] = [];
+
+type ComposerQueuedMessageRequest = {
+  text: string;
+  displayText?: string;
+  browserContextItems?: BrowserContextItem[];
+  source?: QueuedMessage["source"];
+};
 
 type ThreadProps = {
   sessionId: string;
@@ -148,17 +164,17 @@ type ThreadProps = {
   pendingApprovalGroups?: PendingApprovalGroup[];
   onDismissInterruptedApproval?: (runId: string) => void | Promise<void>;
   onResumeInterruptedApproval?: (runId: string) => Promise<string>;
+  browserContextItems?: BrowserContextItem[];
+  onRemoveBrowserContextItem?: (itemId: string) => void;
+  onClearBrowserContextItems?: () => void;
   onResolvePendingApproval?: (
     requestId: string,
     allowed: boolean,
   ) => Promise<void>;
   onCompactContext?: () => void | Promise<void>;
-  onEnqueueQueuedMessage?: (
-    text: string,
-    source?: QueuedMessage["source"],
-  ) => Promise<string>;
+  onEnqueueQueuedMessage?: (input: ComposerQueuedMessageRequest) => Promise<string>;
   onTriggerQueuedMessage?: (messageId: string) => Promise<void>;
-  onGuideQueuedMessage?: (text: string) => Promise<void>;
+  onGuideQueuedMessage?: (input: ComposerQueuedMessageRequest) => Promise<void>;
   onRemoveQueuedMessage?: (messageId: string) => Promise<void>;
   onBranchChanged?: () => void | Promise<void>;
   disableGlobalSideEffects?: boolean;
@@ -189,17 +205,17 @@ type ThreadResolvedProps = {
   pendingApprovalGroups: PendingApprovalGroup[];
   onDismissInterruptedApproval: (runId: string) => void | Promise<void>;
   onResumeInterruptedApproval: (runId: string) => Promise<string>;
+  browserContextItems: BrowserContextItem[];
+  onRemoveBrowserContextItem: (itemId: string) => void;
+  onClearBrowserContextItems: () => void;
   onResolvePendingApproval: (
     requestId: string,
     allowed: boolean,
   ) => Promise<void>;
   onCompactContext: () => void | Promise<void>;
-  onEnqueueQueuedMessage: (
-    text: string,
-    source?: QueuedMessage["source"],
-  ) => Promise<string>;
+  onEnqueueQueuedMessage: (input: ComposerQueuedMessageRequest) => Promise<string>;
   onTriggerQueuedMessage: (messageId: string) => Promise<void>;
-  onGuideQueuedMessage: (text: string) => Promise<void>;
+  onGuideQueuedMessage: (input: ComposerQueuedMessageRequest) => Promise<void>;
   onRemoveQueuedMessage: (messageId: string) => Promise<void>;
   onBranchChanged: () => void | Promise<void>;
   disableGlobalSideEffects: boolean;
@@ -250,6 +266,9 @@ export const Thread: FC<ThreadProps> = ({
   onResumeInterruptedApproval = async () => {
     throw new Error("恢复执行当前不可用。");
   },
+  browserContextItems = EMPTY_BROWSER_CONTEXT_ITEMS,
+  onRemoveBrowserContextItem = () => undefined,
+  onClearBrowserContextItems = () => undefined,
   onResolvePendingApproval = async () => undefined,
   onCompactContext = () => undefined,
   onEnqueueQueuedMessage = async () => "",
@@ -462,6 +481,9 @@ export const Thread: FC<ThreadProps> = ({
               pendingApprovalGroups={pendingApprovalGroups}
               onDismissInterruptedApproval={onDismissInterruptedApproval}
               onResumeInterruptedApproval={onResumeInterruptedApproval}
+              browserContextItems={browserContextItems}
+              onRemoveBrowserContextItem={onRemoveBrowserContextItem}
+              onClearBrowserContextItems={onClearBrowserContextItems}
               onResolvePendingApproval={onResolvePendingApproval}
               onCompactContext={onCompactContext}
               onEnqueueQueuedMessage={onEnqueueQueuedMessage}
@@ -538,6 +560,9 @@ const Composer: FC<ThreadResolvedProps> = ({
   pendingApprovalGroups,
   onDismissInterruptedApproval,
   onResumeInterruptedApproval,
+  browserContextItems,
+  onRemoveBrowserContextItem,
+  onClearBrowserContextItems,
   onResolvePendingApproval,
   onCompactContext,
   onEnqueueQueuedMessage,
@@ -574,6 +599,34 @@ const Composer: FC<ThreadResolvedProps> = ({
   const isThreadRunning = useAuiState((s) => s.thread.isRunning);
   const queuedHeadMessage = queuedMessages[0] ?? null;
   const remainingQueuedCount = Math.max(queuedMessages.length - 1, 0);
+  const createQueuedMessageRequest = useCallback(
+    (
+      text: string,
+      source?: QueuedMessage["source"],
+    ): ComposerQueuedMessageRequest => {
+      const browserItems = getBrowserContextItems(browserContextItems);
+      const displayText =
+        text.trim() || BROWSER_CONTEXT_FALLBACK_INSTRUCTION;
+
+      if (browserItems.length === 0) {
+        return { text: text.trim(), source };
+      }
+
+      return {
+        text: displayText,
+        displayText,
+        browserContextItems: browserItems,
+        source,
+      };
+    },
+    [browserContextItems],
+  );
+
+  const clearBrowserContextAfterSubmit = useCallback(() => {
+    if (browserContextItems.length > 0) {
+      onClearBrowserContextItems();
+    }
+  }, [browserContextItems.length, onClearBrowserContextItems]);
 
   const syncInputOverflow = useCallback(() => {
     const textarea = composerInputRef.current;
@@ -584,6 +637,39 @@ const Composer: FC<ThreadResolvedProps> = ({
       current === nextScrollable ? current : nextScrollable,
     );
   }, []);
+
+  const appendBrowserContextUserMessage = useCallback(
+    (text: string) => {
+      const browserItems = getBrowserContextItems(browserContextItems);
+      if (browserItems.length === 0) {
+        return false;
+      }
+
+      const displayText =
+        text.trim() || BROWSER_CONTEXT_FALLBACK_INSTRUCTION;
+      const parentId = aui.thread().getState().messages.at(-1)?.id ?? null;
+
+      aui.thread().append({
+        role: "user",
+        content: [{ type: "text", text: displayText }],
+        parentId,
+        sourceId: null,
+        metadata: {
+          custom: {
+            browserContextItems: browserItems,
+          },
+        },
+      });
+      aui.composer().setText("");
+      clearBrowserContextAfterSubmit();
+      requestAnimationFrame(() => {
+        syncInputOverflow();
+        composerInputRef.current?.focus();
+      });
+      return true;
+    },
+    [aui, browserContextItems, clearBrowserContextAfterSubmit, syncInputOverflow],
+  );
 
   const handleInputPaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -636,12 +722,21 @@ const Composer: FC<ThreadResolvedProps> = ({
 
         try {
           const sendOrigin = queuedMessage.source === "guided" ? "guided" : "user";
+          const browserItems = getBrowserContextItems(
+            queuedMessage.browserContextItems,
+          );
+          const displayText = queuedMessage.displayText?.trim() || queuedMessage.text;
 
           aui.thread().append({
             role: "user",
-            content: [{ type: "text", text: queuedMessage.text }],
+            content: [{ type: "text", text: displayText }],
             metadata: {
-              custom: sendOrigin === "guided" ? { sendOrigin } : {},
+              custom: {
+                ...(sendOrigin === "guided" ? { sendOrigin } : {}),
+                ...(browserItems.length > 0
+                  ? { browserContextItems: browserItems }
+                  : {}),
+              },
             },
           });
         } catch (error) {
@@ -758,7 +853,7 @@ const Composer: FC<ThreadResolvedProps> = ({
       ].filter(Boolean).join("\n");
 
     if (text.trim()) {
-      await onEnqueueQueuedMessage(text);
+      await onEnqueueQueuedMessage({ text });
     }
   }, [contextSummary, onEnqueueQueuedMessage]);
 
@@ -807,6 +902,11 @@ const Composer: FC<ThreadResolvedProps> = ({
       ) : null}
       <div className="flex w-full flex-col gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-composer-surface)] p-(--composer-padding) shadow-[0_12px_32px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.05)] transition-shadow focus-within:ring-2 focus-within:ring-ring/12">
         <ComposerAttachments />
+        <BrowserContextChips
+          items={browserContextItems}
+          onRemove={onRemoveBrowserContextItem}
+          onClear={onClearBrowserContextItems}
+        />
 
         <ComposerPrimitive.Input
           placeholder="向 Chela 提问..."
@@ -829,25 +929,35 @@ const Composer: FC<ThreadResolvedProps> = ({
               event.shiftKey ||
               isComposingRef.current ||
               event.nativeEvent.isComposing ||
-              !isThreadRunning ||
               isCancelling
             ) {
               return;
             }
 
             const nextDraft = event.currentTarget.value.trim();
-            if (!nextDraft) {
+            if (!nextDraft && browserContextItems.length === 0) {
               return;
             }
 
-            event.preventDefault();
-            void onEnqueueQueuedMessage(nextDraft).then(() => {
-              aui.composer().setText("");
-              requestAnimationFrame(() => {
-                syncInputOverflow();
-                composerInputRef.current?.focus();
+            if (!isThreadRunning && browserContextItems.length > 0) {
+              event.preventDefault();
+              appendBrowserContextUserMessage(nextDraft);
+              return;
+            }
+
+            if (isThreadRunning) {
+              event.preventDefault();
+              void onEnqueueQueuedMessage(
+                createQueuedMessageRequest(nextDraft),
+              ).then(() => {
+                aui.composer().setText("");
+                clearBrowserContextAfterSubmit();
+                requestAnimationFrame(() => {
+                  syncInputOverflow();
+                  composerInputRef.current?.focus();
+                });
               });
-            });
+            }
           }}
           onCompositionStart={() => {
             isComposingRef.current = true;
@@ -873,6 +983,10 @@ const Composer: FC<ThreadResolvedProps> = ({
           isVisionBlocked={isVisionBlocked}
           onEnqueueQueuedMessage={onEnqueueQueuedMessage}
           onGuideQueuedMessage={onGuideQueuedMessage}
+          browserContextItems={browserContextItems}
+          createQueuedMessageRequest={createQueuedMessageRequest}
+          appendBrowserContextUserMessage={appendBrowserContextUserMessage}
+          onClearBrowserContextItems={onClearBrowserContextItems}
           onAfterComposerEnqueue={() => {
             requestAnimationFrame(() => {
               syncInputOverflow();
@@ -895,6 +1009,72 @@ const Composer: FC<ThreadResolvedProps> = ({
         disableGlobalSideEffects={disableGlobalSideEffects}
       />
     </ComposerPrimitive.Root>
+  );
+};
+
+const BrowserContextChips: FC<{
+  items: BrowserContextItem[];
+  onRemove: (itemId: string) => void;
+  onClear: () => void;
+}> = ({ items, onRemove, onClear }) => {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5 px-1 pt-1">
+      {items.map((item) => (
+        <BrowserDomTag
+          key={item.id}
+          item={item}
+          onRemove={() => onRemove(item.id)}
+        />
+      ))}
+      <button
+        type="button"
+        onClick={onClear}
+        className="ml-auto shrink-0 rounded-[var(--radius-shell)] px-2 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground"
+      >
+        清空
+      </button>
+    </div>
+  );
+};
+
+const BrowserDomTag: FC<{
+  item: BrowserContextItem;
+  onRemove?: () => void;
+  compact?: boolean;
+}> = ({ item, onRemove, compact = false }) => {
+  const summary = useMemo(() => describeBrowserContextItem(item), [item]);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onRemove}
+          className={cn(
+            "group inline-flex max-w-[240px] items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-selection-muted-bg)] px-2 py-1 font-medium text-foreground transition-colors hover:bg-[color:var(--color-control-bg-hover)]",
+            compact ? "text-[12px]" : "text-[13px]",
+            !onRemove && "cursor-help",
+          )}
+          aria-label={`DOM tag ${item.label}`}
+        >
+          <MousePointer2Icon className="size-3.5 shrink-0 text-muted-foreground group-hover:text-foreground" />
+          <span className="truncate">dom-tag {item.label}</span>
+          {onRemove ? (
+            <XIcon className="size-3 shrink-0 text-muted-foreground group-hover:text-foreground" />
+          ) : null}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        className="max-w-[360px] whitespace-pre-wrap text-left text-[11px] leading-5"
+      >
+        {summary}
+      </TooltipContent>
+    </Tooltip>
   );
 };
 
@@ -976,10 +1156,18 @@ const ComposerAction: FC<
   > & {
     isVisionBlocked: boolean;
     onEnqueueQueuedMessage: (
+      input: ComposerQueuedMessageRequest,
+    ) => Promise<string>;
+    onGuideQueuedMessage: (
+      input: ComposerQueuedMessageRequest,
+    ) => Promise<void>;
+    browserContextItems: BrowserContextItem[];
+    createQueuedMessageRequest: (
       text: string,
       source?: QueuedMessage["source"],
-    ) => Promise<string>;
-    onGuideQueuedMessage: (text: string) => Promise<void>;
+    ) => ComposerQueuedMessageRequest;
+    appendBrowserContextUserMessage: (text: string) => boolean;
+    onClearBrowserContextItems: () => void;
     onAfterComposerEnqueue?: () => void;
   }
 > = ({
@@ -998,12 +1186,17 @@ const ComposerAction: FC<
   isVisionBlocked,
   onEnqueueQueuedMessage,
   onGuideQueuedMessage,
+  browserContextItems,
+  createQueuedMessageRequest,
+  appendBrowserContextUserMessage,
+  onClearBrowserContextItems,
   onAfterComposerEnqueue,
 }) => {
     const aui = useAui();
     const isThreadRunning = useAuiState((s) => s.thread.isRunning);
     const composerText = useAuiState((s) => s.composer.text);
     const composerHasText = composerText.trim().length > 0;
+    const hasBrowserContext = browserContextItems.length > 0;
     const currentModel = modelOptions.find((model) => model.id === currentModelId);
     const normalizedThinkingLevel = normalizeThinkingLevel(thinkingLevel);
     const effectiveThinkingLevel = getEffectiveThinkingLevel(
@@ -1021,7 +1214,16 @@ const ComposerAction: FC<
     const showStopAction = isThreadRunning || isCancelling;
     const disableSend =
       isVisionBlocked ||
-      (!showStopAction && attachments.length === 0 && !composerHasText);
+      (!showStopAction && attachments.length === 0 && !composerHasText && !hasBrowserContext);
+    const clearBrowserContextAfterSubmit = () => {
+      if (hasBrowserContext) {
+        onClearBrowserContextItems();
+      }
+    };
+    const sendComposerWithBrowserFallback = () => {
+      appendBrowserContextUserMessage(composerText);
+      onAfterComposerEnqueue?.();
+    };
 
     return (
       <div className="relative flex items-center justify-between pt-1">
@@ -1100,12 +1302,15 @@ const ComposerAction: FC<
               type="button"
               variant="ghost"
               size="icon"
-              disabled={!composerHasText || isCancelling}
+              disabled={(!composerHasText && !hasBrowserContext) || isCancelling}
               onClick={() => {
                 const draft = composerText.trim();
-                if (!draft) return;
-                void onEnqueueQueuedMessage(draft).then(() => {
+                if (!draft && !hasBrowserContext) return;
+                void onEnqueueQueuedMessage(
+                  createQueuedMessageRequest(draft),
+                ).then(() => {
                   aui.composer().setText("");
+                  clearBrowserContextAfterSubmit();
                   onAfterComposerEnqueue?.();
                 });
               }}
@@ -1120,12 +1325,15 @@ const ComposerAction: FC<
               type="button"
               variant="ghost"
               size="icon"
-              disabled={!composerHasText || isCancelling}
+              disabled={(!composerHasText && !hasBrowserContext) || isCancelling}
               onClick={() => {
                 const draft = composerText.trim();
-                if (!draft) return;
-                void onGuideQueuedMessage(draft).then(() => {
+                if (!draft && !hasBrowserContext) return;
+                void onGuideQueuedMessage(
+                  createQueuedMessageRequest(draft, "guided"),
+                ).then(() => {
                   aui.composer().setText("");
+                  clearBrowserContextAfterSubmit();
                   onAfterComposerEnqueue?.();
                 });
               }}
@@ -1176,19 +1384,34 @@ const ComposerAction: FC<
                 <ArrowUpIcon className="size-4" />
               </TooltipIconButton>
             ) : (
-              <ComposerPrimitive.Send asChild>
+              hasBrowserContext ? (
                 <TooltipIconButton
                   tooltip="发送"
                   side="bottom"
                   type="button"
                   variant="default"
                   size="icon"
+                  onClick={sendComposerWithBrowserFallback}
                   className="size-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-white shadow-none hover:bg-[color:var(--color-accent-hover)]"
                   aria-label="Send message"
                 >
                   <ArrowUpIcon className="size-4" />
                 </TooltipIconButton>
-              </ComposerPrimitive.Send>
+              ) : (
+                <ComposerPrimitive.Send asChild>
+                  <TooltipIconButton
+                    tooltip="发送"
+                    side="bottom"
+                    type="button"
+                    variant="default"
+                    size="icon"
+                    className="size-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-white shadow-none hover:bg-[color:var(--color-accent-hover)]"
+                    aria-label="Send message"
+                  >
+                    <ArrowUpIcon className="size-4" />
+                  </TooltipIconButton>
+                </ComposerPrimitive.Send>
+              )
             )}
           </>
         )}
@@ -1527,6 +1750,17 @@ const EditComposer: FC = () => {
 };
 
 const UserMessage: FC = () => {
+  const rawBrowserContextItems = useAuiState((s) => {
+    const custom = s.message.metadata?.custom as
+      | { browserContextItems?: unknown }
+      | undefined;
+    return custom?.browserContextItems ?? null;
+  });
+  const browserContextItems = useMemo(
+    () => getBrowserContextItems(rawBrowserContextItems),
+    [rawBrowserContextItems],
+  );
+
   return (
     <MessagePrimitive.Root
       className="fade-in slide-in-from-bottom-1 mx-auto grid w-full max-w-(--thread-max-width) animate-in auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 py-5 duration-150 [&:where(>*)]:col-start-2"
@@ -1541,6 +1775,13 @@ const UserMessage: FC = () => {
         <div className="relative col-start-2 min-w-0">
           <UserMessageGuidedBadge />
           <div className="wrap-break-word peer rounded-[var(--radius-shell)] bg-[color:var(--chela-message-user-bg)] px-4 py-2 text-[15px] leading-7 text-[color:var(--chela-message-user-text)] shadow-[var(--chela-message-user-shadow)] empty:hidden">
+            {browserContextItems.length > 0 ? (
+              <div className="mb-2 flex max-w-full flex-wrap justify-end gap-1.5">
+                {browserContextItems.map((item) => (
+                  <BrowserDomTag key={item.id} item={item} compact />
+                ))}
+              </div>
+            ) : null}
             <MessagePrimitive.Parts />
           </div>
           <div className="mt-1 flex min-h-6 justify-end">

@@ -7,6 +7,7 @@ import type {
   QueuedMessage,
   SelectedFile,
 } from "../../shared/contracts.js";
+import { getBrowserContextItems } from "../../shared/browser-context.js";
 import { atomicWrite, readJsonFile } from "./io.js";
 import { getIndexPath, getSessionMetaPath } from "./paths.js";
 import {
@@ -90,6 +91,8 @@ function normalizeQueuedMessage(
   message: Partial<QueuedMessage>,
 ): QueuedMessage {
   const source = message.source === "guided" ? "guided" : "queued";
+  const browserContextItems = getBrowserContextItems(message.browserContextItems);
+  const displayText = message.displayText?.trim();
 
   return {
     id:
@@ -97,6 +100,8 @@ function normalizeQueuedMessage(
         ? message.id
         : `queued-${randomUUID()}`,
     text: typeof message.text === "string" ? message.text.trim() : "",
+    ...(displayText ? { displayText } : {}),
+    ...(browserContextItems.length > 0 ? { browserContextItems } : {}),
     createdAt: normalizeTimestamp(message.createdAt),
     source,
   };

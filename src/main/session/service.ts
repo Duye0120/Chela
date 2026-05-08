@@ -11,11 +11,13 @@ import { join } from "node:path";
 import type {
   ChatSession,
   ChatSessionSummary,
+  EnqueueQueuedMessageInput,
   QueuedMessage,
   SessionMemorySnapshot,
   SessionTranscriptEvent,
 } from "../../shared/contracts.js";
 import { createEmptySession } from "../../shared/contracts.js";
+import { getBrowserContextItems } from "../../shared/browser-context.js";
 import type { HarnessRunSnapshot } from "../harness/types.js";
 import {
   atomicWrite,
@@ -542,14 +544,18 @@ export function listPersistedQueuedMessages(sessionId: string): QueuedMessage[] 
 
 export function enqueuePersistedQueuedMessage(
   sessionId: string,
-  text: string,
-  source: QueuedMessage["source"] = "queued",
+  input: Omit<EnqueueQueuedMessageInput, "sessionId">,
 ): QueuedMessage {
+  const browserContextItems = getBrowserContextItems(input.browserContextItems);
   const nextQueuedMessage: QueuedMessage = {
     id: `queued-${randomUUID()}`,
-    text,
+    text: input.text,
+    ...(input.displayText?.trim()
+      ? { displayText: input.displayText.trim() }
+      : {}),
+    ...(browserContextItems.length > 0 ? { browserContextItems } : {}),
     createdAt: new Date().toISOString(),
-    source,
+    source: input.source ?? "queued",
   };
 
   const meta = updateSessionMeta(sessionId, (currentMeta) => {

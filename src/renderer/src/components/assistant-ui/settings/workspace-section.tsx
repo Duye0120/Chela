@@ -2,14 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowTopRightOnSquareIcon,
   ClipboardDocumentIcon,
+  DocumentTextIcon,
   FolderIcon,
   PencilSquareIcon,
 } from "@heroicons/react/24/outline";
 import type {
   ChatSessionSummary,
+  FilePreviewResult,
   Settings,
   SessionGroup,
   SoulFilesStatus,
+  WorkspaceDirectoryListing,
+  WorkspaceFileEntry,
 } from "@shared/contracts";
 import { Badge } from "@renderer/components/assistant-ui/badge";
 import { Button } from "@renderer/components/assistant-ui/button";
@@ -28,6 +32,18 @@ function formatBytes(sizeBytes: number): string {
 
 function getProjectName(workspace: string) {
   return workspace.split(/[\\/]/).filter(Boolean).at(-1) ?? workspace;
+}
+
+function formatRelativePath(relativePath: string) {
+  return relativePath || ".";
+}
+
+function formatFileKind(kind: WorkspaceFileEntry["kind"]) {
+  if (kind === "directory") return "目录";
+  if (kind === "text") return "文本";
+  if (kind === "image") return "图片";
+  if (kind === "binary") return "二进制";
+  return "未知";
 }
 
 type WorkspaceListItem = {
@@ -133,6 +149,144 @@ function WorkspaceListRow({
   );
 }
 
+function WorkspaceFileBrowser({
+  listing,
+  preview,
+  loading,
+  previewLoading,
+  selectedPath,
+  onOpenDirectory,
+  onPreviewFile,
+}: {
+  listing: WorkspaceDirectoryListing | null;
+  preview: FilePreviewResult | null;
+  loading: boolean;
+  previewLoading: boolean;
+  selectedPath: string | null;
+  onOpenDirectory: (relativePath: string) => void;
+  onPreviewFile: (relativePath: string) => void;
+}) {
+  const entries = listing?.entries ?? [];
+
+  return (
+    <div className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-5 py-5 shadow-[var(--color-control-shadow)]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[13px] font-medium text-foreground">
+            文件浏览
+          </p>
+          <p className="mt-1 break-all font-mono text-[12px] leading-6 text-muted-foreground">
+            {listing ? formatRelativePath(listing.relativePath) : "."}
+          </p>
+        </div>
+        {listing?.truncated ? (
+          <Badge variant="secondary" className="text-muted-foreground">
+            仅显示前 250 项
+          </Badge>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(260px,0.9fr)_minmax(0,1.1fr)]">
+        <div className="min-h-[280px] rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] p-2">
+          {loading ? (
+            <div className="px-3 py-3 text-[12px] text-muted-foreground">
+              正在读取目录…
+            </div>
+          ) : (
+            <div className="flex max-h-[360px] flex-col gap-1 overflow-auto pr-1">
+              {listing?.parentPath !== null && listing ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenDirectory(listing.parentPath ?? "")}
+                  className="w-full rounded-[var(--radius-shell)] px-3 py-2 text-left text-[12px] text-muted-foreground transition-colors hover:bg-[color:var(--color-control-bg-hover)]"
+                >
+                  ..
+                </button>
+              ) : null}
+              {entries.length > 0 ? (
+                entries.map((entry) => {
+                  const selected = selectedPath === entry.relativePath;
+                  const isDirectory = entry.kind === "directory";
+                  return (
+                    <button
+                      type="button"
+                      key={entry.relativePath}
+                      onClick={() =>
+                        isDirectory
+                          ? onOpenDirectory(entry.relativePath)
+                          : onPreviewFile(entry.relativePath)
+                      }
+                      className={cn(
+                        "w-full rounded-[var(--radius-shell)] px-3 py-2 text-left transition-colors",
+                        selected
+                          ? "bg-[color:var(--color-control-bg-active)]"
+                          : "hover:bg-[color:var(--color-control-bg-hover)]",
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        {isDirectory ? (
+                          <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
+                        ) : (
+                          <DocumentTextIcon className="size-4 shrink-0 text-muted-foreground" />
+                        )}
+                        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">
+                          {entry.name}
+                        </span>
+                      </span>
+                      <span className="mt-1 block truncate pl-6 text-[11px] text-muted-foreground">
+                        {formatFileKind(entry.kind)}
+                        {typeof entry.sizeBytes === "number"
+                          ? ` · ${formatBytes(entry.sizeBytes)}`
+                          : ""}
+                      </span>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="px-3 py-3 text-[12px] text-muted-foreground">
+                  当前目录为空。
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="min-h-[280px] rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-4 py-4">
+          {previewLoading ? (
+            <p className="text-[12px] text-muted-foreground">正在读取预览…</p>
+          ) : preview ? (
+            <div className="flex h-full flex-col gap-3">
+              <div>
+                <p className="break-all font-mono text-[12px] font-medium text-foreground">
+                  {preview.path}
+                </p>
+                {preview.truncated ? (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    预览已截断
+                  </p>
+                ) : null}
+              </div>
+              {preview.error ? (
+                <p className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-2 text-[12px] leading-5 text-muted-foreground">
+                  {preview.error}
+                </p>
+              ) : (
+                <pre className="min-h-0 flex-1 overflow-auto rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-3 font-mono text-[11px] leading-5 text-foreground">
+                  {preview.previewText}
+                </pre>
+              )}
+            </div>
+          ) : (
+            <p className="text-[12px] leading-6 text-muted-foreground">
+              选择左侧文本文件后在这里查看预览。目录会直接进入，图片和二进制文件只显示类型信息。
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function WorkspaceSection({
   settings,
   groups,
@@ -155,6 +309,11 @@ export function WorkspaceSection({
   const [pickingFolder, setPickingFolder] = useState(false);
   const [copyDone, setCopyDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fileListing, setFileListing] = useState<WorkspaceDirectoryListing | null>(null);
+  const [fileBrowserLoading, setFileBrowserLoading] = useState(false);
+  const [filePreview, setFilePreview] = useState<FilePreviewResult | null>(null);
+  const [filePreviewLoading, setFilePreviewLoading] = useState(false);
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const copyTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -354,6 +513,66 @@ export function WorkspaceSection({
     }
   }, [desktopApi, onSettingsChange, settings.workspace]);
 
+  const loadFileListing = useCallback(
+    async (relativePath = "") => {
+      if (!desktopApi?.workspace) {
+        return;
+      }
+
+      setFileBrowserLoading(true);
+      setError(null);
+
+      try {
+        const nextListing = await desktopApi.workspace.listDirectory(relativePath);
+        setFileListing(nextListing);
+        setSelectedFilePath(null);
+        setFilePreview(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "读取工作区目录失败");
+      } finally {
+        setFileBrowserLoading(false);
+      }
+    },
+    [desktopApi],
+  );
+
+  useEffect(() => {
+    void loadFileListing("");
+  }, [loadFileListing, settings.workspace]);
+
+  const handleOpenDirectory = useCallback(
+    (relativePath: string) => {
+      void loadFileListing(relativePath);
+    },
+    [loadFileListing],
+  );
+
+  const handlePreviewFile = useCallback(
+    async (relativePath: string) => {
+      if (!desktopApi?.workspace) {
+        return;
+      }
+
+      setSelectedFilePath(relativePath);
+      setFilePreviewLoading(true);
+      setError(null);
+
+      try {
+        const preview = await desktopApi.workspace.readFilePreview(relativePath);
+        setFilePreview(preview);
+      } catch (err) {
+        setFilePreview({
+          path: relativePath,
+          truncated: false,
+          error: err instanceof Error ? err.message : "读取文件预览失败",
+        });
+      } finally {
+        setFilePreviewLoading(false);
+      }
+    },
+    [desktopApi],
+  );
+
   return (
     <SettingsCard>
       <div className="space-y-4 px-6 pb-6 pt-1">
@@ -535,6 +754,16 @@ export function WorkspaceSection({
                       </div>
                     )}
                   </div>
+
+                  <WorkspaceFileBrowser
+                    listing={fileListing}
+                    preview={filePreview}
+                    loading={fileBrowserLoading}
+                    previewLoading={filePreviewLoading}
+                    selectedPath={selectedFilePath}
+                    onOpenDirectory={handleOpenDirectory}
+                    onPreviewFile={handlePreviewFile}
+                  />
                 </>
               ) : (
                 <div className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-5 py-5 text-[13px] leading-6 text-muted-foreground shadow-[var(--color-control-shadow)]">

@@ -19,6 +19,7 @@ import {
   validateSourceIdPayload,
   validateSettingsUpdatePayload,
   validateWorkspacePathPayload,
+  validateWorkspaceRelativePathPayload,
 } from "../src/main/ipc/schema.ts";
 
 assert.throws(
@@ -375,6 +376,40 @@ assert.throws(
 );
 
 assert.equal(validateWorkspacePathPayload("D:\\a_github\\first_pi_agent"), "D:\\a_github\\first_pi_agent");
+assert.equal(
+  validateWorkspaceRelativePathPayload(IPC_CHANNELS.workspaceListDirectory, undefined, {
+    allowEmpty: true,
+  }),
+  "",
+);
+assert.equal(
+  validateWorkspaceRelativePathPayload(IPC_CHANNELS.workspaceReadFilePreview, "src/main/index.ts"),
+  "src/main/index.ts",
+);
+assert.throws(
+  () =>
+    validateWorkspaceRelativePathPayload(
+      IPC_CHANNELS.workspaceReadFilePreview,
+      "src/main/index.ts\nnext",
+    ),
+  (error) =>
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "INVALID_IPC_PAYLOAD" &&
+    String((error as { message?: unknown }).message).includes("relativePath"),
+);
+assert.throws(
+  () =>
+    validateWorkspaceRelativePathPayload(
+      IPC_CHANNELS.workspaceReadFilePreview,
+      "D:\\a_github\\first_pi_agent\\src\\main\\index.ts",
+    ),
+  (error) =>
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "INVALID_IPC_PAYLOAD" &&
+    String((error as { message?: unknown }).message).includes("relativePath"),
+);
 assert.equal(validateServerNamePayload(IPC_CHANNELS.mcpRestartServer, "filesystem"), "filesystem");
 assert.deepEqual(
   validateMcpServerConfigDraftPayload({

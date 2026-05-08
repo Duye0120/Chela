@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CommandLineIcon,
 } from "@heroicons/react/24/outline";
-import { ActivityIcon, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { ActivityIcon, Globe2Icon, PanelRightClose, PanelRightOpen } from "lucide-react";
 import type {
   ChatSession,
   ChatSessionSummary,
@@ -26,6 +26,7 @@ import { Button } from "@renderer/components/assistant-ui/button";
 import {
   DiffWorkbenchContent,
 } from "@renderer/components/assistant-ui/diff-panel";
+import { BrowserPreviewPanel } from "@renderer/components/browser-preview/BrowserPreviewPanel";
 import { TracePanel } from "@renderer/components/assistant-ui/trace-panel";
 import {
   SettingsView,
@@ -91,6 +92,7 @@ import { useAppGitState } from "@renderer/hooks/use-app-git-state";
 import { useSessionAttachments } from "@renderer/hooks/use-session-attachments";
 import type { PanelImperativeHandle, PanelSize } from "react-resizable-panels";
 import { useLocation, useNavigate } from "react-router-dom";
+import type { BrowserContextItem } from "@renderer/lib/browser-interview";
 
 export default function App() {
   const desktopApi = window.desktopApi;
@@ -108,6 +110,9 @@ export default function App() {
     {},
   );
   const [runningSessionIds, setRunningSessionIds] = useState<string[]>([]);
+  const [browserContextBySessionId, setBrowserContextBySessionId] = useState<
+    Record<string, BrowserContextItem[]>
+  >({});
   const [contextSummaryBySessionId, setContextSummaryBySessionId] = useState<
     Record<string, ContextSummary>
   >({});
@@ -163,8 +168,11 @@ export default function App() {
     rightPanelState.open && rightPanelState.activeView === "diff";
   const tracePanelOpen =
     rightPanelState.open && rightPanelState.activeView === "trace";
+  const browserPanelOpen =
+    rightPanelState.open && rightPanelState.activeView === "browser";
   const rightPanelVisibleOrAnimating =
-    mainView === "thread" && (diffPanelOpen || tracePanelOpen || rightPanelAnimating);
+    mainView === "thread" &&
+    (diffPanelOpen || tracePanelOpen || browserPanelOpen || rightPanelAnimating);
   const threadTerminalOpen = terminalOpen && !rightPanelVisibleOrAnimating;
   const resolvedRightPanelWidth = useMemo(() => {
     const containerWidth =
@@ -1000,6 +1008,58 @@ export default function App() {
     updateRightPanelState({ open: false });
   }, [armRightPanelAnimation, updateRightPanelState]);
 
+  const handleBrowserElementSelected = useCallback((item: BrowserContextItem) => {
+    const sessionId = activeSessionIdRef.current;
+    if (!sessionId) {
+      return;
+    }
+
+    setBrowserContextBySessionId((current) => {
+      const existing = current[sessionId] ?? [];
+      const nextItems = [
+        item,
+        ...existing.filter(
+          (candidate) =>
+            candidate.element.selector !== item.element.selector ||
+            candidate.element.sourceUrl !== item.element.sourceUrl,
+        ),
+      ].slice(0, 8);
+
+      return {
+        ...current,
+        [sessionId]: nextItems,
+      };
+    });
+  }, []);
+
+  const handleRemoveBrowserContextItem = useCallback(
+    (sessionId: string, itemId: string) => {
+      setBrowserContextBySessionId((current) => {
+        const nextItems = (current[sessionId] ?? []).filter(
+          (item) => item.id !== itemId,
+        );
+        return {
+          ...current,
+          [sessionId]: nextItems,
+        };
+      });
+    },
+    [],
+  );
+
+  const handleClearBrowserContextItems = useCallback((sessionId: string) => {
+    setBrowserContextBySessionId((current) => {
+      if ((current[sessionId] ?? []).length === 0) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [sessionId]: [],
+      };
+    });
+  }, []);
+
   const toggleDiffPanel = useCallback(() => {
     if (rightPanelToggleInFlightRef.current) return;
     rightPanelToggleInFlightRef.current = true;
@@ -1035,6 +1095,46 @@ export default function App() {
   }, [
     armRightPanelAnimation,
     diffPanelOpen,
+    resolvedRightPanelWidth,
+    threadWorkspaceWidth,
+    updateRightPanelState,
+  ]);
+
+  const toggleBrowserPanel = useCallback(() => {
+    if (rightPanelToggleInFlightRef.current) return;
+    rightPanelToggleInFlightRef.current = true;
+
+    try {
+      const containerWidth = Math.round(
+        threadWorkspaceRef.current?.getBoundingClientRect().width ?? threadWorkspaceWidth
+      );
+
+      const nextPanelWidth = containerWidth > 0
+        ? clampRightPanelWidth(
+          typeof rightPanelStateRef.current.width === "number"
+            ? rightPanelStateRef.current.width
+            : getDefaultRightPanelWidth(containerWidth),
+          containerWidth
+        )
+        : resolvedRightPanelWidth;
+
+      armRightPanelAnimation();
+
+      if (browserPanelOpen) {
+        updateRightPanelState({ open: false });
+      } else {
+        updateRightPanelState({
+          open: true,
+          activeView: "browser",
+          width: nextPanelWidth,
+        });
+      }
+    } finally {
+      rightPanelToggleInFlightRef.current = false;
+    }
+  }, [
+    armRightPanelAnimation,
+    browserPanelOpen,
     resolvedRightPanelWidth,
     threadWorkspaceWidth,
     updateRightPanelState,
@@ -1082,7 +1182,7 @@ export default function App() {
 
   const handleRightPanelResizeMouseDown = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      if (!diffPanelOpen && !tracePanelOpen) {
+      if (!diffPanelOpen && !tracePanelOpen && !browserPanelOpen) {
         return;
       }
 
@@ -1141,7 +1241,9 @@ export default function App() {
       document.addEventListener("mouseup", handleMouseUp);
     },
     [
+      browserPanelOpen,
       diffPanelOpen,
+      tracePanelOpen,
       resolvedRightPanelWidth,
       threadWorkspaceWidth,
       updateRightPanelState,
@@ -1430,6 +1532,13 @@ export default function App() {
                   void dismissInterruptedApproval(session.id, runId);
                 }}
                 onResumeInterruptedApproval={resumeInterruptedApproval}
+                browserContextItems={browserContextBySessionId[session.id] ?? []}
+                onRemoveBrowserContextItem={(itemId) =>
+                  handleRemoveBrowserContextItem(session.id, itemId)
+                }
+                onClearBrowserContextItems={() =>
+                  handleClearBrowserContextItems(session.id)
+                }
                 visible={visible}
                 disableGlobalSideEffects={hasAnyRunningSessions}
               />
@@ -1441,6 +1550,7 @@ export default function App() {
   }, [
     activeSessionId,
     attachFiles,
+    browserContextBySessionId,
     contextSummaryBySessionId,
     currentModelId,
     createNewSession,
@@ -1459,7 +1569,9 @@ export default function App() {
     pasteFiles,
     persistSession,
     gitBranchSummary,
+    handleClearBrowserContextItems,
     handleGitStateChanged,
+    handleRemoveBrowserContextItem,
     reloadSession,
     sessionCache,
     summaries,
@@ -1544,7 +1656,7 @@ export default function App() {
         className="relative min-h-0 flex-1"
         data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
         {...(sidebarAnimating ? { "data-sidebar-animating": "" } : {})}
-        data-right-panel-open={diffPanelOpen || tracePanelOpen ? "true" : "false"}
+        data-right-panel-open={diffPanelOpen || tracePanelOpen || browserPanelOpen ? "true" : "false"}
         {...(rightPanelAnimating ? { "data-right-panel-animating": "" } : {})}
       >
         <ResizablePanelGroup
@@ -1665,6 +1777,23 @@ export default function App() {
                             type="button"
                             variant="ghost"
                             size="icon"
+                            onClick={toggleBrowserPanel}
+                            className={`relative h-9 w-9 cursor-pointer rounded-[var(--radius-shell)] border-none bg-transparent shadow-none ring-0 transition-[background-color,color,opacity,transform] duration-200 ease-out hover:bg-shell-toolbar-hover ${browserPanelOpen ? "bg-shell-toolbar-hover text-foreground scale-[0.98]" : "text-muted-foreground hover:scale-[1.02]"}`}
+                            aria-label={browserPanelOpen ? "收起浏览器选择" : "展开浏览器选择"}
+                          >
+                            <Globe2Icon className="h-4 w-4" strokeWidth={1.9} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          {browserPanelOpen ? "收起浏览器选择" : "展开浏览器选择"}
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
                             onClick={toggleTracePanel}
                             className={`relative h-9 w-9 cursor-pointer rounded-[var(--radius-shell)] border-none bg-transparent shadow-none ring-0 transition-[background-color,color,opacity,transform] duration-200 ease-out hover:bg-shell-toolbar-hover ${tracePanelOpen ? "bg-shell-toolbar-hover text-foreground scale-[0.98]" : "text-muted-foreground hover:scale-[1.02]"}`}
                             aria-label={tracePanelOpen ? "收起运行追踪" : "展开运行追踪"}
@@ -1705,14 +1834,14 @@ export default function App() {
 
                 {mainView === "thread" ? (
                   <div
-                    className={`chela-right-panel-shell relative flex min-h-0 shrink-0 flex-col overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-surface)] ${diffPanelOpen || tracePanelOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"} ${diffPanelOpen || tracePanelOpen || rightPanelAnimating ? "border border-black/5 dark:border-white/6" : "border border-transparent"}`}
+                    className={`chela-right-panel-shell relative flex min-h-0 shrink-0 flex-col overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-surface)] ${diffPanelOpen || tracePanelOpen || browserPanelOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"} ${diffPanelOpen || tracePanelOpen || browserPanelOpen || rightPanelAnimating ? "border border-black/5 dark:border-white/6" : "border border-transparent"}`}
                     style={{
-                      width: diffPanelOpen || tracePanelOpen ? resolvedRightPanelWidth : 0,
-                      marginLeft: diffPanelOpen || tracePanelOpen ? RIGHT_PANEL_GAP_PX : 0,
+                      width: diffPanelOpen || tracePanelOpen || browserPanelOpen ? resolvedRightPanelWidth : 0,
+                      marginLeft: diffPanelOpen || tracePanelOpen || browserPanelOpen ? RIGHT_PANEL_GAP_PX : 0,
                     }}
                   >
                     <div
-                      className={`absolute left-0 top-0 bottom-0 z-20 flex w-3 -translate-x-1/2 cursor-col-resize justify-center group ${(diffPanelOpen || tracePanelOpen) ? "pointer-events-auto" : "pointer-events-none opacity-0"}`}
+                      className={`absolute left-0 top-0 bottom-0 z-20 flex w-3 -translate-x-1/2 cursor-col-resize justify-center group ${(diffPanelOpen || tracePanelOpen || browserPanelOpen) ? "pointer-events-auto" : "pointer-events-none opacity-0"}`}
                       onMouseDown={handleRightPanelResizeMouseDown}
                     >
                       <div className="h-full w-px bg-border/60 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-active:opacity-100" />
@@ -1727,6 +1856,15 @@ export default function App() {
                               overview={gitOverview}
                               isLoading={gitOverviewLoading}
                               onRefresh={handleRefreshGitOverview}
+                              className="h-full"
+                            />
+                          </div>
+                        )}
+                        {browserPanelOpen && (
+                          <div className="chela-right-panel-content min-h-0 flex-1 overflow-hidden translate-x-0 opacity-100">
+                            <BrowserPreviewPanel
+                              onClose={closeRightPanel}
+                              onElementSelected={handleBrowserElementSelected}
                               className="h-full"
                             />
                           </div>

@@ -276,6 +276,29 @@ export function validateWorkspacePathPayload(value: unknown): string {
   return value;
 }
 
+export function validateWorkspaceRelativePathPayload(
+  channel: string,
+  value: unknown,
+  options?: { allowEmpty?: boolean },
+): string {
+  if (value === undefined && options?.allowEmpty) {
+    return "";
+  }
+
+  if (options?.allowEmpty) {
+    expectString(value, channel, "relativePath");
+  } else {
+    expectNonEmptyString(value, channel, "relativePath");
+  }
+
+  expectSafeSingleLineString(value, channel, "relativePath");
+  if (path.isAbsolute(value)) {
+    throw invalidIpcPayload(channel, "relativePath", "相对路径");
+  }
+
+  return value;
+}
+
 export function validateServerNamePayload(channel: string, value: unknown): string {
   expectNonEmptyString(value, channel, "serverName");
   expectSafeSingleLineString(value, channel, "serverName");

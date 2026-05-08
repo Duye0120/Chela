@@ -1,19 +1,10 @@
 import { Button } from "@renderer/components/assistant-ui/button";
+import { ChelaAsciiBoot } from "@renderer/components/assistant-ui/chela-ascii-boot";
 
 export function AppBootingScreen() {
   return (
-    <main className="grid h-screen place-items-center bg-[#f0f0f0] text-gray-400">
-      <div className="rounded-xl border border-black/6 bg-white/80 px-6 py-4 shadow-sm">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400">
-          Booting
-        </p>
-        <h1 className="mt-2 text-lg font-medium text-gray-800">
-          正在拉起桌面聊天壳…
-        </h1>
-        <p className="mt-1 text-xs text-gray-400">
-          会话状态、窗口状态和本地文件能力正在就位。
-        </p>
-      </div>
+    <main className="chela-ascii-boot-screen">
+      <ChelaAsciiBoot />
     </main>
   );
 }
