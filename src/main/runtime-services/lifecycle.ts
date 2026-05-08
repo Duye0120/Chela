@@ -1,8 +1,11 @@
 import { orderRuntimeServices } from "./registry.js";
 import type {
   RuntimeServiceDefinition,
+  RuntimeServiceHealthStatus,
   RuntimeServiceLifecycleOptions,
   RuntimeServiceState,
+  RuntimeServiceStatus,
+  RuntimeServiceStatusReport,
 } from "./types.js";
 
 export class RuntimeServiceLifecycle {
@@ -31,7 +34,13 @@ export class RuntimeServiceLifecycle {
       }
 
       const startedAt = this.now();
-      this.setState(definition, { status: "starting", started: false, updatedAt: startedAt });
+      this.setState(definition, {
+        status: "starting",
+        started: false,
+        error: undefined,
+        errorMessage: undefined,
+        updatedAt: startedAt,
+      });
 
       try {
         await definition.start();
@@ -39,6 +48,8 @@ export class RuntimeServiceLifecycle {
           status: "healthy",
           started: true,
           startDurationMs: Math.max(0, this.now() - startedAt),
+          error: undefined,
+          errorMessage: undefined,
           updatedAt: this.now(),
         });
         startedThisRound.push(definition);
@@ -48,6 +59,7 @@ export class RuntimeServiceLifecycle {
           started: false,
           startDurationMs: Math.max(0, this.now() - startedAt),
           error,
+          errorMessage: errorToMessage(error),
           updatedAt: this.now(),
         });
         this.onError?.(definition, error);
@@ -79,6 +91,45 @@ export class RuntimeServiceLifecycle {
 
   getStates(): RuntimeServiceState[] {
     return Array.from(this.states.values());
+  }
+
+  async getStatusReport(): Promise<RuntimeServiceStatusReport> {
+    const ordered = this.orderedDefinitions.length > 0 ? this.orderedDefinitions : orderRuntimeServices(this.definitions);
+    const services: RuntimeServiceStatus[] = [];
+
+    for (const definition of ordered) {
+      const current = this.getState(definition);
+      const health = await this.readHealth(definition);
+      const state = this.states.get(definition.name) ?? current;
+      services.push({
+        name: definition.name,
+        group: definition.group,
+        criticality: definition.criticality,
+        status: health?.status ?? state.status,
+        started: state.started,
+        startDurationMs: state.startDurationMs,
+        message: health?.message,
+        errorMessage: state.errorMessage,
+        updatedAt: health?.updatedAt ?? state.updatedAt,
+      });
+    }
+
+    const totals = {
+      total: services.length,
+      healthy: countStatus(services, "healthy"),
+      degraded: countStatus(services, "degraded"),
+      failed: countStatus(services, "failed"),
+      starting: countStatus(services, "starting"),
+      stopped: countStatus(services, "stopped"),
+      unknown: countStatus(services, "unknown"),
+    };
+
+    return {
+      status: summarizeStatus(services),
+      updatedAt: this.now(),
+      totals,
+      services,
+    };
   }
 
   isStarted(): boolean {
@@ -117,4 +168,63 @@ export class RuntimeServiceLifecycle {
     const current = this.getState(definition);
     this.states.set(definition.name, { ...current, ...patch, definition });
   }
+
+  private async readHealth(definition: RuntimeServiceDefinition): Promise<RuntimeServiceState["health"]> {
+    if (!definition.health) {
+      return this.states.get(definition.name)?.health;
+    }
+
+    try {
+      const health = await definition.health();
+      this.setState(definition, {
+        health,
+        status: health.status,
+        error: health.status === "failed" || health.status === "degraded" ? this.states.get(definition.name)?.error : undefined,
+        updatedAt: health.updatedAt,
+        errorMessage: health.status === "failed" || health.status === "degraded" ? health.message : undefined,
+      });
+      return health;
+    } catch (error) {
+      const health = {
+        status: "degraded" as const,
+        message: `health check failed: ${errorToMessage(error)}`,
+        updatedAt: this.now(),
+      };
+      this.setState(definition, {
+        health,
+        status: "degraded",
+        error,
+        errorMessage: health.message,
+        updatedAt: health.updatedAt,
+      });
+      return health;
+    }
+  }
+}
+
+function countStatus(services: RuntimeServiceStatus[], status: RuntimeServiceHealthStatus): number {
+  return services.filter((service) => service.status === status).length;
+}
+
+function summarizeStatus(services: RuntimeServiceStatus[]): RuntimeServiceHealthStatus {
+  if (services.some((service) => service.status === "failed" && service.criticality === "critical")) {
+    return "failed";
+  }
+  if (services.some((service) => service.status === "failed" || service.status === "degraded")) {
+    return "degraded";
+  }
+  if (services.some((service) => service.status === "starting")) {
+    return "starting";
+  }
+  if (services.length > 0 && services.every((service) => service.status === "healthy")) {
+    return "healthy";
+  }
+  if (services.length > 0 && services.every((service) => service.status === "stopped")) {
+    return "stopped";
+  }
+  return "unknown";
+}
+
+function errorToMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

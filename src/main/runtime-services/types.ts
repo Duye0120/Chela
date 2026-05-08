@@ -26,7 +26,9 @@ export type RuntimeServiceState = {
   status: RuntimeServiceHealthStatus;
   started: boolean;
   startDurationMs?: number;
+  health?: RuntimeServiceHealth;
   error?: unknown;
+  errorMessage?: string;
   updatedAt: number;
 };
 
@@ -34,4 +36,31 @@ export type RuntimeServiceLifecycleOptions = {
   now?: () => number;
   onError?: (service: RuntimeServiceDefinition, error: unknown) => void;
   onRollbackError?: (service: RuntimeServiceDefinition, error: unknown) => void;
+};
+
+export type RuntimeServiceStatus = {
+  name: string;
+  group: RuntimeServiceGroup;
+  criticality: RuntimeServiceCriticality;
+  status: RuntimeServiceHealthStatus;
+  started: boolean;
+  startDurationMs?: number;
+  message?: string;
+  errorMessage?: string;
+  updatedAt: number;
+};
+
+export type RuntimeServiceStatusReport = {
+  status: RuntimeServiceHealthStatus;
+  updatedAt: number;
+  totals: {
+    total: number;
+    healthy: number;
+    degraded: number;
+    failed: number;
+    starting: number;
+    stopped: number;
+    unknown: number;
+  };
+  services: RuntimeServiceStatus[];
 };
