@@ -13,7 +13,11 @@ export function createBrowserInspectorScript() {
   let hovered = null;
   let pendingTarget = null;
   let frame = 0;
+  let pinMode = false;
+  let pinCounter = 0;
   const selections = [];
+  const pins = [];
+  const pendingPins = [];
 
   const escapeCss = (value) => {
     if (window.CSS && typeof window.CSS.escape === "function") {
@@ -47,6 +51,33 @@ export function createBrowserInspectorScript() {
     return overlay;
   };
 
+  const createPinMarker = (rect, number, pinId) => {
+    const marker = document.createElement("div");
+    marker.className = "chela-browser-pin-marker";
+    marker.dataset.chelaPinId = pinId;
+    marker.textContent = String(number);
+    marker.style.cssText = [
+      "position: fixed !important",
+      "left: " + Math.max(8, Math.round(rect.left)) + "px !important",
+      "top: " + Math.max(8, Math.round(rect.top)) + "px !important",
+      "z-index: 2147483645 !important",
+      "min-width: 22px !important",
+      "height: 22px !important",
+      "padding: 0 6px !important",
+      "display: inline-flex !important",
+      "align-items: center !important",
+      "justify-content: center !important",
+      "border-radius: 999px !important",
+      "background: #f97316 !important",
+      "color: #ffffff !important",
+      "font: 700 12px/1 ui-sans-serif, system-ui, sans-serif !important",
+      "box-shadow: 0 6px 20px rgba(0,0,0,0.22) !important",
+      "pointer-events: none !important"
+    ].join(";");
+    document.documentElement.appendChild(marker);
+    return marker;
+  };
+
   const ensureLabel = () => {
     if (label && document.documentElement.contains(label)) {
       return label;
@@ -75,7 +106,8 @@ export function createBrowserInspectorScript() {
   const isInspectorElement = (target) =>
     target === overlay || target === label ||
     target?.id === "chela-inspector-highlight" ||
-    target?.id === "chela-inspector-label";
+    target?.id === "chela-inspector-label" ||
+    target?.classList?.contains("chela-browser-pin-marker");
 
   const selectorFor = (element) => {
     const parts = [];
@@ -109,6 +141,67 @@ export function createBrowserInspectorScript() {
     }
 
     return parts.join(" > ");
+  };
+
+
+  const cleanText = (value, maxLength) => {
+    const normalized = String(value || "").replace(/\s+/g, " ").trim();
+    if (normalized.length <= maxLength) return normalized;
+    return normalized.slice(0, maxLength).trimEnd() + "...";
+  };
+
+  const isVisible = (element) => {
+    if (!element || typeof element.getBoundingClientRect !== "function") return false;
+    const rect = element.getBoundingClientRect();
+    const styles = window.getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0 && styles.visibility !== "hidden" && styles.display !== "none";
+  };
+
+  const collectPageSnapshot = () => {
+    const description = document.querySelector('meta[name="description"]')?.getAttribute("content") || null;
+    const headings = Array.from(document.querySelectorAll("h1,h2,h3"))
+      .filter(isVisible)
+      .map((element) => cleanText(element.textContent, 120))
+      .filter(Boolean)
+      .slice(0, 12);
+    const visibleText = cleanText(document.body?.innerText || "", 4000);
+    const interactiveElements = Array.from(document.querySelectorAll("a,button,input,textarea,select,[role='button'],[role='link'],[role='textbox'],[tabindex]"))
+      .filter(isVisible)
+      .map((element) => {
+        const tagName = element.tagName.toLowerCase();
+        const label =
+          cleanText(element.getAttribute("aria-label"), 100) ||
+          cleanText(element.getAttribute("title"), 100) ||
+          cleanText(element.textContent, 100) ||
+          cleanText(element.getAttribute("placeholder"), 100) ||
+          cleanText(element.getAttribute("value"), 100) ||
+          tagName;
+        return {
+          label,
+          selector: selectorFor(element),
+          tagName,
+          role: element.getAttribute("role") || null,
+          href: element.getAttribute("href") || null,
+          inputType: element.getAttribute("type") || null
+        };
+      })
+      .filter((element) => element.label)
+      .slice(0, 30);
+
+    return {
+      sourceUrl: window.location.href,
+      title: document.title || null,
+      description,
+      viewport: {
+        x: 0,
+        y: 0,
+        width: window.innerWidth,
+        height: window.innerHeight
+      },
+      headings,
+      visibleText,
+      interactiveElements
+    };
   };
 
   const labelFor = (element) => {
@@ -189,12 +282,76 @@ export function createBrowserInspectorScript() {
     event.stopPropagation();
     const target = event.target || hovered;
     if (!target || isInspectorElement(target)) return;
-    selections.push(collectElement(target));
+    const element = collectElement(target);
+    if (pinMode) {
+      pinCounter += 1;
+      const pinId = "chela-pin-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+      const rect = target.getBoundingClientRect();
+      createPinMarker(rect, pinCounter, pinId);
+      const pendingPin = {
+        pinId,
+        markerNumber: pinCounter,
+        sourceUrl: element.sourceUrl,
+        selector: element.selector,
+        tagName: element.tagName,
+        textContent: element.textContent,
+        boundingRect: element.boundingRect,
+        viewport: {
+          x: 0,
+          y: 0,
+          width: window.innerWidth,
+          height: window.innerHeight
+        },
+        styles: element.styles
+      };
+      pins.push(pendingPin);
+      pendingPins.push(pendingPin);
+      return;
+    }
+    selections.push(element);
   };
 
+
+  const focusPin = (pinId) => {
+    const pin = pins.find((item) => item.pinId === pinId);
+    const selector = pin && pin.selector;
+    if (!selector) return { ok: false, reason: "pin-not-found" };
+    let element = null;
+    try {
+      element = document.querySelector(selector);
+    } catch {
+      return { ok: false, reason: "selector-invalid" };
+    }
+    if (!element || typeof element.getBoundingClientRect !== "function") {
+      return { ok: false, reason: "element-not-found" };
+    }
+    element.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+    const rect = element.getBoundingClientRect();
+    updateHighlight(element);
+    const marker = document.querySelector('.chela-browser-pin-marker[data-chela-pin-id="' + pinId + '"]');
+    if (marker) {
+      marker.style.transform = "scale(1.18)";
+      marker.style.boxShadow = "0 0 0 4px rgba(249,115,22,0.28), 0 8px 24px rgba(0,0,0,0.28)";
+      window.setTimeout(() => {
+        marker.style.transform = "";
+        marker.style.boxShadow = "0 6px 20px rgba(0,0,0,0.22)";
+      }, 900);
+    }
+    return {
+      ok: true,
+      pinId,
+      boundingRect: {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      }
+    };
+  };
   window[apiName] = {
     version: 1,
-    enable() {
+    enable(options) {
+      pinMode = Boolean(options && options.mode === "pin");
       if (enabled) return true;
       enabled = true;
       ensureOverlay();
@@ -206,6 +363,7 @@ export function createBrowserInspectorScript() {
     },
     disable() {
       enabled = false;
+      pinMode = false;
       document.removeEventListener("mousemove", onMouseMove, true);
       document.removeEventListener("click", onClick, true);
       document.documentElement.style.cursor = "";
@@ -215,6 +373,22 @@ export function createBrowserInspectorScript() {
     },
     consumeSelection() {
       return selections.shift() || null;
+    },
+    consumePin() {
+      return pendingPins.shift() || null;
+    },
+    setMode(mode) {
+      pinMode = mode === "pin";
+      return true;
+    },
+    collectPageSnapshot() {
+      return collectPageSnapshot();
+    },
+    listPins() {
+      return pins.slice();
+    },
+    focusPin(pinId) {
+      return focusPin(pinId);
     }
   };
 })();

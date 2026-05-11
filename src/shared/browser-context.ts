@@ -6,9 +6,37 @@ export function isBrowserContextItem(value: unknown): value is BrowserContextIte
   }
 
   const candidate = value as Partial<BrowserContextItem>;
-  return (
+  const hasBaseShape =
     typeof candidate.id === "string" &&
-    typeof candidate.label === "string" &&
+    typeof candidate.label === "string";
+
+  if (!hasBaseShape) {
+    return false;
+  }
+
+  if (candidate.kind === "page-snapshot") {
+    return Boolean(candidate.pageSnapshot) && typeof candidate.pageSnapshot === "object";
+  }
+
+  if (candidate.kind === "pin") {
+    return (
+      Boolean(candidate.pin) &&
+      typeof candidate.pin === "object" &&
+      typeof candidate.pin.comment === "string" &&
+      typeof candidate.pin.selector === "string"
+    );
+  }
+
+  if (candidate.kind === "review-queue") {
+    return (
+      Boolean(candidate.reviewQueue) &&
+      typeof candidate.reviewQueue === "object" &&
+      typeof candidate.reviewQueue.title === "string" &&
+      Array.isArray(candidate.reviewQueue.pins)
+    );
+  }
+
+  return (
     Boolean(candidate.element) &&
     typeof candidate.element === "object" &&
     typeof candidate.element.selector === "string" &&
@@ -21,5 +49,128 @@ export function getBrowserContextItems(value: unknown, limit = 8) {
     return [];
   }
 
-  return value.filter(isBrowserContextItem).slice(0, limit);
+  return compactBrowserContextItems(value.filter(isBrowserContextItem), limit);
+}
+
+
+export type BrowserContextBudgetLevel = "light" | "medium" | "heavy";
+
+export type BrowserContextBudget = {
+  itemCount: number;
+  estimatedChars: number;
+  level: BrowserContextBudgetLevel;
+  label: string;
+};
+
+function canonicalizeUrl(value: string | null | undefined) {
+  const raw = value?.trim();
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return raw.replace(/#.*$/u, "");
+  }
+}
+
+function getItemPriority(item: BrowserContextItem) {
+  if (item.kind === "review-queue") {
+    return 4;
+  }
+  if (item.kind === "pin") {
+    return 3;
+  }
+  if (item.kind === "element" || item.element) {
+    return 2;
+  }
+  if (item.kind === "page-snapshot") {
+    return 1;
+  }
+  return 0;
+}
+
+function getItemTimestamp(item: BrowserContextItem) {
+  const timestamp = Date.parse(item.createdAt);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function getBrowserContextDedupKey(item: BrowserContextItem) {
+  if (item.kind === "review-queue" && item.reviewQueue) {
+    return [
+      "review-queue",
+      canonicalizeUrl(item.reviewQueue.sourceUrl),
+      item.reviewQueue.queueId?.trim() ?? "",
+      item.reviewQueue.pins.map((pin) => pin.pinId || `${pin.selector}:${pin.comment}`).join(","),
+    ].join("|");
+  }
+
+  if (item.kind === "pin" && item.pin) {
+    return [
+      "pin",
+      canonicalizeUrl(item.pin.sourceUrl),
+      item.pin.selector?.trim() ?? "",
+      item.pin.comment?.trim() ?? "",
+    ].join("|");
+  }
+
+  if (item.kind === "page-snapshot" && item.pageSnapshot) {
+    return [
+      "page-snapshot",
+      canonicalizeUrl(item.pageSnapshot.sourceUrl),
+    ].join("|");
+  }
+
+  if (item.element) {
+    return [
+      "element",
+      canonicalizeUrl(item.element.sourceUrl),
+      item.element.selector?.trim() ?? "",
+    ].join("|");
+  }
+
+  return `unknown|${item.id}`;
+}
+
+export function estimateBrowserContextChars(items: readonly BrowserContextItem[]) {
+  return items.reduce((total, item) => total + JSON.stringify(item).length, 0);
+}
+
+export function summarizeBrowserContextBudget(
+  items: readonly BrowserContextItem[],
+): BrowserContextBudget {
+  const estimatedChars = estimateBrowserContextChars(items);
+  const level: BrowserContextBudgetLevel =
+    estimatedChars > 8000 ? "heavy" : estimatedChars > 3000 ? "medium" : "light";
+
+  return {
+    itemCount: items.length,
+    estimatedChars,
+    level,
+    label: `${items.length} 项 · ~${estimatedChars.toLocaleString()} chars · ${level}`,
+  };
+}
+
+export function compactBrowserContextItems(
+  items: readonly BrowserContextItem[],
+  limit = 8,
+): BrowserContextItem[] {
+  const deduped = new Map<string, BrowserContextItem>();
+
+  for (const item of items.filter(isBrowserContextItem)) {
+    deduped.set(getBrowserContextDedupKey(item), item);
+  }
+
+  return [...deduped.values()]
+    .sort((a, b) => {
+      const priorityDelta = getItemPriority(b) - getItemPriority(a);
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+      return getItemTimestamp(b) - getItemTimestamp(a);
+    })
+    .slice(0, limit);
 }

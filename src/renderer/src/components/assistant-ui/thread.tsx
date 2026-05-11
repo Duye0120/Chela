@@ -30,10 +30,12 @@ import {
   ChevronRightIcon,
   CopyIcon,
   LoaderCircleIcon,
+  MapPinIcon,
   MousePointer2Icon,
   PencilIcon,
   RotateCcwIcon,
   SendHorizonalIcon,
+  SparklesIcon,
   SquareIcon,
   Wand2Icon,
   XIcon,
@@ -125,6 +127,7 @@ import {
   BROWSER_CONTEXT_FALLBACK_INSTRUCTION,
   describeBrowserContextItem,
   getBrowserContextItems,
+  summarizeBrowserContextBudget,
   type BrowserContextItem,
 } from "@renderer/lib/browser-interview";
 
@@ -856,6 +859,8 @@ const Composer: FC<ThreadResolvedProps> = ({
       await onEnqueueQueuedMessage({ text });
     }
   }, [contextSummary, onEnqueueQueuedMessage]);
+  const showComposerMetaRow =
+    attachments.length > 0 || browserContextItems.length > 0;
 
   return (
     <ComposerPrimitive.Root className="relative flex w-full flex-col gap-1.5">
@@ -900,21 +905,27 @@ const Composer: FC<ThreadResolvedProps> = ({
           onRemove={async () => onRemoveQueuedMessage(queuedHeadMessage.id)}
         />
       ) : null}
-      <div className="flex w-full flex-col gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-composer-surface)] p-(--composer-padding) shadow-[0_12px_32px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.05)] transition-shadow focus-within:ring-2 focus-within:ring-ring/12">
-        <ComposerAttachments />
-        <BrowserContextChips
-          items={browserContextItems}
-          onRemove={onRemoveBrowserContextItem}
-          onClear={onClearBrowserContextItems}
-        />
+      <div className="flex w-full flex-col gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-composer-surface)] p-3 shadow-[0_12px_32px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.05)] transition-shadow focus-within:ring-2 focus-within:ring-ring/12">
+        {showComposerMetaRow ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {attachments.length > 0 ? <ComposerAttachments /> : null}
+            {browserContextItems.length > 0 ? (
+              <BrowserContextChips
+                items={browserContextItems}
+                onRemove={onRemoveBrowserContextItem}
+                onClear={onClearBrowserContextItems}
+              />
+            ) : null}
+          </div>
+        ) : null}
 
         <ComposerPrimitive.Input
-          placeholder="向 Chela 提问..."
+          placeholder="Add instructions, ask Chela, or describe what to do with attachments..."
           ref={composerInputRef}
-          className={`min-h-0 w-full resize-none bg-transparent px-1 py-1 text-[15px] leading-6 text-foreground outline-none placeholder:text-[color:var(--color-text-secondary)]/85 ${inputScrollable ? "overflow-y-auto pr-2" : "overflow-y-hidden"
+          className={`min-h-[88px] w-full resize-none bg-transparent px-1 py-2 text-[15px] leading-6 text-foreground outline-none placeholder:text-[color:var(--color-text-secondary)]/75 ${inputScrollable ? "overflow-y-auto pr-2" : "overflow-y-hidden"
             }`}
-          minRows={1}
-          maxRows={5}
+          minRows={3}
+          maxRows={7}
           autoFocus={visible}
           onChange={() => {
             requestAnimationFrame(syncInputOverflow);
@@ -1021,8 +1032,19 @@ const BrowserContextChips: FC<{
     return null;
   }
 
+  const budget = summarizeBrowserContextBudget(items);
+  const budgetClassName =
+    budget.level === "heavy"
+      ? "text-[color:var(--color-status-warning)]"
+      : budget.level === "medium"
+        ? "text-[color:var(--color-text-secondary)]"
+        : "text-muted-foreground";
+
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5 px-1 pt-1">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <span className={cn("shrink-0 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2 py-1 text-[11px] font-medium", budgetClassName)}>
+Context · {budget.label}
+      </span>
       {items.map((item) => (
         <BrowserDomTag
           key={item.id}
@@ -1041,6 +1063,33 @@ const BrowserContextChips: FC<{
   );
 };
 
+
+function getBrowserContextChipLabel(item: BrowserContextItem) {
+  if (item.kind === "pin") {
+    return `pin ${item.label}`;
+  }
+  if (item.kind === "page-snapshot") {
+    return item.label;
+  }
+  if (item.kind === "review-queue") {
+    return `review ${item.label}`;
+  }
+  return `dom ${item.label}`;
+}
+
+const BrowserContextIcon: FC<{ item: BrowserContextItem }> = ({ item }) => {
+  if (item.kind === "pin") {
+    return <MapPinIcon className="size-3.5 shrink-0 text-muted-foreground group-hover:text-foreground" />;
+  }
+  if (item.kind === "page-snapshot") {
+    return <SparklesIcon className="size-3.5 shrink-0 text-muted-foreground group-hover:text-foreground" />;
+  }
+  if (item.kind === "review-queue") {
+    return <Wand2Icon className="size-3.5 shrink-0 text-muted-foreground group-hover:text-foreground" />;
+  }
+  return <MousePointer2Icon className="size-3.5 shrink-0 text-muted-foreground group-hover:text-foreground" />;
+};
+
 const BrowserDomTag: FC<{
   item: BrowserContextItem;
   onRemove?: () => void;
@@ -1055,14 +1104,14 @@ const BrowserDomTag: FC<{
           type="button"
           onClick={onRemove}
           className={cn(
-            "group inline-flex max-w-[240px] items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-selection-muted-bg)] px-2 py-1 font-medium text-foreground transition-colors hover:bg-[color:var(--color-control-bg-hover)]",
+            "group inline-flex h-8 max-w-[240px] items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-selection-muted-bg)] px-2.5 font-medium text-foreground transition-colors hover:bg-[color:var(--color-control-bg-hover)]",
             compact ? "text-[12px]" : "text-[13px]",
             !onRemove && "cursor-help",
           )}
           aria-label={`DOM tag ${item.label}`}
         >
-          <MousePointer2Icon className="size-3.5 shrink-0 text-muted-foreground group-hover:text-foreground" />
-          <span className="truncate">dom-tag {item.label}</span>
+          <BrowserContextIcon item={item} />
+          <span className="truncate">{getBrowserContextChipLabel(item)}</span>
           {onRemove ? (
             <XIcon className="size-3 shrink-0 text-muted-foreground group-hover:text-foreground" />
           ) : null}
