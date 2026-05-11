@@ -118,3 +118,28 @@
   - `pnpm exec tsx tests/harness-readiness-recorder-regression.test.ts` passed
   - `pnpm exec tsx tests/harness-readiness-regression.test.ts` passed
 - 未做：未改 TraceService UI 链路、未接 metrics/audit、未实现 Analysis Sidecar Runner、未改 `package.json` / `pnpm-lock.yaml`、未运行 `pnpm build`。
+
+
+## Analysis Sidecar Runner MVP
+
+- 时间：2026-05-08 23:48 +0800
+- 改了什么：
+  - 新增 `src/main/analysis-sidecar/runner.ts`，实现通用 one-shot sidecar runner：`spawn(file, args)`、禁用 shell、timeout、stdout/stderr 分离、输出大小限制和超时标记。
+  - 新增 `src/main/analysis-sidecar/env.ts`，沉淀 sidecar 环境变量白名单构造，避免 API key / Authorization 等敏感环境透传。
+  - 新增 `src/main/analysis-sidecar/artifacts.ts`，提供 readiness analysis artifact 路径映射，为后续 main process 复用 report 输出路径做准备。
+  - 改造 `scripts/readiness/run-readiness-report.ts`，保留 CLI wrapper 和现有参数构造，但底层复用 `runAnalysisSidecar()` 与 `buildAnalysisSidecarEnv()`。
+  - 新增 `tests/analysis-sidecar-runner-regression.test.ts`，覆盖 env allowlist、正常输出、非零退出、stdout/stderr 限制、timeout 和 cwd 注入。
+- 为什么改：落地 backend runtime framework spec Phase 4 的 MVP，把 Python readiness report 从 scripts 专用 runner 收口成 Chela backend 可复用的 Analysis Sidecar 能力；仍保持 one-shot，不把 Python 接进在线 run lifecycle。
+- 涉及文件：
+  - `src/main/analysis-sidecar/runner.ts`
+  - `src/main/analysis-sidecar/env.ts`
+  - `src/main/analysis-sidecar/artifacts.ts`
+  - `scripts/readiness/run-readiness-report.ts`
+  - `tests/analysis-sidecar-runner-regression.test.ts`
+  - `docs/changes/2026-05-08/changes.md`
+- 验证结果：
+  - `pnpm exec tsx tests/analysis-sidecar-runner-regression.test.ts` passed
+  - `pnpm exec tsx tests/readiness-runner-regression.test.ts` passed
+  - `pnpm exec tsx tests/observability-dispatcher-regression.test.ts` passed
+  - `pnpm exec tsx tests/harness-readiness-regression.test.ts` passed
+- 未做：未做 long-lived Python worker、未接 UI、未改 provider/model、未改 `package.json` / `pnpm-lock.yaml`、未运行 `pnpm build`。

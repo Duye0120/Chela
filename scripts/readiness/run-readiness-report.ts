@@ -1,5 +1,7 @@
-import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+
+import { buildAnalysisSidecarEnv } from "../../src/main/analysis-sidecar/env.js";
+import { runAnalysisSidecar } from "../../src/main/analysis-sidecar/runner.js";
 
 export type ReadinessReportRunnerOptions = {
   input: string;
@@ -44,14 +46,7 @@ export function buildReadinessReportArgs(options: ReadinessReportRunnerOptions):
 }
 
 export function buildReadinessReportEnv(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const key of ALLOWED_ENV_KEYS) {
-    const value = source[key];
-    if (typeof value === "string") {
-      env[key] = value;
-    }
-  }
-  return env;
+  return buildAnalysisSidecarEnv(source, ALLOWED_ENV_KEYS);
 }
 
 export async function runReadinessReport(options: ReadinessReportRunnerOptions): Promise<ReadinessReportRunnerResult> {
@@ -59,40 +54,23 @@ export async function runReadinessReport(options: ReadinessReportRunnerOptions):
   const python = options.python ?? envSource.CHELA_PYTHON ?? "python3";
   const args = buildReadinessReportArgs(options);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-
-  return await new Promise<ReadinessReportRunnerResult>((resolvePromise, reject) => {
-    const child = spawn(python, args, {
-      cwd: options.cwd ?? projectRoot(),
-      env: buildReadinessReportEnv(envSource),
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-    }, timeoutMs);
-
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.on("close", (code, signal) => {
-      clearTimeout(timer);
-      resolvePromise({ code, signal, stdout, stderr, timedOut, args, python });
-    });
+  const result = await runAnalysisSidecar({
+    command: python,
+    args,
+    cwd: options.cwd ?? projectRoot(),
+    env: buildReadinessReportEnv(envSource),
+    timeoutMs,
   });
+
+  return {
+    code: result.code,
+    signal: result.signal,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    timedOut: result.timedOut,
+    args,
+    python,
+  };
 }
 
 function parseCliArgs(argv: string[]): ReadinessReportRunnerOptions {
