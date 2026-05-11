@@ -1,7 +1,7 @@
 "use client";
 
 import { PropsWithChildren, useEffect, useMemo, useState, type FC } from "react";
-import { FileText, PaperclipIcon, XIcon } from "lucide-react";
+import { FileImageIcon, FileText, FolderIcon, PaperclipIcon, XIcon } from "lucide-react";
 import {
   AttachmentPrimitive,
   ComposerPrimitive,
@@ -306,11 +306,82 @@ export const UserMessageAttachments: FC = () => {
   );
 };
 
+const AttachmentChipIcon: FC = () => {
+  const src = useAttachmentSrc();
+  const { type, contentType } = useAuiState(
+    useShallow((s) => ({
+      type: s.attachment.type,
+      contentType: s.attachment.contentType,
+    })),
+  );
+
+  if (src) {
+    return (
+      <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-[calc(var(--radius-shell)-6px)] bg-[color:var(--color-control-panel-bg)]">
+        <img src={src} alt="" className="size-full object-cover" />
+      </span>
+    );
+  }
+
+  if (type === "image" || contentType?.startsWith("image/") === true) {
+    return <FileImageIcon className="size-3.5 shrink-0 text-[color:var(--color-text-secondary)]" />;
+  }
+
+  if (type === "file" && contentType?.includes("directory")) {
+    return <FolderIcon className="size-3.5 shrink-0 text-[color:var(--color-text-secondary)]" />;
+  }
+
+  return <FileText className="size-3.5 shrink-0 text-[color:var(--color-text-secondary)]" />;
+};
+
+const AttachmentChip: FC = () => {
+  const aui = useAui();
+  const isComposer = aui.attachment.source !== "message";
+  const src = useAttachmentSrc();
+  const { name, subtitle } = useAttachmentCardInfo();
+
+  return (
+    <Tooltip>
+      <AttachmentPrimitive.Root className="group shrink-0">
+        <AttachmentPreviewDialog>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex h-8 max-w-[220px] items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2.5 text-[12px] font-medium text-foreground transition-colors hover:bg-[color:var(--color-control-bg-hover)]"
+              aria-label={`附件 ${name}`}
+            >
+              <AttachmentChipIcon />
+              <span className="min-w-0 truncate">{name}</span>
+              {isComposer ? (
+                <AttachmentPrimitive.Remove asChild>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-[calc(var(--radius-shell)-6px)] text-muted-foreground transition-colors hover:bg-[color:var(--color-control-panel-bg)] hover:text-foreground"
+                    aria-label="移除附件"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    <XIcon className="size-3" />
+                  </span>
+                </AttachmentPrimitive.Remove>
+              ) : null}
+            </button>
+          </TooltipTrigger>
+        </AttachmentPreviewDialog>
+        <TooltipContent side="top">
+          {src ? "点击预览" : subtitle}
+        </TooltipContent>
+      </AttachmentPrimitive.Root>
+    </Tooltip>
+  );
+};
+
 export const ComposerAttachments: FC = () => {
   return (
-    <div className="flex w-full flex-row items-center gap-2 overflow-x-auto pb-1 empty:hidden">
+    <div className="flex w-full flex-row items-center gap-1.5 overflow-x-auto px-1 pb-1 empty:hidden">
       <ComposerPrimitive.Attachments>
-        {() => <AttachmentTile />}
+        {() => <AttachmentChip />}
       </ComposerPrimitive.Attachments>
     </div>
   );
