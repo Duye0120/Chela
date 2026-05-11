@@ -371,26 +371,34 @@ function SidebarImpl({
         ) : (
           <span className="h-3.5 w-3.5 shrink-0" />
         )}
-        <button
-          type="button"
-          onClick={() => {
-            setArchiveConfirmFor(null);
-            onSelectSession(summary.id);
-            if (archived) {
-              setShowArchived(false);
-            }
-          }}
-          className="min-w-0 flex-1 cursor-pointer text-left"
-        >
-          <span
-            className={`block min-w-0 truncate text-[12px] ${active
-                ? "font-medium text-[color:var(--color-control-selected-text)]"
-                : "text-[color:var(--chela-text-primary)]"
-              }`}
-          >
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => {
+                setArchiveConfirmFor(null);
+                onSelectSession(summary.id);
+                if (archived) {
+                  setShowArchived(false);
+                }
+              }}
+              className="min-w-0 flex-1 cursor-pointer text-left"
+              aria-label={summary.title}
+            >
+              <span
+                className={`block min-w-0 truncate text-[12px] ${active
+                    ? "font-medium text-[color:var(--color-control-selected-text)]"
+                    : "text-[color:var(--chela-text-primary)]"
+                  }`}
+              >
+                {summary.title}
+              </span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="max-w-[320px] break-words">
             {summary.title}
-          </span>
-        </button>
+          </TooltipContent>
+        </Tooltip>
 
         <div className="relative w-[64px] shrink-0">
           <span
@@ -626,31 +634,39 @@ function SidebarImpl({
                               <FolderIcon className="h-3.5 w-3.5" />
                             )}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setExpandedProjectIds((current) => {
-                                if (current.has(group.id)) {
-                                  return current;
-                                }
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExpandedProjectIds((current) => {
+                                    if (current.has(group.id)) {
+                                      return current;
+                                    }
 
-                                const next = new Set(current);
-                                next.add(group.id);
-                                return next;
-                              });
-                              onSelectProject(group.id);
-                            }}
-                            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
-                          >
-                            <span className="truncate text-[12px] font-medium text-[color:var(--chela-text-primary)]">
+                                    const next = new Set(current);
+                                    next.add(group.id);
+                                    return next;
+                                  });
+                                  onSelectProject(group.id);
+                                }}
+                                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
+                                aria-label={group.name}
+                              >
+                                <span className="truncate text-[12px] font-medium text-[color:var(--chela-text-primary)]">
+                                  {group.name}
+                                </span>
+                                {!hasPath ? (
+                                  <span className="shrink-0 rounded-full bg-[color:var(--chela-status-warning-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--chela-status-warning-text)]">
+                                    待绑定
+                                  </span>
+                                ) : null}
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="max-w-[320px] break-words">
                               {group.name}
-                            </span>
-                            {!hasPath ? (
-                              <span className="shrink-0 rounded-full bg-[color:var(--chela-status-warning-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--chela-status-warning-text)]">
-                                待绑定
-                              </span>
-                            ) : null}
-                          </button>
+                            </TooltipContent>
+                          </Tooltip>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <button

@@ -11,9 +11,10 @@ export const LEGACY_SIDEBAR_WIDTH_STORAGE_KEY = "first-pi-agent.sidebar-width";
 export const SIDEBAR_COLLAPSED_STORAGE_KEY = "chela.sidebar-collapsed";
 export const DEFAULT_SIDEBAR_SIZE = 18;
 export const MIN_SIDEBAR_WIDTH = 220;
+export const MAX_SIDEBAR_WIDTH = 350;
 export const MIN_RIGHT_PANEL_WIDTH = 480;
-export const MAX_RIGHT_PANEL_WIDTH = 920;
-export const MIN_THREAD_CONTENT_WIDTH = 320;
+export const FALLBACK_RIGHT_PANEL_WIDTH = 920;
+export const MIN_THREAD_CONTENT_WIDTH = 600;
 export const RIGHT_PANEL_GAP_PX = 8;
 export const ROOT_UI_THEME_DATASET = "theme";
 export const SETTINGS_ROUTE_PREFIX = "/settings";
@@ -68,16 +69,18 @@ export function clampSidebarSize(size: number) {
 }
 
 export function clampRightPanelWidth(size: number, containerWidth: number) {
+  const preferredWidth = Math.max(MIN_RIGHT_PANEL_WIDTH, size);
+
   if (!Number.isFinite(containerWidth) || containerWidth <= 0) {
-    return Math.min(MAX_RIGHT_PANEL_WIDTH, Math.max(MIN_RIGHT_PANEL_WIDTH, size));
+    return Math.min(FALLBACK_RIGHT_PANEL_WIDTH, preferredWidth);
   }
 
   const maxWidth = Math.max(
     MIN_RIGHT_PANEL_WIDTH,
-    Math.min(MAX_RIGHT_PANEL_WIDTH, containerWidth - MIN_THREAD_CONTENT_WIDTH),
+    containerWidth - MIN_THREAD_CONTENT_WIDTH - RIGHT_PANEL_GAP_PX,
   );
 
-  return Math.min(maxWidth, Math.max(MIN_RIGHT_PANEL_WIDTH, size));
+  return Math.min(maxWidth, preferredWidth);
 }
 
 export function getDefaultRightPanelWidth(containerWidth: number) {
@@ -97,7 +100,9 @@ export function migrateLegacySidebarWidth(storedWidth: number) {
     return DEFAULT_SIDEBAR_SIZE;
   }
 
-  return clampSidebarSize((storedWidth / window.innerWidth) * 100);
+  return clampSidebarSize(
+    (Math.min(MAX_SIDEBAR_WIDTH, storedWidth) / window.innerWidth) * 100,
+  );
 }
 
 export function readStoredNumber(keys: string[]) {

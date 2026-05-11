@@ -44,6 +44,12 @@ UI 交付默认同时满足表现和性能。
 - 不接受只提升视觉而牺牲渲染稳定性、响应速度或列表滚动性能的实现。
 - 涉及 React 组件、设置页、聊天区、diff panel 这类高频界面时，默认优先稳定 selector、减少无意义重渲染、控制派生对象创建。
 
+Shell 分栏拖拽改动默认完整核对。`新增：2026-05-11 13:10:14`
+- 改左侧 sidebar、右侧 diff/browser/trace 工作区、聊天主区域宽度和拖拽前，先同时查 `src/renderer/src/App.tsx`、`src/renderer/src/components/assistant-ui/sidebar.tsx`、`src/renderer/src/components/assistant-ui/diff-panel.tsx`、`src/renderer/src/components/browser-preview/BrowserPreviewPanel.tsx`、`src/renderer/src/components/assistant-ui/trace-panel.tsx`、`src/renderer/src/components/ui/resizable.tsx`。
+- 先确认实际生效的拖拽源：左侧 shell sidebar 由 `react-resizable-panels` 的 `ResizableHandle` 承载，右侧 workspace 由 `App.tsx` 的 panel state 和 pointer drag 承载；旧 `diff-panel.tsx` 内部 `useResizable` 按调用点确认。
+- 左侧 sidebar 拉手默认视觉透明，只保留命中区域；防止出现多条硬竖线。
+- 右侧含 Browser `<webview>` 的拖拽必须有 pointer capture、全窗 pointerup/pointercancel、lostpointercapture/blur 兜底和覆盖 webview 的透明遮罩，避免释放后残留拖拽态。
+
 选择态的视觉语言要统一。
 - 下拉、列表、分支切换、模型选择等“已选中”状态，优先复用项目里已经存在的选中底色和反馈方式。
 - 如无充分理由，不要为新的选择器额外发明一套选中色、选中徽标或强调色。

@@ -667,6 +667,7 @@ body, .status-pill, .composer-ghost-button {
   pointer-events: none;
 }
 
+
 @keyframes chela-main-content-shift-left {
   from {
     opacity: 0.985;

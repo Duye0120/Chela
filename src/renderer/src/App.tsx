@@ -36,7 +36,6 @@ import { Sidebar } from "@renderer/components/assistant-ui/sidebar";
 import { TerminalDrawer } from "@renderer/components/assistant-ui/terminal-drawer";
 import { TitleBar } from "@renderer/components/assistant-ui/title-bar";
 import {
-  ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@renderer/components/ui/resizable";
@@ -51,10 +50,10 @@ import {
 import {
   ACTIVE_SESSION_STORAGE_KEY,
   DEFAULT_SIDEBAR_SIZE,
+  FALLBACK_RIGHT_PANEL_WIDTH,
   LEGACY_ACTIVE_SESSION_STORAGE_KEY,
   LEGACY_SIDEBAR_WIDTH_STORAGE_KEY,
-  MAX_RIGHT_PANEL_WIDTH,
-  MAX_SIDEBAR_SIZE,
+  MAX_SIDEBAR_WIDTH,
   MIN_RIGHT_PANEL_WIDTH,
   MIN_SIDEBAR_WIDTH,
   RIGHT_PANEL_GAP_PX,
@@ -93,6 +92,7 @@ import { useSessionAttachments } from "@renderer/hooks/use-session-attachments";
 import type { PanelImperativeHandle, PanelSize } from "react-resizable-panels";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { BrowserContextItem } from "@renderer/lib/browser-interview";
+import { compactBrowserContextItems } from "@renderer/lib/browser-interview";
 
 export default function App() {
   const desktopApi = window.desktopApi;
@@ -153,6 +153,7 @@ export default function App() {
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("off");
   const [sidebarAnimating, setSidebarAnimating] = useState(false);
   const [rightPanelAnimating, setRightPanelAnimating] = useState(false);
+  const [rightPanelDragging, setRightPanelDragging] = useState(false);
 
   const settingsSection = useMemo(
     () => resolveSettingsSectionFromPath(location.pathname) ?? "general",
@@ -180,7 +181,7 @@ export default function App() {
         ? threadWorkspaceWidth
         : typeof window !== "undefined"
           ? window.innerWidth
-          : MAX_RIGHT_PANEL_WIDTH;
+          : FALLBACK_RIGHT_PANEL_WIDTH;
     const preferredWidth =
       typeof rightPanelState.width === "number"
         ? rightPanelState.width
@@ -191,6 +192,7 @@ export default function App() {
 
   const sidebarPanelRef = useRef<PanelImperativeHandle | null>(null);
   const threadWorkspaceRef = useRef<HTMLDivElement | null>(null);
+  const rightPanelShellRef = useRef<HTMLDivElement | null>(null);
   const rightPanelStateRef = useRef(rightPanelState);
   const rightPanelToggleInFlightRef = useRef(false);
   const sessionSelectionSerialRef = useRef(0);
@@ -201,10 +203,14 @@ export default function App() {
   const activeSessionIdRef = useRef<string | null>(null);
   const sessionCacheRef = useRef<Record<string, ChatSession>>({});
   const appliedCustomThemeKeysRef = useRef<string[]>([]);
+  const rightPanelDragCleanupRef = useRef<(() => void) | null>(null);
   const rightPanelDragStateRef = useRef<{
     startX: number;
     startWidth: number;
+    currentWidth: number;
     containerWidth: number;
+    pointerId: number;
+    handle: HTMLDivElement;
   } | null>(null);
   const rightPanelAnimatingTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -277,6 +283,21 @@ export default function App() {
   }, [sidebarCollapsed, sidebarSize]);
 
   useEffect(() => () => clearTimeout(rightPanelAnimatingTimerRef.current), []);
+
+  useEffect(() => {
+    if (rightPanelVisibleOrAnimating) {
+      return;
+    }
+
+    rightPanelDragCleanupRef.current?.();
+  }, [rightPanelVisibleOrAnimating]);
+
+  useEffect(
+    () => () => {
+      rightPanelDragCleanupRef.current?.();
+    },
+    [],
+  );
 
   const armRightPanelAnimation = useCallback(() => {
     setRightPanelAnimating(true);
@@ -1016,14 +1037,7 @@ export default function App() {
 
     setBrowserContextBySessionId((current) => {
       const existing = current[sessionId] ?? [];
-      const nextItems = [
-        item,
-        ...existing.filter(
-          (candidate) =>
-            candidate.element.selector !== item.element.selector ||
-            candidate.element.sourceUrl !== item.element.sourceUrl,
-        ),
-      ].slice(0, 8);
+      const nextItems = compactBrowserContextItems([item, ...existing], 8);
 
       return {
         ...current,
@@ -1180,8 +1194,8 @@ export default function App() {
     updateRightPanelState,
   ]);
 
-  const handleRightPanelResizeMouseDown = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleRightPanelResizePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
       if (!diffPanelOpen && !tracePanelOpen && !browserPanelOpen) {
         return;
       }
@@ -1190,23 +1204,86 @@ export default function App() {
       event.stopPropagation();
 
       const element = threadWorkspaceRef.current;
+      const shellElement = rightPanelShellRef.current;
       const containerWidth = Math.round(
         element?.getBoundingClientRect().width ?? threadWorkspaceWidth,
       );
       const startWidth = resolvedRightPanelWidth;
 
+      rightPanelDragCleanupRef.current?.();
+
       rightPanelDragStateRef.current = {
         startX: event.clientX,
         startWidth,
+        currentWidth: startWidth,
         containerWidth,
+        pointerId: event.pointerId,
+        handle: event.currentTarget,
       };
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture can fail if the pointer was cancelled before React handled it.
+      }
+      setRightPanelDragging(true);
+      const previousBodyCursor = document.body.style.cursor;
+      const previousBodyUserSelect = document.body.style.userSelect;
+      const previousRootCursor = document.documentElement.style.cursor;
       document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      document.documentElement.style.cursor = "col-resize";
 
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const dragState = rightPanelDragStateRef.current;
-        if (!dragState) {
+      const applyWidth = (nextWidth: number) => {
+        if (!shellElement) {
           return;
         }
+
+        shellElement.style.width = `${nextWidth}px`;
+        shellElement.style.marginLeft = `${RIGHT_PANEL_GAP_PX}px`;
+      };
+
+      const cleanupDrag = (commit: boolean) => {
+        const dragState = rightPanelDragStateRef.current;
+        rightPanelDragStateRef.current = null;
+        setRightPanelDragging(false);
+        document.body.style.cursor = previousBodyCursor;
+        document.body.style.userSelect = previousBodyUserSelect;
+        document.documentElement.style.cursor = previousRootCursor;
+
+        if (dragState) {
+          dragState.handle.removeEventListener("lostpointercapture", handleLostPointerCapture);
+          try {
+            if (dragState.handle.hasPointerCapture(dragState.pointerId)) {
+              dragState.handle.releasePointerCapture(dragState.pointerId);
+            }
+          } catch {
+            // The handle may already have lost capture during window blur or webview handoff.
+          }
+        }
+
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        window.removeEventListener("pointercancel", handlePointerCancel);
+        window.removeEventListener("mouseup", handleMouseUpFallback);
+        window.removeEventListener("blur", handleWindowBlur);
+        window.removeEventListener("keydown", handleKeyDown);
+        rightPanelDragCleanupRef.current = null;
+
+        if (!commit || !dragState) {
+          return;
+        }
+
+        const finalWidth = clampRightPanelWidth(
+          dragState.currentWidth,
+          dragState.containerWidth,
+        );
+        applyWidth(finalWidth);
+        updateRightPanelState({ width: finalWidth });
+      };
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const dragState = rightPanelDragStateRef.current;
+        if (!dragState || moveEvent.pointerId !== dragState.pointerId) return;
 
         const delta = dragState.startX - moveEvent.clientX;
         const nextWidth = clampRightPanelWidth(
@@ -1214,38 +1291,41 @@ export default function App() {
           dragState.containerWidth,
         );
 
-        setRightPanelState((current) =>
-          current.width === nextWidth ? current : { ...current, width: nextWidth },
-        );
+        dragState.currentWidth = nextWidth;
+        applyWidth(nextWidth);
       };
 
-      const handleMouseUp = () => {
+      const handlePointerUp = (upEvent: PointerEvent) => {
         const dragState = rightPanelDragStateRef.current;
-        rightPanelDragStateRef.current = null;
-        document.body.style.cursor = "";
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
-
-        if (!dragState) {
-          return;
-        }
-
-        const finalWidth = clampRightPanelWidth(
-          rightPanelStateRef.current.width ?? dragState.startWidth,
-          dragState.containerWidth,
-        );
-        updateRightPanelState({ width: finalWidth });
+        if (!dragState || upEvent.pointerId !== dragState.pointerId) return;
+        cleanupDrag(true);
       };
 
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
+      const handlePointerCancel = () => cleanupDrag(false);
+      const handleMouseUpFallback = () => cleanupDrag(true);
+      const handleWindowBlur = () => cleanupDrag(true);
+      const handleLostPointerCapture = () => cleanupDrag(true);
+      const handleKeyDown = (keyEvent: KeyboardEvent) => {
+        if (keyEvent.key === "Escape") {
+          cleanupDrag(false);
+        }
+      };
+
+      event.currentTarget.addEventListener("lostpointercapture", handleLostPointerCapture);
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+      window.addEventListener("pointercancel", handlePointerCancel);
+      window.addEventListener("mouseup", handleMouseUpFallback);
+      window.addEventListener("blur", handleWindowBlur);
+      window.addEventListener("keydown", handleKeyDown);
+      rightPanelDragCleanupRef.current = () => cleanupDrag(true);
     },
     [
       browserPanelOpen,
       diffPanelOpen,
-      tracePanelOpen,
       resolvedRightPanelWidth,
       threadWorkspaceWidth,
+      tracePanelOpen,
       updateRightPanelState,
     ],
   );
@@ -1672,7 +1752,7 @@ export default function App() {
             collapsedSize="0%"
             defaultSize={toSidebarPercentageSize(sidebarSize)}
             minSize={`${MIN_SIDEBAR_WIDTH}px`}
-            maxSize={`${MAX_SIDEBAR_SIZE}%`}
+            maxSize={`${MAX_SIDEBAR_WIDTH}px`}
             onResize={handleSidebarResize}
           >
             <aside className="chela-sidebar-content relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-transparent" data-collapsed={sidebarCollapsed ? "true" : undefined}>
@@ -1716,7 +1796,6 @@ export default function App() {
               />
             </aside>
           </ResizablePanel>
-          <ResizableHandle className="-mx-3 w-6 bg-transparent opacity-0 focus-visible:ring-0" />
           <ResizablePanel id="shell-main">
             <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
               <div
@@ -1834,15 +1913,17 @@ export default function App() {
 
                 {mainView === "thread" ? (
                   <div
+                    ref={rightPanelShellRef}
                     className={`chela-right-panel-shell relative flex min-h-0 shrink-0 flex-col overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-surface)] ${diffPanelOpen || tracePanelOpen || browserPanelOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"} ${diffPanelOpen || tracePanelOpen || browserPanelOpen || rightPanelAnimating ? "border border-black/5 dark:border-white/6" : "border border-transparent"}`}
                     style={{
                       width: diffPanelOpen || tracePanelOpen || browserPanelOpen ? resolvedRightPanelWidth : 0,
                       marginLeft: diffPanelOpen || tracePanelOpen || browserPanelOpen ? RIGHT_PANEL_GAP_PX : 0,
+                      willChange: "width",
                     }}
                   >
                     <div
-                      className={`absolute left-0 top-0 bottom-0 z-20 flex w-3 -translate-x-1/2 cursor-col-resize justify-center group ${(diffPanelOpen || tracePanelOpen || browserPanelOpen) ? "pointer-events-auto" : "pointer-events-none opacity-0"}`}
-                      onMouseDown={handleRightPanelResizeMouseDown}
+                      className={`absolute left-0 top-0 bottom-0 z-20 flex w-3 -translate-x-1/2 cursor-col-resize touch-none select-none justify-center group ${(diffPanelOpen || tracePanelOpen || browserPanelOpen) ? "pointer-events-auto" : "pointer-events-none opacity-0"}`}
+                      onPointerDown={handleRightPanelResizePointerDown}
                     >
                       <div className="h-full w-px bg-border/60 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-active:opacity-100" />
                     </div>
