@@ -58,6 +58,7 @@ export const IPC_CHANNELS = {
   settingsUpdate: "settings:update",
   settingsGetLogSnapshot: "settings:get-log-snapshot",
   settingsOpenLogFolder: "settings:open-log-folder",
+  runtimeGetDiagnostics: "runtime:get-diagnostics",
   memoryAdd: "memory:add",
   memorySearch: "memory:search",
   memoryList: "memory:list",

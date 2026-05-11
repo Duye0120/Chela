@@ -410,6 +410,46 @@ export type BrowserElementStyles = {
   margin?: string | null;
 };
 
+export type BrowserPageInteractiveElement = {
+  label: string;
+  selector?: string | null;
+  tagName: string;
+  role?: string | null;
+  href?: string | null;
+  inputType?: string | null;
+};
+
+export type BrowserPageSnapshot = {
+  sourceUrl?: string | null;
+  title?: string | null;
+  description?: string | null;
+  viewport?: BrowserElementRect | null;
+  headings?: string[];
+  visibleText?: string | null;
+  interactiveElements?: BrowserPageInteractiveElement[];
+};
+
+export type BrowserPagePin = {
+  pinId?: string | null;
+  markerNumber?: number | null;
+  sourceUrl?: string | null;
+  comment: string;
+  selector: string;
+  tagName: string;
+  textContent?: string | null;
+  boundingRect?: BrowserElementRect | null;
+  viewport?: BrowserElementRect | null;
+  styles?: BrowserElementStyles | null;
+};
+
+export type BrowserReviewQueue = {
+  queueId?: string | null;
+  title: string;
+  sourceUrl?: string | null;
+  summary?: string | null;
+  pins: BrowserPagePin[];
+};
+
 export type BrowserInterviewElement = {
   sourceUrl?: string | null;
   selector: string;
@@ -426,7 +466,11 @@ export type BrowserContextItem = {
   id: string;
   label: string;
   createdAt: string;
-  element: BrowserInterviewElement;
+  kind?: "element" | "page-snapshot" | "pin" | "review-queue";
+  element?: BrowserInterviewElement;
+  pageSnapshot?: BrowserPageSnapshot;
+  pin?: BrowserPagePin;
+  reviewQueue?: BrowserReviewQueue;
 };
 
 export type DiagnosticLogId = "app" | "audit";
@@ -1227,6 +1271,53 @@ export type WindowBounds = {
   height: number;
 };
 
+
+export type RuntimeDiagnosticsServiceGroup =
+  | "core"
+  | "observability"
+  | "agent"
+  | "integration"
+  | "experimental";
+
+export type RuntimeDiagnosticsServiceCriticality = "critical" | "optional";
+
+export type RuntimeDiagnosticsServiceStatusValue =
+  | "unknown"
+  | "starting"
+  | "healthy"
+  | "degraded"
+  | "failed"
+  | "stopped"
+  | "disabled";
+
+export type RuntimeDiagnosticsServiceStatus = {
+  name: string;
+  group: RuntimeDiagnosticsServiceGroup;
+  criticality: RuntimeDiagnosticsServiceCriticality;
+  status: RuntimeDiagnosticsServiceStatusValue;
+  started: boolean;
+  startDurationMs?: number;
+  message?: string;
+  errorMessage?: string;
+  updatedAt: number;
+};
+
+export type RuntimeDiagnosticsReport = {
+  status: Exclude<RuntimeDiagnosticsServiceStatusValue, "disabled">;
+  generatedAt: number;
+  totals: {
+    total: number;
+    healthy: number;
+    degraded: number;
+    failed: number;
+    starting: number;
+    stopped: number;
+    unknown: number;
+    disabled: number;
+  };
+  services: RuntimeDiagnosticsServiceStatus[];
+};
+
 export type PersistedAppState = {
   sessions: ChatSession[];
   ui: WindowUiState;
@@ -1295,6 +1386,9 @@ export type DesktopApi = {
     update: (partial: Partial<Settings>) => Promise<void>;
     getLogSnapshot: () => Promise<DiagnosticLogBundle>;
     openLogFolder: (logId: DiagnosticLogId) => Promise<void>;
+  };
+  runtime: {
+    getDiagnostics: () => Promise<RuntimeDiagnosticsReport>;
   };
   memory: {
     add: (input: MemoryAddInput) => Promise<MemoryRecord>;

@@ -158,6 +158,9 @@ const desktopApi: DesktopApi = {
     getLogSnapshot: () => invokeIpc(IPC_CHANNELS.settingsGetLogSnapshot),
     openLogFolder: (logId) => invokeIpc(IPC_CHANNELS.settingsOpenLogFolder, logId),
   },
+  runtime: {
+    getDiagnostics: () => invokeIpc(IPC_CHANNELS.runtimeGetDiagnostics),
+  },
   memory: {
     add: (input) => invokeIpc(IPC_CHANNELS.memoryAdd, input),
     search: (query, limit) => invokeIpc(IPC_CHANNELS.memorySearch, query, limit),

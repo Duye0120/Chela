@@ -18,7 +18,9 @@ import {
 } from "../harness-readiness/service.js";
 import { appLogger } from "../logger.js";
 import { RuntimeServiceLifecycle } from "../runtime-services/lifecycle.js";
+import type { RuntimeDiagnosticsReport } from "../../shared/contracts.js";
 import type { RuntimeServiceDefinition } from "../runtime-services/types.js";
+import { mapRuntimeDiagnosticsReport } from "../runtime-services/diagnostics.js";
 
 const BACKGROUND_SERVICES: RuntimeServiceDefinition[] = [
   { name: "bus-audit", group: "observability", criticality: "optional", start: initBusAuditLog, stop: stopBusAuditLog },
@@ -100,4 +102,9 @@ export async function startBackgroundServices(): Promise<void> {
 
 export async function stopBackgroundServices(): Promise<void> {
   await backgroundServiceLifecycle.stop();
+}
+
+
+export async function getRuntimeDiagnosticsReport(): Promise<RuntimeDiagnosticsReport> {
+  return mapRuntimeDiagnosticsReport(await backgroundServiceLifecycle.getStatusReport());
 }
