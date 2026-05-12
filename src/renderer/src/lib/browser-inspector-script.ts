@@ -3,7 +3,7 @@ export function createBrowserInspectorScript() {
 (() => {
   const apiName = "__chelaInspector";
   const existing = window[apiName];
-  if (existing && existing.version === 1) {
+  if (existing && existing.version === 2) {
     return;
   }
 
@@ -51,8 +51,37 @@ export function createBrowserInspectorScript() {
     return overlay;
   };
 
-  const createPinMarker = (rect, number, pinId) => {
-    const marker = document.createElement("div");
+  const getPinKey = (pin) => [
+    String(pin.sourceUrl || "").replace(/#.*$/, ""),
+    String(pin.selector || "").trim()
+  ].join("|");
+
+  const findPinIndex = (pin) => {
+    const key = getPinKey(pin);
+    return pins.findIndex((item) => getPinKey(item) === key);
+  };
+
+  const updatePinComment = (pinId, comment) => {
+    const pin = pins.find((item) => item.pinId === pinId);
+    if (pin) {
+      pin.comment = String(comment || "");
+    }
+    const marker = document.querySelector('.chela-browser-pin-marker[data-chela-pin-id="' + pinId + '"]');
+    if (marker) {
+      marker.title = String(comment || "");
+      marker.setAttribute("aria-label", String(comment || ""));
+    }
+    return Boolean(pin || marker);
+  };
+
+  const upsertPinMarker = (rect, number, pinId) => {
+    let marker = document.querySelector('.chela-browser-pin-marker[data-chela-pin-id="' + pinId + '"]');
+    if (!marker) {
+      marker = document.createElement("div");
+      marker.className = "chela-browser-pin-marker";
+      marker.dataset.chelaPinId = pinId;
+      document.documentElement.appendChild(marker);
+    }
     marker.className = "chela-browser-pin-marker";
     marker.dataset.chelaPinId = pinId;
     marker.textContent = String(number);
@@ -74,7 +103,6 @@ export function createBrowserInspectorScript() {
       "box-shadow: 0 6px 20px rgba(0,0,0,0.22) !important",
       "pointer-events: none !important"
     ].join(";");
-    document.documentElement.appendChild(marker);
     return marker;
   };
 
@@ -284,13 +312,8 @@ export function createBrowserInspectorScript() {
     if (!target || isInspectorElement(target)) return;
     const element = collectElement(target);
     if (pinMode) {
-      pinCounter += 1;
-      const pinId = "chela-pin-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
       const rect = target.getBoundingClientRect();
-      createPinMarker(rect, pinCounter, pinId);
-      const pendingPin = {
-        pinId,
-        markerNumber: pinCounter,
+      const basePin = {
         sourceUrl: element.sourceUrl,
         selector: element.selector,
         tagName: element.tagName,
@@ -304,7 +327,29 @@ export function createBrowserInspectorScript() {
         },
         styles: element.styles
       };
-      pins.push(pendingPin);
+      const existingIndex = findPinIndex(basePin);
+      const existingPin = existingIndex >= 0 ? pins[existingIndex] : null;
+      const markerNumber = existingPin?.markerNumber || (pinCounter += 1);
+      const pinId = existingPin?.pinId || ("chela-pin-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8));
+      upsertPinMarker(rect, markerNumber, pinId);
+      const pendingPin = {
+        ...existingPin,
+        ...basePin,
+        pinId,
+        markerNumber
+      };
+      if (existingIndex >= 0) {
+        pins[existingIndex] = pendingPin;
+      } else {
+        pins.push(pendingPin);
+      }
+      const pendingIndex = pendingPins.findIndex((item) => item.pinId === pinId);
+      if (pendingIndex >= 0) {
+        pendingPins.splice(pendingIndex, 1);
+      }
+      if (typeof pendingPin.comment === "string") {
+        updatePinComment(pinId, pendingPin.comment);
+      }
       pendingPins.push(pendingPin);
       return;
     }
@@ -348,8 +393,26 @@ export function createBrowserInspectorScript() {
       }
     };
   };
+
+  const removePin = (pinId) => {
+    const index = pins.findIndex((item) => item.pinId === pinId);
+    if (index >= 0) {
+      pins.splice(index, 1);
+    }
+    for (let index = pendingPins.length - 1; index >= 0; index -= 1) {
+      if (pendingPins[index].pinId === pinId) {
+        pendingPins.splice(index, 1);
+      }
+    }
+    const marker = document.querySelector('.chela-browser-pin-marker[data-chela-pin-id="' + pinId + '"]');
+    if (marker) {
+      marker.remove();
+    }
+    return true;
+  };
+
   window[apiName] = {
-    version: 1,
+    version: 2,
     enable(options) {
       pinMode = Boolean(options && options.mode === "pin");
       if (enabled) return true;
@@ -389,6 +452,12 @@ export function createBrowserInspectorScript() {
     },
     focusPin(pinId) {
       return focusPin(pinId);
+    },
+    removePin(pinId) {
+      return removePin(pinId);
+    },
+    updatePinComment(pinId, comment) {
+      return updatePinComment(pinId, comment);
     }
   };
 })();

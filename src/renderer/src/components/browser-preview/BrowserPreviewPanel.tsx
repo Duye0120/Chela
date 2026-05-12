@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type FormEvent,
 } from "react";
 import {
@@ -61,7 +62,12 @@ type BrowserWebViewElement = HTMLElement & {
   canGoForward?: () => boolean;
 };
 
+type BrowserPendingPin = Omit<BrowserPagePin, "comment"> & {
+  comment?: string | null;
+};
+
 const BROWSER_PREVIEW_URL_STORAGE_KEY = "chela.browser-preview.url";
+const PIN_COMPOSER_WIDTH_PX = 320;
 
 function readInitialBrowserUrl() {
   if (typeof window === "undefined") {
@@ -92,7 +98,7 @@ function isBrowserInterviewElement(
 }
 
 
-function isBrowserPendingPin(value: unknown): value is Omit<BrowserPagePin, "comment"> {
+function isBrowserPendingPin(value: unknown): value is BrowserPendingPin {
   if (!value || typeof value !== "object") {
     return false;
   }
@@ -128,6 +134,54 @@ function getNavigationUrl(event: Event) {
   return typeof candidate.url === "string" ? candidate.url : null;
 }
 
+function canonicalizeBrowserPinUrl(value: string | null | undefined) {
+  const raw = value?.trim();
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return raw.replace(/#.*$/u, "");
+  }
+}
+
+function getBrowserPinKey(pin: Pick<BrowserPagePin, "sourceUrl" | "selector">) {
+  return [
+    canonicalizeBrowserPinUrl(pin.sourceUrl),
+    pin.selector.trim(),
+  ].join("|");
+}
+
+function getPinTargetLabel(pin: Pick<BrowserPagePin, "tagName" | "textContent">) {
+  const tag = pin.tagName?.trim().toLowerCase() || "element";
+  const text = pin.textContent?.replace(/\s+/gu, " ").trim();
+  return text ? `<${tag}> ${text.slice(0, 48)}` : `<${tag}>`;
+}
+
+function getPinComposerStyle(pin: BrowserPendingPin): CSSProperties {
+  const rect = pin.boundingRect;
+  if (!rect) {
+    return {
+      left: 12,
+      top: 12,
+      width: `min(${PIN_COMPOSER_WIDTH_PX}px, calc(100% - 24px))`,
+    };
+  }
+
+  const preferredLeft = Math.round(rect.x + Math.min(rect.width, 36) + 12);
+  const preferredTop = Math.round(rect.y);
+
+  return {
+    left: `max(12px, min(${preferredLeft}px, calc(100% - ${PIN_COMPOSER_WIDTH_PX + 12}px)))`,
+    top: `max(12px, min(${preferredTop}px, calc(100% - 172px)))`,
+    width: `min(${PIN_COMPOSER_WIDTH_PX}px, calc(100% - 24px))`,
+  };
+}
+
 export function BrowserPreviewPanel({
   onClose,
   onElementSelected,
@@ -139,7 +193,7 @@ export function BrowserPreviewPanel({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [inspectorEnabled, setInspectorEnabled] = useState(false);
   const [pinModeEnabled, setPinModeEnabled] = useState(false);
-  const [pendingPin, setPendingPin] = useState<Omit<BrowserPagePin, "comment"> | null>(null);
+  const [pendingPin, setPendingPin] = useState<BrowserPendingPin | null>(null);
   const [pinCommentDraft, setPinCommentDraft] = useState("");
   const [pagePins, setPagePins] = useState<BrowserPagePin[]>([]);
   const [lastSelectionLabel, setLastSelectionLabel] = useState<string | null>(null);
@@ -157,6 +211,7 @@ export function BrowserPreviewPanel({
     useState<BrowserWebViewElement | null>(null);
   const inspectorEnabledRef = useRef(inspectorEnabled);
   const pollingRef = useRef<number | null>(null);
+  const pagePinsRef = useRef(pagePins);
 
   const handleWebviewRef = useCallback((node: HTMLElement | null) => {
     const nextNode = node as BrowserWebViewElement | null;
@@ -170,6 +225,10 @@ export function BrowserPreviewPanel({
   useEffect(() => {
     window.localStorage.setItem(BROWSER_PREVIEW_URL_STORAGE_KEY, currentUrl);
   }, [currentUrl]);
+
+  useEffect(() => {
+    pagePinsRef.current = pagePins;
+  }, [pagePins]);
 
   const runInBrowser = useCallback(
     async (code: string) => {
@@ -317,11 +376,18 @@ export function BrowserPreviewPanel({
           if (!isBrowserPendingPin(value)) {
             return;
           }
-          setPendingPin({
+          const pending = {
             ...value,
             sourceUrl: value.sourceUrl || currentUrl,
+          };
+          const existing = pagePinsRef.current.find(
+            (pin) => getBrowserPinKey(pin) === getBrowserPinKey(pending),
+          );
+          setPendingPin({
+            ...pending,
+            comment: pending.comment ?? existing?.comment ?? "",
           });
-          setPinCommentDraft("");
+          setPinCommentDraft(pending.comment ?? existing?.comment ?? "");
         });
     }, 220);
 
@@ -411,11 +477,56 @@ export function BrowserPreviewPanel({
     const item = createBrowserPinContextItem(pin);
     setPinFocusError(null);
     setLastPinLabel(item.label);
-    setPagePins((current) => [pin, ...current.filter((candidate) => candidate.pinId !== pin.pinId)].slice(0, 12));
+    setPagePins((current) => [
+      pin,
+      ...current.filter((candidate) => getBrowserPinKey(candidate) !== getBrowserPinKey(pin)),
+    ].slice(0, 12));
     setPendingPin(null);
     setPinCommentDraft("");
+    if (pin.pinId) {
+      void runInBrowser(
+        `window.__chelaInspector?.updatePinComment?.(${JSON.stringify(pin.pinId)}, ${JSON.stringify(comment)})`,
+      );
+    }
     onElementSelected(item);
-  }, [currentUrl, onElementSelected, pendingPin, pinCommentDraft]);
+  }, [currentUrl, onElementSelected, pendingPin, pinCommentDraft, runInBrowser]);
+
+  const cancelPendingPin = useCallback(() => {
+    const pinId = pendingPin?.pinId;
+    const hasSavedPin = pendingPin
+      ? pagePinsRef.current.some(
+          (pin) => getBrowserPinKey(pin) === getBrowserPinKey(pendingPin),
+        )
+      : false;
+    setPendingPin(null);
+    setPinCommentDraft("");
+    if (pinId && !hasSavedPin) {
+      void runInBrowser(
+        `window.__chelaInspector?.removePin?.(${JSON.stringify(pinId)})`,
+      );
+    }
+  }, [pendingPin, runInBrowser]);
+
+  const removePagePin = useCallback(
+    (pin: BrowserPagePin) => {
+      setPagePins((current) =>
+        current.filter((candidate) => getBrowserPinKey(candidate) !== getBrowserPinKey(pin)),
+      );
+      if (
+        pendingPin &&
+        getBrowserPinKey(pendingPin) === getBrowserPinKey(pin)
+      ) {
+        setPendingPin(null);
+        setPinCommentDraft("");
+      }
+      if (pin.pinId) {
+        void runInBrowser(
+          `window.__chelaInspector?.removePin?.(${JSON.stringify(pin.pinId)})`,
+        );
+      }
+    },
+    [pendingPin, runInBrowser],
+  );
 
 
   const focusPagePin = useCallback(
@@ -698,7 +809,7 @@ export function BrowserPreviewPanel({
 
 
       {pagePins.length > 0 ? (
-        <div className="mb-2 rounded-[var(--radius-shell)] border border-[color:var(--color-border-muted)] bg-[color:var(--color-control-panel-bg)] px-2 py-2">
+        <div className="mb-2 rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-2 py-2 shadow-[var(--color-control-shadow)]">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
@@ -717,19 +828,39 @@ export function BrowserPreviewPanel({
               加入 Review 上下文
             </Button>
           </div>
-          <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-1">
+          <div className="flex min-w-0 items-stretch gap-2 overflow-x-auto pb-1">
             {pagePins.map((pin) => (
-              <button
+              <div
                 key={pin.pinId ?? `${pin.selector}-${pin.comment}`}
-                type="button"
-                onClick={() => void focusPagePin(pin)}
-                className="inline-flex max-w-[240px] shrink-0 items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-selection-muted-bg)] px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-[color:var(--color-control-bg-hover)]"
-                title={pin.comment}
+                className="group flex w-[260px] shrink-0 items-start gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-selection-muted-bg)] px-2.5 py-2 text-left transition-colors hover:bg-[color:var(--color-control-bg-hover)]"
               >
-                <MapPinIcon className="size-3 shrink-0 text-muted-foreground" />
-                <span className="shrink-0 text-muted-foreground">#{pin.markerNumber ?? "?"}</span>
-                <span className="truncate">{pin.comment}</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => void focusPagePin(pin)}
+                  className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                  title={pin.comment}
+                >
+                  <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-[11px] font-semibold text-white">
+                    {pin.markerNumber ?? "?"}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      {getPinTargetLabel(pin)}
+                    </span>
+                    <span className="mt-0.5 line-clamp-2 block text-[12px] leading-4 text-foreground">
+                      {pin.comment}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removePagePin(pin)}
+                  className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-[var(--radius-shell)] text-muted-foreground opacity-70 transition-opacity hover:bg-[color:var(--color-control-bg)] hover:text-foreground group-hover:opacity-100"
+                  aria-label="删除页面批注"
+                >
+                  <XIcon className="size-3" />
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -741,52 +872,7 @@ export function BrowserPreviewPanel({
           {pinFocusError}
         </div>
       ) : null}
-      {pendingPin ? (
-        <div className="mb-2 rounded-[var(--radius-shell)] border border-[color:var(--color-border-muted)] bg-[color:var(--color-control-panel-bg)] p-2 shadow-[var(--color-control-shadow)]">
-          <div className="mb-2 flex items-center justify-between gap-2 text-[12px] text-foreground">
-            <span className="inline-flex min-w-0 items-center gap-1.5 font-medium">
-              <MapPinIcon className="size-3.5 shrink-0 text-[color:var(--color-accent)]" />
-              <span className="truncate">给 {pendingPin.tagName} 写一句页面批注</span>
-            </span>
-            <button
-              type="button"
-              className="text-[11px] text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setPendingPin(null);
-                setPinCommentDraft("");
-              }}
-            >
-              取消
-            </button>
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={pinCommentDraft}
-              onChange={(event) => setPinCommentDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  submitPendingPin();
-                }
-              }}
-              className="min-w-0 flex-1 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2.5 py-1.5 text-[12px] text-foreground outline-none placeholder:text-muted-foreground"
-              placeholder="例如：这里 CTA 不够明显，帮我改成主操作"
-              autoFocus
-            />
-            <Button
-              type="button"
-              size="sm"
-              disabled={!pinCommentDraft.trim()}
-              onClick={submitPendingPin}
-              className="h-8 rounded-[var(--radius-shell)] px-3 text-[12px]"
-            >
-              加入上下文
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="min-h-0 flex-1 overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)]">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)]">
         <webview
           ref={handleWebviewRef}
           src={currentUrl}
@@ -794,6 +880,70 @@ export function BrowserPreviewPanel({
           partition="persist:chela-browser-preview"
           allowpopups={false}
         />
+        {pendingPin ? (
+          <div
+            className="absolute z-20 rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] p-2.5 shadow-[var(--color-control-shadow)]"
+            style={getPinComposerStyle(pendingPin)}
+          >
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="inline-flex max-w-full items-center gap-1.5 text-[12px] font-medium text-foreground">
+                  <MapPinIcon className="size-3.5 shrink-0 text-[color:var(--color-accent)]" />
+                  <span className="truncate">{getPinTargetLabel(pendingPin)}</span>
+                </p>
+                {pendingPin.comment ? (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">更新页面批注</p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-[var(--radius-shell)] text-muted-foreground hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground"
+                onClick={cancelPendingPin}
+                aria-label="取消页面批注"
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            </div>
+            <textarea
+              value={pinCommentDraft}
+              onChange={(event) => setPinCommentDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelPendingPin();
+                  return;
+                }
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                  event.preventDefault();
+                  submitPendingPin();
+                }
+              }}
+              className="h-20 w-full resize-none rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2.5 py-2 text-[12px] leading-4 text-foreground outline-none placeholder:text-muted-foreground"
+              placeholder="写一句批注"
+              autoFocus
+            />
+            <div className="mt-2 flex justify-end gap-1.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={cancelPendingPin}
+                className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px]"
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!pinCommentDraft.trim()}
+                onClick={submitPendingPin}
+                className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px]"
+              >
+                {pendingPin.comment ? "更新" : "保存"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </section>
   );

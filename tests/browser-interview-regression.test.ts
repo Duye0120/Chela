@@ -42,6 +42,8 @@ const selectedButton: BrowserInterviewElement = {
 assert.equal(normalizeBrowserPreviewUrl("localhost:5173"), "http://localhost:5173");
 assert.equal(normalizeBrowserPreviewUrl("127.0.0.1:3000/app"), "http://127.0.0.1:3000/app");
 assert.equal(normalizeBrowserPreviewUrl("https://example.com/path"), "https://example.com/path");
+assert.equal(normalizeBrowserPreviewUrl("file:///C:/Users/Administrator/.ssh/id_rsa"), "");
+assert.equal(normalizeBrowserPreviewUrl("javascript:alert(1)"), "");
 assert.equal(normalizeBrowserPreviewUrl(""), "");
 
 assert.equal(formatBrowserElementLabel(selectedButton), "button#save.primary");
@@ -155,6 +157,19 @@ const reviewQueuePrompt = buildBrowserContextPrompt("按队列处理", [reviewQu
 assert.match(reviewQueuePrompt, /页面 Review 队列 1/);
 assert.match(reviewQueuePrompt, /按页面批注修复 dashboard/);
 assert.match(reviewQueuePrompt, /Selector: main > button#browser/);
+
+const updatedSameElementPin = {
+  ...pinItem.pin!,
+  pinId: "chela-pin-updated",
+  markerNumber: 1,
+  comment: "同一个元素更新后的批注",
+};
+const duplicateQueue = createBrowserReviewQueue([pinItem.pin!, updatedSameElementPin], {
+  title: "Deduped Review",
+  sourceUrl: "http://localhost:5173/dashboard",
+});
+assert.equal(duplicateQueue.pins.length, 1);
+assert.equal(duplicateQueue.pins[0]?.comment, "同一个元素更新后的批注");
 
 const secondSnapshot = createBrowserPageSnapshotContextItem({
   sourceUrl: "http://localhost:5173/dashboard#details",
