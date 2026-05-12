@@ -16,6 +16,9 @@ type WebFetchDetails = {
   truncated: boolean;
 };
 
+const MAX_REDIRECTS = 5;
+const USER_AGENT = "Chela/0.1";
+
 /** Strip HTML tags and extract text content (basic) */
 function htmlToText(html: string): string {
   return html
@@ -40,6 +43,57 @@ function htmlToText(html: string): string {
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function resolveRedirectUrl(currentUrl: string, location: string | null): string | null {
+  if (!location) {
+    return null;
+  }
+
+  try {
+    return new URL(location, currentUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+async function fetchWithPolicyRedirects(
+  initialUrl: string,
+  signal: AbortSignal,
+): Promise<Response | { error: string; url: string }> {
+  let nextUrl = initialUrl;
+
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+    const urlCheck = checkFetchUrl(nextUrl);
+    if (!urlCheck.allowed) {
+      return { error: urlCheck.reason ?? "URL 被策略拒绝。", url: nextUrl };
+    }
+
+    const response = await fetch(nextUrl, {
+      signal,
+      redirect: "manual",
+      headers: { "User-Agent": USER_AGENT },
+    });
+
+    if (![301, 302, 303, 307, 308].includes(response.status)) {
+      return response;
+    }
+
+    const redirectUrl = resolveRedirectUrl(nextUrl, response.headers.get("location"));
+    if (!redirectUrl) {
+      return { error: "重定向响应缺少有效 Location。", url: nextUrl };
+    }
+
+    nextUrl = redirectUrl;
+  }
+
+  return { error: `重定向次数超过 ${MAX_REDIRECTS} 次。`, url: nextUrl };
+}
+
+function isFetchPolicyError(
+  value: Response | { error: string; url: string },
+): value is { error: string; url: string } {
+  return "error" in value;
 }
 
 export function createWebFetchTool(): AgentTool<typeof parameters, WebFetchDetails> {
@@ -71,15 +125,18 @@ export function createWebFetchTool(): AgentTool<typeof parameters, WebFetchDetai
           signal.addEventListener("abort", () => controller.abort(), { once: true });
         }
 
-        const response = await fetch(params.url, {
-          signal: controller.signal,
-          headers: { "User-Agent": "PiDesktopAgent/1.0" },
-        });
+        const response = await fetchWithPolicyRedirects(params.url, controller.signal);
+        if (isFetchPolicyError(response)) {
+          return {
+            content: [{ type: "text", text: `无法访问: ${response.error}` }],
+            details: { url: response.url, statusCode: 0, contentLength: 0, truncated: false },
+          };
+        }
 
         if (!response.ok) {
           return {
             content: [{ type: "text", text: `HTTP ${response.status}: ${response.statusText}` }],
-            details: { url: params.url, statusCode: response.status, contentLength: 0, truncated: false },
+            details: { url: response.url, statusCode: response.status, contentLength: 0, truncated: false },
           };
         }
 
@@ -90,7 +147,7 @@ export function createWebFetchTool(): AgentTool<typeof parameters, WebFetchDetai
         if (raw.length > FETCH_POLICY.maxResponseSizeBytes) {
           return {
             content: [{ type: "text", text: `响应体过大（${(raw.length / 1024 / 1024).toFixed(1)}MB），已拒绝` }],
-            details: { url: params.url, statusCode: response.status, contentLength: raw.length, truncated: true },
+            details: { url: response.url, statusCode: response.status, contentLength: raw.length, truncated: true },
           };
         }
 
@@ -107,9 +164,9 @@ export function createWebFetchTool(): AgentTool<typeof parameters, WebFetchDetai
         }
 
         return {
-          content: [{ type: "text", text: `网页内容（${params.url}）:\n\n${text}` }],
+          content: [{ type: "text", text: `网页内容（${response.url}）:\n\n${text}` }],
           details: {
-            url: params.url,
+            url: response.url,
             statusCode: response.status,
             contentLength: raw.length,
             truncated,

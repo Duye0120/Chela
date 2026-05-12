@@ -46,9 +46,23 @@ withTempWorkspace((workspacePath) => {
 }
 
 {
+  const result = checkShellCommand("rmdir /s /q C:\\temp\\chela");
+  assert.equal(result.allowed, false);
+  assert.equal(result.needsConfirmation, false);
+}
+
+{
+  const result = checkShellCommand("Restart-Computer -Force");
+  assert.equal(result.allowed, false);
+  assert.equal(result.needsConfirmation, false);
+}
+
+{
   assert.equal(isPathForbiddenRead(path.join(os.tmpdir(), "project", ".env")), true);
   assert.equal(checkFetchUrl("https://example.com").allowed, true);
   assert.equal(checkFetchUrl("file:///tmp/secret").allowed, false);
+  assert.equal(checkFetchUrl("http://[::1]:5173").allowed, false);
+  assert.equal(checkFetchUrl("http://169.254.169.254/latest/meta-data").allowed, false);
 }
 
 {

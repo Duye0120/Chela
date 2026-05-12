@@ -4,6 +4,7 @@ export type {
   BrowserElementStyles,
   BrowserInterviewElement,
   BrowserPagePin,
+  BrowserPageSnapshot,
   BrowserReviewQueue,
 } from "@shared/contracts";
 export {
@@ -29,6 +30,8 @@ export const BROWSER_CONTEXT_FALLBACK_INSTRUCTION =
 const LOCAL_HOST_PATTERN =
   /^(localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1\])(?::\d+)?(?:[/?#].*)?$/iu;
 const URL_SCHEME_PATTERN = /^[a-z][a-z\d+.-]*:\/\//iu;
+const URL_PROTOCOL_LIKE_PATTERN = /^[a-z][a-z\d+.-]*:/iu;
+const BROWSER_PREVIEW_ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 
 function cleanText(value: string | null | undefined, maxLength: number) {
   const normalized = value?.replace(/\s+/gu, " ").trim() ?? "";
@@ -54,18 +57,48 @@ function formatNullable(value: string | number | null | undefined) {
   return String(value);
 }
 
+function canonicalizeBrowserPinUrl(value: string | null | undefined) {
+  const raw = value?.trim();
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return raw.replace(/#.*$/u, "");
+  }
+}
+
+function getBrowserPinQueueKey(pin: Pick<BrowserPagePin, "sourceUrl" | "selector">) {
+  return `${canonicalizeBrowserPinUrl(pin.sourceUrl)}|${pin.selector.trim()}`;
+}
+
 export function normalizeBrowserPreviewUrl(value: string) {
   const trimmed = value.trim();
   if (!trimmed) {
     return "";
   }
 
-  if (URL_SCHEME_PATTERN.test(trimmed)) {
-    return trimmed;
-  }
-
   if (LOCAL_HOST_PATTERN.test(trimmed)) {
     return `http://${trimmed}`;
+  }
+
+  if (URL_SCHEME_PATTERN.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      return BROWSER_PREVIEW_ALLOWED_PROTOCOLS.has(parsed.protocol)
+        ? parsed.toString()
+        : "";
+    } catch {
+      return "";
+    }
+  }
+
+  if (URL_PROTOCOL_LIKE_PATTERN.test(trimmed)) {
+    return "";
   }
 
   return `https://${trimmed}`;
@@ -147,7 +180,7 @@ export function createBrowserReviewQueue(
 ): BrowserReviewQueue {
   const deduped = new Map<string, BrowserPagePin>();
   for (const pin of pins) {
-    const key = pin.pinId || `${pin.sourceUrl ?? ""}|${pin.selector}|${pin.comment}`;
+    const key = getBrowserPinQueueKey(pin);
     deduped.set(key, pin);
   }
   const nextPins = [...deduped.values()].slice(0, 12);

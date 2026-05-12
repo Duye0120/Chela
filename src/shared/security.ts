@@ -4,9 +4,15 @@
 /** Commands that are always blocked — high risk, irreversible */
 export const DANGEROUS_COMMAND_PATTERNS: RegExp[] = [
   /\brm\s+(-rf?|--recursive)\s+[\/~]/,
+  /\brm\s+(-rf?|--recursive)\b.*\.\./,
+  /\bRemove-Item\b.*(?:^|\s)(?:-Recurse|-r)(?:\s|$)/i,
+  /\brmdir\b.*(?:^|\s)\/s(?:\s|$)/i,
+  /\bdel\b.*(?:^|\s)\/[fsq]+(?:\s|$)/i,
   /\bmkfs\b/,
   /\bdd\b.*\bof=/,
   /\b(shutdown|reboot|halt|poweroff)\b/,
+  /\bStop-Computer\b/i,
+  /\bRestart-Computer\b/i,
   /\bchmod\s+777\b/,
   />\s*\/dev\/sd/,
   /\bcurl\b.*\|\s*(bash|sh)\b/,
@@ -50,7 +56,9 @@ export const FETCH_POLICY = {
   blockedHostPatterns: [
     /^localhost$/,
     /^127\.0\.0\.1$/,
+    /^\[?::1\]?$/,
     /^0\.0\.0\.0$/,
+    /^169\.254\./,
     /^10\./,
     /^192\.168\./,
     /^172\.(1[6-9]|2\d|3[01])\./,
