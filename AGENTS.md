@@ -39,6 +39,13 @@ UI 设计默认谨慎使用 border。
 - 如果必须使用 border，优先弱化处理，避免页面出现过多边框盒子感。
 - UI 控件圆角默认统一使用项目 token，如 `rounded-[var(--radius-shell)]`；轻量按钮、下拉触发器、分支切换器也要沿用统一圆角。只有头像、进度环、状态点这类天然圆形元素才使用 `rounded-full`。
 
+UI 颜色 token 默认按语义统一。`新增：2026-05-13 11:38:00`
+- 改 UI 颜色前先确认现有 token 的语义，优先复用已有 token，不要随手新增近似色或临时色。
+- 同一界面、同一层级、同一语义的控件必须使用同一背景 / 文本 / hover token；例如同一行 chip 默认统一背景，只通过 icon、文案或局部状态表达类型差异。
+- 新增或调整颜色时，先归类为 shell、composer、control、selection、status、accent、message 等语义层，再选择对应 token。
+- 只有确实存在新的 UI 语义时才新增 token；新增时必须同步说明用途、适用范围和避免与哪些现有 token 混用。
+- 后续需要专项整理全项目颜色 token，目标是消除同语义多 token、同层级多背景和散落的硬编码颜色。
+
 UI 交付默认同时满足表现和性能。
 - 所有 UI 改动同时追求观感质量、交互清晰度和运行性能。
 - 不接受只提升视觉而牺牲渲染稳定性、响应速度或列表滚动性能的实现。
@@ -71,6 +78,12 @@ Shell 分栏拖拽改动默认完整核对。`新增：2026-05-11 13:10:14`
 - 中断审批恢复、内部续写提示、runtime 诊断文案只走内部链路；用户可见聊天消息、重试动作、恢复动作统一展示产品级文案，不展示 `sessionId`、`runId`、`payloadHash` 这类内部字段。
 - 引导消息和“下一条继续说”统一走正式队列模型；主进程负责 FIFO、抢占置顶、run 结束后续发，`pendingRedirectDraft` 这类单条临时草稿语义只保留迁移兼容职责。
 - 交付前至少手动确认：纯文本聊天能发、`思考` 还能显示、`context` 圆环与 hover/展开都在、`0%` 灰环正常、分支切换器选中态和缓存正常。
+
+跨面板状态同步默认集中治理。`新增：2026-05-13 14:32:00`
+- 聊天 session、附件、Browser context、Browser marker、右侧 panel 这类跨组件共享状态，默认先找唯一事实源。
+- 删除、保存、切换 session、清空 context 时，要同步所有派生 UI；聊天里的 context / attachment chip 和 Browser panel 里的 marker 必须联动。
+- 后续若同类同步继续增多，优先评估引入 Zustand store 或等价轻量状态层，把 session 附件、browser context、panel interaction state 从局部组件 state 中收拢。
+- 引入全局 store 时要先划清职责：持久化仍走 session service，store 负责 renderer 内同步、selector 和派生状态，不把主进程持久化逻辑混进 UI store。
 
 聊天默认语气保持克制与尊重。`新增：2026-04-10 23:20:43`
 - 用户明确不接受“黑化”、毒舌、阴阳怪气或带冒犯感的表达。
