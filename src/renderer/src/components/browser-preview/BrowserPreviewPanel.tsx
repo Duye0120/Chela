@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -11,9 +12,7 @@ import {
   ChevronRightIcon,
   Globe2Icon,
   MapPinIcon,
-  MousePointer2Icon,
   RefreshCwIcon,
-  ScanSearchIcon,
   SparklesIcon,
   XIcon,
 } from "lucide-react";
@@ -26,23 +25,24 @@ import {
 import { createBrowserInspectorScript } from "@renderer/lib/browser-inspector-script";
 import {
   DEFAULT_BROWSER_PREVIEW_URL,
-  createBrowserContextItem,
   createBrowserPageSnapshotContextItem,
   createBrowserPinContextItem,
-  createBrowserReviewQueue,
-  createBrowserReviewQueueContextItem,
-  formatBrowserElementLabel,
+  createBrowserScreenshotContextItem,
+  formatBrowserContextChipLabel,
   normalizeBrowserPreviewUrl,
   type BrowserContextItem,
-  type BrowserInterviewElement,
   type BrowserPagePin,
   type BrowserPageSnapshot,
 } from "@renderer/lib/browser-interview";
 import { cn } from "@renderer/lib/utils";
+import type { SelectedFile } from "@shared/contracts";
 
 type BrowserPreviewPanelProps = {
   onClose: () => void;
   onElementSelected: (item: BrowserContextItem) => void;
+  onScreenshotCaptured: (files: SelectedFile[]) => Promise<void> | void;
+  browserContextItems: BrowserContextItem[];
+  resetInteractionSignal?: number;
   className?: string;
 };
 
@@ -60,14 +60,49 @@ type BrowserWebViewElement = HTMLElement & {
   goForward?: () => void;
   canGoBack?: () => boolean;
   canGoForward?: () => boolean;
+  capturePage?: (rect?: BrowserCaptureRect) => Promise<BrowserCaptureImage>;
 };
 
 type BrowserPendingPin = Omit<BrowserPagePin, "comment"> & {
   comment?: string | null;
 };
 
+type BrowserCaptureRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type BrowserCaptureImage = {
+  toPNG?: () => Uint8Array;
+  toDataURL?: () => string;
+};
+
+type BrowserCaptureRegion = {
+  sourceUrl?: string | null;
+  rect: BrowserCaptureRect;
+  viewport?: BrowserCaptureRect | null;
+  title?: string | null;
+};
+
+type BrowserPendingScreenshot = BrowserCaptureRegion & {
+  screenshotId: string;
+  markerNumber: number;
+  imageBuffer: ArrayBuffer;
+  imageUrl: string;
+};
+
+type BrowserScreenshotMarkerPayload = {
+  screenshotId: string;
+  markerNumber: number;
+  rect: BrowserCaptureRect;
+  comment: string;
+};
+
 const BROWSER_PREVIEW_URL_STORAGE_KEY = "chela.browser-preview.url";
 const PIN_COMPOSER_WIDTH_PX = 320;
+const SCREENSHOT_COMPOSER_WIDTH_PX = 340;
 
 function readInitialBrowserUrl() {
   if (typeof window === "undefined") {
@@ -80,23 +115,6 @@ function readInitialBrowserUrl() {
     ) || DEFAULT_BROWSER_PREVIEW_URL
   );
 }
-
-function isBrowserInterviewElement(
-  value: unknown,
-): value is BrowserInterviewElement {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as Partial<BrowserInterviewElement>;
-  return (
-    typeof candidate.selector === "string" &&
-    candidate.selector.trim().length > 0 &&
-    typeof candidate.tagName === "string" &&
-    candidate.tagName.trim().length > 0
-  );
-}
-
 
 function isBrowserPendingPin(value: unknown): value is BrowserPendingPin {
   if (!value || typeof value !== "object") {
@@ -112,6 +130,24 @@ function isBrowserPendingPin(value: unknown): value is BrowserPendingPin {
   );
 }
 
+function isBrowserCaptureRegion(value: unknown): value is BrowserCaptureRegion {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<BrowserCaptureRegion>;
+  const rect = candidate.rect;
+  return (
+    Boolean(rect) &&
+    typeof rect?.x === "number" &&
+    typeof rect.y === "number" &&
+    typeof rect.width === "number" &&
+    typeof rect.height === "number" &&
+    rect.width > 0 &&
+    rect.height > 0
+  );
+}
+
 function isBrowserPageSnapshot(value: unknown): value is BrowserPageSnapshot {
   if (!value || typeof value !== "object") {
     return false;
@@ -123,10 +159,6 @@ function isBrowserPageSnapshot(value: unknown): value is BrowserPageSnapshot {
     typeof candidate.title === "string" ||
     typeof candidate.visibleText === "string"
   );
-}
-
-function getBrowserPageTitle(snapshot: BrowserPageSnapshot, fallbackUrl: string) {
-  return snapshot.title?.trim() || snapshot.sourceUrl?.trim() || fallbackUrl;
 }
 
 function getNavigationUrl(event: Event) {
@@ -182,45 +214,133 @@ function getPinComposerStyle(pin: BrowserPendingPin): CSSProperties {
   };
 }
 
+function getScreenshotComposerStyle(
+  screenshot: BrowserPendingScreenshot,
+): CSSProperties {
+  const rect = screenshot.rect;
+  const preferredLeft = Math.round(rect.x + Math.min(rect.width, 36) + 12);
+  const preferredTop = Math.round(rect.y);
+
+  return {
+    left: `max(12px, min(${preferredLeft}px, calc(100% - ${SCREENSHOT_COMPOSER_WIDTH_PX + 12}px)))`,
+    top: `max(12px, min(${preferredTop}px, calc(100% - 260px)))`,
+    width: `min(${SCREENSHOT_COMPOSER_WIDTH_PX}px, calc(100% - 24px))`,
+  };
+}
+
+function getPngArrayBuffer(bytes: Uint8Array) {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
+function getPngArrayBufferFromDataUrl(dataUrl: string) {
+  const [, base64 = ""] = dataUrl.split(",");
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes.buffer;
+}
+
+function getScreenshotName(region: BrowserCaptureRegion) {
+  const date = new Date();
+  const stamp = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+    String(date.getHours()).padStart(2, "0"),
+    String(date.getMinutes()).padStart(2, "0"),
+    String(date.getSeconds()).padStart(2, "0"),
+  ].join("");
+  const title = region.title?.trim().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/gu, "").slice(0, 32);
+  return `browser-region-${title ? `${title}-` : ""}${stamp}.png`;
+}
+
+function createBrowserScreenshotId() {
+  return `browser-screenshot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeCaptureRect(rect: BrowserCaptureRect): BrowserCaptureRect {
+  return {
+    x: Math.max(0, Math.round(rect.x)),
+    y: Math.max(0, Math.round(rect.y)),
+    width: Math.max(1, Math.round(rect.width)),
+    height: Math.max(1, Math.round(rect.height)),
+  };
+}
+
+function waitForBrowserPaint() {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, 48);
+  });
+}
+
+function createScreenshotMarkerPayloads(
+  items: readonly BrowserContextItem[],
+): BrowserScreenshotMarkerPayload[] {
+  return items.flatMap((item, index) => {
+    const screenshot = item.kind === "screenshot" ? item.screenshot : null;
+    const rect = screenshot?.boundingRect;
+    if (!screenshot?.screenshotId || !rect) {
+      return [];
+    }
+
+    return [{
+      screenshotId: screenshot.screenshotId,
+      markerNumber: index + 1,
+      rect: normalizeCaptureRect(rect),
+      comment: screenshot.comment,
+    }];
+  });
+}
+
 export function BrowserPreviewPanel({
   onClose,
   onElementSelected,
+  onScreenshotCaptured,
+  browserContextItems,
+  resetInteractionSignal = 0,
   className,
 }: BrowserPreviewPanelProps) {
   const [currentUrl, setCurrentUrl] = useState(readInitialBrowserUrl);
   const [draftUrl, setDraftUrl] = useState(currentUrl);
   const [loadState, setLoadState] = useState<BrowserLoadState>("idle");
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [inspectorEnabled, setInspectorEnabled] = useState(false);
   const [pinModeEnabled, setPinModeEnabled] = useState(false);
   const [pendingPin, setPendingPin] = useState<BrowserPendingPin | null>(null);
   const [pinCommentDraft, setPinCommentDraft] = useState("");
+  const [pendingScreenshot, setPendingScreenshot] =
+    useState<BrowserPendingScreenshot | null>(null);
+  const [screenshotCommentDraft, setScreenshotCommentDraft] = useState("");
   const [pagePins, setPagePins] = useState<BrowserPagePin[]>([]);
-  const [lastSelectionLabel, setLastSelectionLabel] = useState<string | null>(null);
-  const [lastPinLabel, setLastPinLabel] = useState<string | null>(null);
-  const [lastReviewQueueLabel, setLastReviewQueueLabel] = useState<string | null>(null);
   const [pageTitle, setPageTitle] = useState<string | null>(null);
   const [snapshotBusy, setSnapshotBusy] = useState(false);
-  const [lastSnapshotLabel, setLastSnapshotLabel] = useState<string | null>(null);
   const [navigationState, setNavigationState] = useState<BrowserNavigationState>({
     canGoBack: false,
     canGoForward: false,
   });
-  const [pinFocusError, setPinFocusError] = useState<string | null>(null);
   const [webviewElement, setWebviewElement] =
     useState<BrowserWebViewElement | null>(null);
-  const inspectorEnabledRef = useRef(inspectorEnabled);
   const pollingRef = useRef<number | null>(null);
   const pagePinsRef = useRef(pagePins);
+  const screenshotMarkerCounterRef = useRef(0);
+  const resetInteractionSignalRef = useRef(resetInteractionSignal);
+  const hasPendingComposer = Boolean(pendingPin || pendingScreenshot);
+  const screenshotMarkerPayloads = useMemo(
+    () => createScreenshotMarkerPayloads(browserContextItems),
+    [browserContextItems],
+  );
+  const screenshotMarkerSignature = useMemo(
+    () => JSON.stringify(screenshotMarkerPayloads),
+    [screenshotMarkerPayloads],
+  );
 
   const handleWebviewRef = useCallback((node: HTMLElement | null) => {
     const nextNode = node as BrowserWebViewElement | null;
     setWebviewElement((current) => (current === nextNode ? current : nextNode));
   }, []);
-
-  useEffect(() => {
-    inspectorEnabledRef.current = inspectorEnabled;
-  }, [inspectorEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(BROWSER_PREVIEW_URL_STORAGE_KEY, currentUrl);
@@ -245,6 +365,15 @@ export function BrowserPreviewPanel({
     },
     [webviewElement],
   );
+
+  const stopBrowserInteraction = useCallback(() => {
+    setPinModeEnabled(false);
+    if (pollingRef.current !== null) {
+      window.clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    void runInBrowser("window.__chelaInspector?.disable?.()");
+  }, [runInBrowser]);
 
   const refreshNavigationState = useCallback(
     (webview: BrowserWebViewElement | null = webviewElement) => {
@@ -281,13 +410,23 @@ export function BrowserPreviewPanel({
 
   const injectInspector = useCallback(async () => {
     await runInBrowser(createBrowserInspectorScript());
-    if (inspectorEnabledRef.current) {
-      await runInBrowser("window.__chelaInspector?.enable?.()");
-    }
+    await runInBrowser(
+      `window.__chelaInspector?.syncScreenshotMarkers?.(${screenshotMarkerSignature})`,
+    );
     if (pinModeEnabled) {
       await runInBrowser("window.__chelaInspector?.enable?.({ mode: 'pin' })");
     }
-  }, [pinModeEnabled, runInBrowser]);
+  }, [pinModeEnabled, runInBrowser, screenshotMarkerSignature]);
+
+  useEffect(() => {
+    if (!webviewElement) {
+      return;
+    }
+
+    void runInBrowser(
+      `window.__chelaInspector?.syncScreenshotMarkers?.(${screenshotMarkerSignature})`,
+    );
+  }, [runInBrowser, screenshotMarkerSignature, webviewElement]);
 
   useEffect(() => {
     const webview = webviewElement;
@@ -346,67 +485,6 @@ export function BrowserPreviewPanel({
     };
   }, [injectInspector, refreshNavigationState, webviewElement]);
 
-  useEffect(() => {
-    if (!webviewElement || (!inspectorEnabled && !pinModeEnabled)) {
-      if (pollingRef.current !== null) {
-        window.clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-      return;
-    }
-
-    void injectInspector();
-    pollingRef.current = window.setInterval(() => {
-      void runInBrowser("window.__chelaInspector?.consumeSelection?.() ?? null")
-        .then((value) => {
-          if (!isBrowserInterviewElement(value)) {
-            return;
-          }
-
-          const element: BrowserInterviewElement = {
-            ...value,
-            sourceUrl: value.sourceUrl || currentUrl,
-          };
-          const item = createBrowserContextItem(element);
-          setLastSelectionLabel(formatBrowserElementLabel(element));
-          onElementSelected(item);
-        });
-      void runInBrowser("window.__chelaInspector?.consumePin?.() ?? null")
-        .then((value) => {
-          if (!isBrowserPendingPin(value)) {
-            return;
-          }
-          const pending = {
-            ...value,
-            sourceUrl: value.sourceUrl || currentUrl,
-          };
-          const existing = pagePinsRef.current.find(
-            (pin) => getBrowserPinKey(pin) === getBrowserPinKey(pending),
-          );
-          setPendingPin({
-            ...pending,
-            comment: pending.comment ?? existing?.comment ?? "",
-          });
-          setPinCommentDraft(pending.comment ?? existing?.comment ?? "");
-        });
-    }, 220);
-
-    return () => {
-      if (pollingRef.current !== null) {
-        window.clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
-  }, [
-    currentUrl,
-    injectInspector,
-    inspectorEnabled,
-    pinModeEnabled,
-    onElementSelected,
-    runInBrowser,
-    webviewElement,
-  ]);
-
   useEffect(() => () => {
     if (pollingRef.current !== null) {
       window.clearInterval(pollingRef.current);
@@ -433,27 +511,12 @@ export function BrowserPreviewPanel({
     [currentUrl, draftUrl, webviewElement],
   );
 
-  const toggleInspector = useCallback(() => {
-    setInspectorEnabled((current) => {
-      const next = !current;
-      if (next) {
-        setPinModeEnabled(false);
-      }
-      void runInBrowser(
-        next
-          ? "window.__chelaInspector?.enable?.()"
-          : "window.__chelaInspector?.disable?.()",
-      );
-      return next;
-    });
-  }, [runInBrowser]);
-
   const togglePinMode = useCallback(() => {
+    if (hasPendingComposer) {
+      return;
+    }
     setPinModeEnabled((current) => {
       const next = !current;
-      if (next) {
-        setInspectorEnabled(false);
-      }
       void runInBrowser(
         next
           ? "window.__chelaInspector?.enable?.({ mode: 'pin' })"
@@ -461,7 +524,7 @@ export function BrowserPreviewPanel({
       );
       return next;
     });
-  }, [runInBrowser]);
+  }, [hasPendingComposer, runInBrowser]);
 
   const submitPendingPin = useCallback(() => {
     const comment = pinCommentDraft.trim();
@@ -475,8 +538,6 @@ export function BrowserPreviewPanel({
       sourceUrl: pendingPin.sourceUrl || currentUrl,
     };
     const item = createBrowserPinContextItem(pin);
-    setPinFocusError(null);
-    setLastPinLabel(item.label);
     setPagePins((current) => [
       pin,
       ...current.filter((candidate) => getBrowserPinKey(candidate) !== getBrowserPinKey(pin)),
@@ -507,64 +568,236 @@ export function BrowserPreviewPanel({
     }
   }, [pendingPin, runInBrowser]);
 
-  const removePagePin = useCallback(
-    (pin: BrowserPagePin) => {
-      setPagePins((current) =>
-        current.filter((candidate) => getBrowserPinKey(candidate) !== getBrowserPinKey(pin)),
-      );
-      if (
-        pendingPin &&
-        getBrowserPinKey(pendingPin) === getBrowserPinKey(pin)
-      ) {
-        setPendingPin(null);
-        setPinCommentDraft("");
+  const clearPendingScreenshot = useCallback(
+    (removeScreenshotMarker: boolean) => {
+      if (pendingScreenshot?.imageUrl) {
+        URL.revokeObjectURL(pendingScreenshot.imageUrl);
       }
-      if (pin.pinId) {
+      if (removeScreenshotMarker && pendingScreenshot?.screenshotId) {
         void runInBrowser(
-          `window.__chelaInspector?.removePin?.(${JSON.stringify(pin.pinId)})`,
+          `window.__chelaInspector?.removeScreenshotMarker?.(${JSON.stringify(pendingScreenshot.screenshotId)})`,
         );
       }
+      setPendingScreenshot(null);
+      setScreenshotCommentDraft("");
     },
-    [pendingPin, runInBrowser],
+    [pendingScreenshot, runInBrowser],
   );
 
+  const cancelPendingScreenshot = useCallback(() => {
+    clearPendingScreenshot(true);
+    setScreenshotCommentDraft("");
+  }, [clearPendingScreenshot]);
 
-  const focusPagePin = useCallback(
-    async (pin: BrowserPagePin) => {
-      if (!pin.pinId) {
-        setPinFocusError("这条批注缺少定位 id，无法回跳。");
+  const captureBrowserRegion = useCallback(
+    async (region: BrowserCaptureRegion) => {
+      if (!webviewElement?.capturePage) {
+        setLoadError("当前浏览器不支持区域截图。");
         return;
       }
 
-      const result = await runInBrowser(
-        `window.__chelaInspector?.focusPin?.(${JSON.stringify(pin.pinId)}) ?? null`,
-      );
-      const ok = Boolean(result && typeof result === "object" && (result as { ok?: unknown }).ok === true);
-      if (!ok) {
-        setPinFocusError("批注位置暂时找不到，可能页面已刷新或 DOM 结构变了。");
-        return;
+      try {
+        const rect = normalizeCaptureRect(region.rect);
+        const screenshotId = createBrowserScreenshotId();
+        const markerNumber = screenshotMarkerCounterRef.current + 1;
+        let image: BrowserCaptureImage | null = null;
+        let capturePrepared = false;
+        try {
+          await runInBrowser("window.__chelaInspector?.prepareCapture?.() ?? false");
+          capturePrepared = true;
+          await waitForBrowserPaint();
+          image = await webviewElement.capturePage(rect);
+        } finally {
+          if (capturePrepared) {
+            await runInBrowser("window.__chelaInspector?.restoreCaptureVisuals?.()");
+          }
+        }
+        const buffer = image.toPNG
+          ? getPngArrayBuffer(image.toPNG())
+          : image.toDataURL
+            ? getPngArrayBufferFromDataUrl(image.toDataURL())
+            : null;
+
+        if (!buffer) {
+          setLoadError("区域截图生成失败。");
+          return;
+        }
+
+        const imageUrl = URL.createObjectURL(
+          new Blob([buffer], { type: "image/png" }),
+        );
+        setPendingScreenshot((current) => {
+          if (current?.imageUrl) {
+            URL.revokeObjectURL(current.imageUrl);
+          }
+          if (current?.screenshotId) {
+            void runInBrowser(
+              `window.__chelaInspector?.removeScreenshotMarker?.(${JSON.stringify(current.screenshotId)})`,
+            );
+          }
+          return {
+            ...region,
+            rect,
+            screenshotId,
+            markerNumber,
+            imageUrl,
+            imageBuffer: buffer,
+          };
+        });
+        void runInBrowser(
+          `window.__chelaInspector?.upsertScreenshotMarker?.(${JSON.stringify({
+            screenshotId,
+            markerNumber,
+            rect,
+            comment: "",
+          })})`,
+        );
+        stopBrowserInteraction();
+        setScreenshotCommentDraft("");
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : "区域截图失败。");
       }
-      setPinFocusError(null);
-      setLastPinLabel(pin.comment ? `批注: ${pin.comment}` : `批注 #${pin.markerNumber ?? ""}`);
     },
-    [runInBrowser],
+    [stopBrowserInteraction, webviewElement],
   );
 
-
-  const addReviewQueueToContext = useCallback(() => {
-    if (pagePins.length === 0) {
+  const submitPendingScreenshot = useCallback(async () => {
+    const comment = screenshotCommentDraft.trim();
+    if (!pendingScreenshot || !comment || !window.desktopApi?.files) {
       return;
     }
 
-    const queue = createBrowserReviewQueue(pagePins, {
-      title: pageTitle ? `${pageTitle} 页面 Review` : "页面 Review 队列",
-      sourceUrl: currentUrl,
-      summary: `按 ${pagePins.length} 条页面批注修复当前页面`,
-    });
-    const item = createBrowserReviewQueueContextItem(queue);
-    setLastReviewQueueLabel(item.label);
-    onElementSelected(item);
-  }, [currentUrl, onElementSelected, pagePins, pageTitle]);
+    try {
+      const file = await window.desktopApi.files.saveFromClipboard({
+        name: getScreenshotName(pendingScreenshot),
+        mimeType: "image/png",
+        buffer: pendingScreenshot.imageBuffer,
+      });
+      const contextItem = createBrowserScreenshotContextItem({
+        screenshotId: pendingScreenshot.screenshotId,
+        sourceUrl: pendingScreenshot.sourceUrl || currentUrl,
+        title: pendingScreenshot.title ?? pageTitle,
+        comment,
+        imageName: file.name,
+        imagePath: file.path,
+        boundingRect: pendingScreenshot.rect,
+        viewport: pendingScreenshot.viewport ?? null,
+      });
+      await onScreenshotCaptured([{
+        ...file,
+        displayName: formatBrowserContextChipLabel(contextItem),
+        description: comment,
+        browserContextItemId: contextItem.id,
+      }]);
+      onElementSelected(contextItem);
+      screenshotMarkerCounterRef.current = Math.max(
+        screenshotMarkerCounterRef.current,
+        pendingScreenshot.markerNumber,
+      );
+      void runInBrowser(
+        `window.__chelaInspector?.upsertScreenshotMarker?.(${JSON.stringify({
+          screenshotId: pendingScreenshot.screenshotId,
+          markerNumber: pendingScreenshot.markerNumber,
+          rect: pendingScreenshot.rect,
+          comment,
+        })})`,
+      );
+      clearPendingScreenshot(false);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "截图批注保存失败。");
+    }
+  }, [
+    clearPendingScreenshot,
+    currentUrl,
+    onElementSelected,
+    onScreenshotCaptured,
+    pageTitle,
+    pendingScreenshot,
+    runInBrowser,
+    screenshotCommentDraft,
+  ]);
+
+  useEffect(() => {
+    if (resetInteractionSignalRef.current === resetInteractionSignal) {
+      return;
+    }
+
+    resetInteractionSignalRef.current = resetInteractionSignal;
+    setPendingPin(null);
+    setPinCommentDraft("");
+    cancelPendingScreenshot();
+    stopBrowserInteraction();
+  }, [cancelPendingScreenshot, resetInteractionSignal, stopBrowserInteraction]);
+
+  useEffect(() => {
+    if (!webviewElement || !pinModeEnabled || hasPendingComposer) {
+      if (pollingRef.current !== null) {
+        window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+
+    void injectInspector();
+    pollingRef.current = window.setInterval(() => {
+      void runInBrowser("window.__chelaInspector?.consumePin?.() ?? null")
+        .then((value) => {
+          if (!isBrowserPendingPin(value)) {
+            return;
+          }
+          const pending = {
+            ...value,
+            sourceUrl: value.sourceUrl || currentUrl,
+          };
+          const existing = pagePinsRef.current.find(
+            (pin) => getBrowserPinKey(pin) === getBrowserPinKey(pending),
+          );
+          setPendingPin({
+            ...pending,
+            comment: pending.comment ?? existing?.comment ?? "",
+          });
+          setPinCommentDraft(pending.comment ?? existing?.comment ?? "");
+          stopBrowserInteraction();
+        });
+      void runInBrowser("window.__chelaInspector?.consumeCaptureRegion?.() ?? null")
+        .then((value) => {
+          if (!isBrowserCaptureRegion(value)) {
+            return;
+          }
+          void captureBrowserRegion({
+            ...value,
+            sourceUrl: value.sourceUrl || currentUrl,
+          });
+        });
+      void runInBrowser("window.__chelaInspector?.consumeCancelRequest?.() ?? false")
+        .then((value) => {
+          if (!value) {
+            return;
+          }
+          cancelPendingPin();
+          cancelPendingScreenshot();
+          stopBrowserInteraction();
+        });
+    }, 220);
+
+    return () => {
+      if (pollingRef.current !== null) {
+        window.clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [
+    currentUrl,
+    captureBrowserRegion,
+    cancelPendingPin,
+    cancelPendingScreenshot,
+    injectInspector,
+    hasPendingComposer,
+    pinModeEnabled,
+    runInBrowser,
+    stopBrowserInteraction,
+    webviewElement,
+  ]);
 
   const capturePageSnapshot = useCallback(async () => {
     if (!webviewElement || snapshotBusy) {
@@ -587,9 +820,7 @@ export function BrowserPreviewPanel({
       sourceUrl: value.sourceUrl || currentUrl,
     };
     const item = createBrowserPageSnapshotContextItem(snapshot);
-    const label = getBrowserPageTitle(snapshot, currentUrl);
     setPageTitle(snapshot.title?.trim() || pageTitle);
-    setLastSnapshotLabel(label);
     onElementSelected(item);
   }, [
     currentUrl,
@@ -600,6 +831,15 @@ export function BrowserPreviewPanel({
     snapshotBusy,
     webviewElement,
   ]);
+
+  const pageStatusLabel =
+    loadState === "loading"
+      ? "页面加载中"
+      : loadState === "error"
+        ? loadError ?? "页面加载失败"
+        : pageTitle
+          ? `${pageTitle} · ${currentUrl}`
+          : currentUrl;
 
   return (
     <section className={cn("flex h-full min-h-0 flex-col bg-background px-4 py-4", className)}>
@@ -667,7 +907,10 @@ export function BrowserPreviewPanel({
           </Tooltip>
         </div>
 
-        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2.5 py-1.5">
+        <label
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2.5 py-1.5"
+          title={pageStatusLabel}
+        >
           <Globe2Icon className="size-4 shrink-0 text-muted-foreground" />
           <input
             value={draftUrl}
@@ -722,156 +965,31 @@ export function BrowserPreviewPanel({
               type="button"
               variant={pinModeEnabled ? "default" : "ghost"}
               size="sm"
+              disabled={hasPendingComposer}
               onClick={togglePinMode}
               className={cn(
                 "h-8 rounded-[var(--radius-shell)] px-2.5 text-[12px] shadow-none",
                 pinModeEnabled
-                  ? "bg-[color:var(--color-accent)] text-white hover:bg-[color:var(--color-accent-hover)]"
+                  ? "bg-[color:var(--color-browser-pin-bg)] text-[color:var(--color-browser-pin-fg)] hover:bg-[color:var(--color-browser-pin-bg)]/90"
                   : "text-muted-foreground hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground",
               )}
               aria-label={pinModeEnabled ? "关闭页面批注" : "开启页面批注"}
             >
               <MapPinIcon className="size-4" />
               <span className="ml-1.5 hidden xl:inline">
-                {pinModeEnabled ? "批注中" : "Pin"}
+                {pinModeEnabled ? "批注中" : "批注"}
               </span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {pinModeEnabled ? "点击页面元素后输入一句批注" : "在页面上添加批注上下文"}
+            {pinModeEnabled
+              ? "左键点击页面目标写批注，拖拽框选区域截图，右键或 Esc 取消"
+              : "选择页面目标批注或框选区域截图"}
           </TooltipContent>
         </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant={inspectorEnabled ? "default" : "ghost"}
-              size="sm"
-              onClick={toggleInspector}
-              className={cn(
-                "h-8 rounded-[var(--radius-shell)] px-2.5 text-[12px] shadow-none",
-                inspectorEnabled
-                  ? "bg-[color:var(--color-accent)] text-white hover:bg-[color:var(--color-accent-hover)]"
-                  : "text-muted-foreground hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground",
-              )}
-              aria-label={inspectorEnabled ? "关闭元素选择" : "开启元素选择"}
-            >
-              <ScanSearchIcon className="size-4" />
-              <span className="ml-1.5 hidden xl:inline">
-                {inspectorEnabled ? "选择中" : "选元素"}
-              </span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {inspectorEnabled ? "点击页面元素加入聊天上下文" : "开启元素选择"}
-          </TooltipContent>
-        </Tooltip>
       </form>
 
-      <div className="mb-2 flex min-h-5 items-center justify-between gap-2 px-1 text-[12px] text-muted-foreground">
-        <span className="truncate">
-          {loadState === "loading"
-            ? "页面加载中"
-            : loadState === "error"
-              ? loadError ?? "页面加载失败"
-              : pageTitle
-                ? `${pageTitle} · ${currentUrl}`
-                : currentUrl}
-        </span>
-        <div className="flex min-w-0 shrink-0 items-center gap-1.5">
-          {lastSnapshotLabel ? (
-            <span className="inline-flex max-w-[220px] shrink min-w-0 items-center gap-1 rounded-[var(--radius-shell)] bg-[color:var(--color-selection-muted-bg)] px-2 py-0.5 text-[11px] text-foreground">
-              <SparklesIcon className="size-3 shrink-0" />
-              <span className="truncate">{lastSnapshotLabel}</span>
-            </span>
-          ) : null}
-          {lastReviewQueueLabel ? (
-            <span className="inline-flex max-w-[200px] shrink-0 items-center gap-1 rounded-[var(--radius-shell)] bg-[color:var(--color-selection-muted-bg)] px-2 py-0.5 text-[11px] text-foreground">
-              <SparklesIcon className="size-3 shrink-0" />
-              <span className="truncate">{lastReviewQueueLabel}</span>
-            </span>
-          ) : null}
-          {lastPinLabel ? (
-            <span className="inline-flex max-w-[180px] shrink-0 items-center gap-1 rounded-[var(--radius-shell)] bg-[color:var(--color-selection-muted-bg)] px-2 py-0.5 text-[11px] text-foreground">
-              <MapPinIcon className="size-3 shrink-0" />
-              <span className="truncate">{lastPinLabel}</span>
-            </span>
-          ) : null}
-          {lastSelectionLabel ? (
-            <span className="inline-flex max-w-[180px] shrink-0 items-center gap-1 rounded-[var(--radius-shell)] bg-[color:var(--color-selection-muted-bg)] px-2 py-0.5 text-[11px] text-foreground">
-              <MousePointer2Icon className="size-3 shrink-0" />
-              <span className="truncate">{lastSelectionLabel}</span>
-            </span>
-          ) : null}
-        </div>
-      </div>
-
-
-      {pagePins.length > 0 ? (
-        <div className="mb-2 rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-2 py-2 shadow-[var(--color-control-shadow)]">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                Review Queue
-              </p>
-              <p className="truncate text-[12px] text-muted-foreground">
-                {pagePins.length} 条页面批注，可一键交给 Agent 处理
-              </p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              onClick={addReviewQueueToContext}
-              className="h-8 shrink-0 rounded-[var(--radius-shell)] px-3 text-[12px]"
-            >
-              加入 Review 上下文
-            </Button>
-          </div>
-          <div className="flex min-w-0 items-stretch gap-2 overflow-x-auto pb-1">
-            {pagePins.map((pin) => (
-              <div
-                key={pin.pinId ?? `${pin.selector}-${pin.comment}`}
-                className="group flex w-[260px] shrink-0 items-start gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-selection-muted-bg)] px-2.5 py-2 text-left transition-colors hover:bg-[color:var(--color-control-bg-hover)]"
-              >
-                <button
-                  type="button"
-                  onClick={() => void focusPagePin(pin)}
-                  className="flex min-w-0 flex-1 items-start gap-2 text-left"
-                  title={pin.comment}
-                >
-                  <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-[11px] font-semibold text-white">
-                    {pin.markerNumber ?? "?"}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-[11px] text-muted-foreground">
-                      {getPinTargetLabel(pin)}
-                    </span>
-                    <span className="mt-0.5 line-clamp-2 block text-[12px] leading-4 text-foreground">
-                      {pin.comment}
-                    </span>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removePagePin(pin)}
-                  className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-[var(--radius-shell)] text-muted-foreground opacity-70 transition-opacity hover:bg-[color:var(--color-control-bg)] hover:text-foreground group-hover:opacity-100"
-                  aria-label="删除页面批注"
-                >
-                  <XIcon className="size-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-
-      {pinFocusError ? (
-        <div className="mb-2 rounded-[var(--radius-shell)] border border-[color:var(--color-border-muted)] bg-[color:var(--color-control-panel-bg)] px-2.5 py-1.5 text-[12px] text-[color:var(--color-status-warning)]">
-          {pinFocusError}
-        </div>
-      ) : null}
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)]">
         <webview
           ref={handleWebviewRef}
@@ -882,13 +1000,13 @@ export function BrowserPreviewPanel({
         />
         {pendingPin ? (
           <div
-            className="absolute z-20 rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] p-2.5 shadow-[var(--color-control-shadow)]"
+            className="absolute z-40 rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] p-2.5 shadow-[var(--color-control-shadow)]"
             style={getPinComposerStyle(pendingPin)}
           >
             <div className="mb-2 flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="inline-flex max-w-full items-center gap-1.5 text-[12px] font-medium text-foreground">
-                  <MapPinIcon className="size-3.5 shrink-0 text-[color:var(--color-accent)]" />
+                  <MapPinIcon className="size-3.5 shrink-0 text-[color:var(--color-browser-pin-bg)]" />
                   <span className="truncate">{getPinTargetLabel(pendingPin)}</span>
                 </p>
                 {pendingPin.comment ? (
@@ -940,6 +1058,74 @@ export function BrowserPreviewPanel({
                 className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px]"
               >
                 {pendingPin.comment ? "更新" : "保存"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        {pendingScreenshot ? (
+          <div
+            className="absolute z-40 rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] p-2.5 shadow-[var(--color-control-shadow)]"
+            style={getScreenshotComposerStyle(pendingScreenshot)}
+          >
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="inline-flex max-w-full items-center gap-1.5 text-[12px] font-medium text-foreground">
+                  <MapPinIcon className="size-3.5 shrink-0 text-[color:var(--color-browser-pin-bg)]" />
+                  <span className="truncate">
+                    截图区域 {Math.round(pendingScreenshot.rect.width)}x{Math.round(pendingScreenshot.rect.height)}
+                  </span>
+                </p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-[var(--radius-shell)] text-muted-foreground hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground"
+                onClick={cancelPendingScreenshot}
+                aria-label="取消截图批注"
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            </div>
+            <img
+              src={pendingScreenshot.imageUrl}
+              alt="截图预览"
+              className="mb-2 h-24 w-full rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] object-contain"
+            />
+            <textarea
+              value={screenshotCommentDraft}
+              onChange={(event) => setScreenshotCommentDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelPendingScreenshot();
+                  return;
+                }
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                  event.preventDefault();
+                  void submitPendingScreenshot();
+                }
+              }}
+              className="h-20 w-full resize-none rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2.5 py-2 text-[12px] leading-4 text-foreground outline-none placeholder:text-muted-foreground"
+              placeholder="评价这张截图"
+              autoFocus
+            />
+            <div className="mt-2 flex justify-end gap-1.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={cancelPendingScreenshot}
+                className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px]"
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!screenshotCommentDraft.trim()}
+                onClick={() => void submitPendingScreenshot()}
+                className="h-7 rounded-[var(--radius-shell)] px-2.5 text-[12px]"
+              >
+                保存
               </Button>
             </div>
           </div>

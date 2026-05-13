@@ -6,6 +6,7 @@ export type {
   BrowserPagePin,
   BrowserPageSnapshot,
   BrowserReviewQueue,
+  BrowserScreenshotAnnotation,
 } from "@shared/contracts";
 export {
   compactBrowserContextItems,
@@ -21,6 +22,7 @@ import type {
   BrowserPagePin,
   BrowserPageSnapshot,
   BrowserReviewQueue,
+  BrowserScreenshotAnnotation,
 } from "@shared/contracts";
 
 export const DEFAULT_BROWSER_PREVIEW_URL = "http://localhost:5173";
@@ -159,6 +161,20 @@ export function createBrowserPinContextItem(pin: BrowserPagePin): BrowserContext
   };
 }
 
+export function createBrowserScreenshotContextItem(
+  screenshot: BrowserScreenshotAnnotation,
+): BrowserContextItem {
+  const comment = cleanText(screenshot.comment, 48);
+  const fallback = cleanText(screenshot.title, 32) || "截图";
+  return {
+    id: `browser-screenshot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    label: comment ? `截图: ${comment}` : `截图: ${fallback}`,
+    createdAt: new Date().toISOString(),
+    kind: "screenshot",
+    screenshot,
+  };
+}
+
 
 export function createBrowserReviewQueueContextItem(
   reviewQueue: BrowserReviewQueue,
@@ -172,6 +188,38 @@ export function createBrowserReviewQueueContextItem(
     kind: "review-queue",
     reviewQueue,
   };
+}
+
+function stripBrowserContextLabelPrefix(value: string) {
+  return value.replace(/^(页面|批注|元素|Review|review)[:：]\s*/u, "").trim();
+}
+
+export function formatBrowserContextChipLabel(item: BrowserContextItem) {
+  if (item.kind === "pin" && item.pin) {
+    const comment = cleanText(item.pin.comment, 48);
+    const fallback = item.pin.tagName?.trim() || item.pin.selector?.trim() || "元素";
+    return `批注 · ${comment || fallback}`;
+  }
+
+  if (item.kind === "page-snapshot") {
+    const title =
+      cleanText(item.pageSnapshot?.title, 48) ||
+      stripBrowserContextLabelPrefix(item.label);
+    return `页面 · ${title || "快照"}`;
+  }
+
+  if (item.kind === "review-queue" && item.reviewQueue) {
+    const title = cleanText(item.reviewQueue.title, 40) || "页面 Review";
+    return `审阅 · ${title} · ${item.reviewQueue.pins.length} 条`;
+  }
+
+  if (item.kind === "screenshot" && item.screenshot) {
+    const comment = cleanText(item.screenshot.comment, 48);
+    const fallback = cleanText(item.screenshot.title, 32) || item.screenshot.imageName || "区域";
+    return `截图 · ${comment || fallback}`;
+  }
+
+  return `元素 · ${stripBrowserContextLabelPrefix(item.label) || "DOM"}`;
 }
 
 export function createBrowserReviewQueue(
@@ -192,6 +240,17 @@ export function createBrowserReviewQueue(
     summary: options.summary ?? `${nextPins.length} 条页面批注需要处理`,
     pins: nextPins,
   };
+}
+
+export function getBrowserReviewQueueSignature(
+  pins: readonly Pick<BrowserPagePin, "sourceUrl" | "selector">[],
+  sourceUrl?: string | null,
+) {
+  const pinSignature = pins
+    .map((pin) => `${canonicalizeBrowserPinUrl(pin.sourceUrl || sourceUrl)}:${pin.selector.trim()}`)
+    .sort()
+    .join(",");
+  return `${canonicalizeBrowserPinUrl(sourceUrl)}|${pinSignature}`;
 }
 
 export function buildBrowserDisplayText(
@@ -239,6 +298,23 @@ export function describeBrowserContextItem(item: BrowserContextItem) {
       `Selector: ${formatNullable(pin.selector)}`,
       `Tag: <${formatNullable(pin.tagName)}>`,
       `Text: ${formatNullable(cleanText(pin.textContent, 160))}`,
+      `Rect: ${size}`,
+    ].join("\n");
+  }
+
+  if (item.kind === "screenshot" && item.screenshot) {
+    const screenshot = item.screenshot;
+    const rect = screenshot.boundingRect;
+    const size = rect
+      ? `${Math.round(rect.width)}x${Math.round(rect.height)} @ ${Math.round(rect.x)},${Math.round(rect.y)}`
+      : "(unknown)";
+
+    return [
+      `Comment: ${formatNullable(cleanText(screenshot.comment, 240))}`,
+      `Page: ${formatNullable(screenshot.sourceUrl)}`,
+      `Title: ${formatNullable(screenshot.title)}`,
+      `Image: ${formatNullable(screenshot.imageName)}`,
+      `Path: ${formatNullable(screenshot.imagePath)}`,
       `Rect: ${size}`,
     ].join("\n");
   }
@@ -343,6 +419,28 @@ export function buildBrowserContextPrompt(
         `- Viewport: ${viewportText}`,
         `- 文本内容: ${formatNullable(cleanText(pin.textContent, 500))}`,
         `- 样式: display=${formatNullable(pin.styles?.display)}, position=${formatNullable(pin.styles?.position)}, width=${formatNullable(pin.styles?.width)}, height=${formatNullable(pin.styles?.height)}, bg=${formatNullable(pin.styles?.backgroundColor)}, color=${formatNullable(pin.styles?.color)}, fontSize=${formatNullable(pin.styles?.fontSize)}`,
+      ].join("\n");
+    }
+
+    if (item.kind === "screenshot" && item.screenshot) {
+      const screenshot = item.screenshot;
+      const rect = screenshot.boundingRect;
+      const viewport = screenshot.viewport;
+      const position = rect
+        ? `${Math.round(rect.x)},${Math.round(rect.y)} / ${Math.round(rect.width)}x${Math.round(rect.height)}`
+        : "(未知)";
+      const viewportText = viewport
+        ? `${Math.round(viewport.width)}x${Math.round(viewport.height)}`
+        : "(未知)";
+
+      return [
+        `【页面截图批注 ${index + 1}: ${item.label}】`,
+        `- 批注: ${formatNullable(cleanText(screenshot.comment, 500))}`,
+        `- 当前页面: ${formatNullable(screenshot.sourceUrl)}`,
+        `- 标题: ${formatNullable(screenshot.title)}`,
+        `- 图片附件: ${formatNullable(screenshot.imageName)}`,
+        `- 截图区域: ${position}`,
+        `- Viewport: ${viewportText}`,
       ].join("\n");
     }
 

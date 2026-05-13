@@ -363,6 +363,9 @@ export type WorkspaceDirectoryListing = {
 export type SelectedFile = {
   id: string;
   name: string;
+  displayName?: string;
+  description?: string;
+  browserContextItemId?: string;
   path: string;
   size: number;
   extension: string;
@@ -442,6 +445,17 @@ export type BrowserPagePin = {
   styles?: BrowserElementStyles | null;
 };
 
+export type BrowserScreenshotAnnotation = {
+  screenshotId?: string | null;
+  sourceUrl?: string | null;
+  title?: string | null;
+  comment: string;
+  imageName: string;
+  imagePath: string;
+  boundingRect?: BrowserElementRect | null;
+  viewport?: BrowserElementRect | null;
+};
+
 export type BrowserReviewQueue = {
   queueId?: string | null;
   title: string;
@@ -466,11 +480,12 @@ export type BrowserContextItem = {
   id: string;
   label: string;
   createdAt: string;
-  kind?: "element" | "page-snapshot" | "pin" | "review-queue";
+  kind?: "element" | "page-snapshot" | "pin" | "review-queue" | "screenshot";
   element?: BrowserInterviewElement;
   pageSnapshot?: BrowserPageSnapshot;
   pin?: BrowserPagePin;
   reviewQueue?: BrowserReviewQueue;
+  screenshot?: BrowserScreenshotAnnotation;
 };
 
 export type DiagnosticLogId = "app" | "audit";

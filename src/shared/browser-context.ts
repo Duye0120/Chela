@@ -36,6 +36,16 @@ export function isBrowserContextItem(value: unknown): value is BrowserContextIte
     );
   }
 
+  if (candidate.kind === "screenshot") {
+    return (
+      Boolean(candidate.screenshot) &&
+      typeof candidate.screenshot === "object" &&
+      typeof candidate.screenshot.comment === "string" &&
+      typeof candidate.screenshot.imageName === "string" &&
+      typeof candidate.screenshot.imagePath === "string"
+    );
+  }
+
   return (
     Boolean(candidate.element) &&
     typeof candidate.element === "object" &&
@@ -84,6 +94,9 @@ function getItemPriority(item: BrowserContextItem) {
   if (item.kind === "pin") {
     return 3;
   }
+  if (item.kind === "screenshot") {
+    return 3;
+  }
   if (item.kind === "element" || item.element) {
     return 2;
   }
@@ -100,11 +113,18 @@ function getItemTimestamp(item: BrowserContextItem) {
 
 function getBrowserContextDedupKey(item: BrowserContextItem) {
   if (item.kind === "review-queue" && item.reviewQueue) {
+    const pinSignature = item.reviewQueue.pins
+      .map((pin) => [
+        canonicalizeUrl(pin.sourceUrl),
+        pin.selector?.trim() ?? "",
+      ].join(":"))
+      .sort()
+      .join(",");
+
     return [
       "review-queue",
       canonicalizeUrl(item.reviewQueue.sourceUrl),
-      item.reviewQueue.queueId?.trim() ?? "",
-      item.reviewQueue.pins.map((pin) => pin.pinId || `${pin.selector}:${pin.comment}`).join(","),
+      pinSignature,
     ].join("|");
   }
 
@@ -114,6 +134,15 @@ function getBrowserContextDedupKey(item: BrowserContextItem) {
       canonicalizeUrl(item.pin.sourceUrl),
       item.pin.selector?.trim() ?? "",
       item.pin.comment?.trim() ?? "",
+    ].join("|");
+  }
+
+  if (item.kind === "screenshot" && item.screenshot) {
+    return [
+      "screenshot",
+      canonicalizeUrl(item.screenshot.sourceUrl),
+      item.screenshot.imagePath?.trim() ?? "",
+      item.screenshot.comment?.trim() ?? "",
     ].join("|");
   }
 
@@ -133,6 +162,21 @@ function getBrowserContextDedupKey(item: BrowserContextItem) {
   }
 
   return `unknown|${item.id}`;
+}
+
+function compareBrowserContextItems(a: BrowserContextItem, b: BrowserContextItem) {
+  const priorityDelta = getItemPriority(b) - getItemPriority(a);
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+  return getItemTimestamp(b) - getItemTimestamp(a);
+}
+
+function selectPreferredBrowserContextItem(
+  current: BrowserContextItem,
+  candidate: BrowserContextItem,
+) {
+  return compareBrowserContextItems(current, candidate) <= 0 ? current : candidate;
 }
 
 export function estimateBrowserContextChars(items: readonly BrowserContextItem[]) {
@@ -161,16 +205,12 @@ export function compactBrowserContextItems(
   const deduped = new Map<string, BrowserContextItem>();
 
   for (const item of items.filter(isBrowserContextItem)) {
-    deduped.set(getBrowserContextDedupKey(item), item);
+    const key = getBrowserContextDedupKey(item);
+    const current = deduped.get(key);
+    deduped.set(key, current ? selectPreferredBrowserContextItem(current, item) : item);
   }
 
   return [...deduped.values()]
-    .sort((a, b) => {
-      const priorityDelta = getItemPriority(b) - getItemPriority(a);
-      if (priorityDelta !== 0) {
-        return priorityDelta;
-      }
-      return getItemTimestamp(b) - getItemTimestamp(a);
-    })
+    .sort(compareBrowserContextItems)
     .slice(0, limit);
 }
