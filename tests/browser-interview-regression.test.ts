@@ -1,4 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createBrowserInspectorScript } from "../src/renderer/src/lib/browser-inspector-script.ts";
+import {
+  selectedFileToCreateAttachment,
+  toPersistedMessageAttachment,
+} from "../src/renderer/src/lib/assistant-ui-attachments.ts";
 import {
   buildBrowserDisplayText,
   buildBrowserContextPrompt,
@@ -8,8 +14,11 @@ import {
   createBrowserPinContextItem,
   createBrowserReviewQueue,
   createBrowserReviewQueueContextItem,
+  createBrowserScreenshotContextItem,
   describeBrowserContextItem,
+  formatBrowserContextChipLabel,
   formatBrowserElementLabel,
+  getBrowserReviewQueueSignature,
   getBrowserContextItems,
   isBrowserContextItem,
   normalizeBrowserPreviewUrl,
@@ -135,12 +144,172 @@ assert.equal(pinItem.pin?.pinId, "chela-pin-test");
 assert.equal(pinItem.pin?.markerNumber, 1);
 assert.equal(isBrowserContextItem(pinItem), true);
 assert.match(describeBrowserContextItem(pinItem), /Comment: 这里 CTA 不够明显/);
+assert.equal(
+  formatBrowserContextChipLabel(pinItem),
+  "批注 · 这里 CTA 不够明显，帮我改成主操作",
+);
+assert.equal(formatBrowserContextChipLabel(contextItem), "元素 · button#save.primary");
 const pinPrompt = buildBrowserContextPrompt("按批注处理", [pinItem]);
 assert.match(pinPrompt, /页面批注 1: 批注: 这里 CTA 不够明显/);
 assert.match(pinPrompt, /Selector: main > button#browser/);
 assert.match(pinPrompt, /位置\/尺寸: 320,180 \/ 180x40/);
 assert.match(pinPrompt, /Viewport: 1280x720/);
 
+const inspectorScript = createBrowserInspectorScript();
+assert.match(inspectorScript, /removeUnsavedPins/u);
+assert.match(inspectorScript, /getNextMarkerNumber/u);
+assert.match(inspectorScript, /--color-browser-pin-bg/u);
+assert.match(inspectorScript, /--color-browser-select-fg/u);
+assert.match(inspectorScript, /pendingCaptures/u);
+assert.match(inspectorScript, /consumeCaptureRegion/u);
+assert.match(inspectorScript, /consumeCancelRequest/u);
+assert.match(inspectorScript, /clearInteractionVisuals/u);
+assert.match(inspectorScript, /prepareCapture/u);
+assert.match(inspectorScript, /restoreCaptureVisuals/u);
+assert.match(inspectorScript, /captureHiddenElements/u);
+assert.match(inspectorScript, /chela-browser-screenshot-marker/u);
+assert.match(inspectorScript, /upsertScreenshotMarker/u);
+assert.match(inspectorScript, /removeScreenshotMarker/u);
+assert.match(inspectorScript, /syncScreenshotMarkers/u);
+assert.match(inspectorScript, /pendingTarget = null/u);
+assert.match(inspectorScript, /contextmenu/u);
+assert.match(inspectorScript, /keydown/u);
+assert.match(inspectorScript, /Escape/u);
+assert.doesNotMatch(inspectorScript, /let pinCounter/u);
+
+const browserPreviewPanelSource = readFileSync(
+  new URL("../src/renderer/src/components/browser-preview/BrowserPreviewPanel.tsx", import.meta.url),
+  "utf8",
+);
+const attachmentSource = readFileSync(
+  new URL("../src/renderer/src/components/assistant-ui/attachment.tsx", import.meta.url),
+  "utf8",
+);
+const dialogSource = readFileSync(
+  new URL("../src/renderer/src/components/ui/dialog.tsx", import.meta.url),
+  "utf8",
+);
+assert.match(dialogSource, /sm:rounded-\[calc\(var\(--radius-shell\)\+4px\)\]/u);
+assert.match(dialogSource, /rounded-\[var\(--radius-shell\)\]/u);
+assert.doesNotMatch(dialogSource, /sm:rounded-\[20px\]|rounded-\[10px\]/u);
+assert.match(attachmentSource, /rounded-\[calc\(var\(--radius-shell\)\+4px\)\]/u);
+assert.ok(attachmentSource.includes("[&>button]:rounded-[var(--radius-shell)]"));
+assert.equal(attachmentSource.includes("[&>button]:rounded-full"), false);
+assert.match(browserPreviewPanelSource, /capturePage/u);
+assert.match(browserPreviewPanelSource, /onScreenshotCaptured/u);
+assert.match(browserPreviewPanelSource, /browserContextItems/u);
+assert.match(browserPreviewPanelSource, /pendingScreenshot/u);
+assert.match(browserPreviewPanelSource, /submitPendingScreenshot/u);
+assert.match(browserPreviewPanelSource, /cancelPendingScreenshot/u);
+assert.match(browserPreviewPanelSource, /URL\.createObjectURL/u);
+assert.match(browserPreviewPanelSource, /const stopBrowserInteraction = useCallback/u);
+assert.match(browserPreviewPanelSource, /window\.__chelaInspector\?\.disable\?\.\(\)/u);
+assert.match(browserPreviewPanelSource, /const hasPendingComposer = Boolean\(pendingPin \|\| pendingScreenshot\)/u);
+assert.match(browserPreviewPanelSource, /disabled=\{hasPendingComposer\}/u);
+const captureRegionSource = browserPreviewPanelSource.slice(
+  browserPreviewPanelSource.indexOf("const captureBrowserRegion"),
+  browserPreviewPanelSource.indexOf("const submitPendingScreenshot"),
+);
+assert.match(captureRegionSource, /setPendingScreenshot/u);
+assert.match(captureRegionSource, /stopBrowserInteraction\(\)/u);
+assert.match(captureRegionSource, /window\.__chelaInspector\?\.prepareCapture\?\.\(\)/u);
+assert.match(captureRegionSource, /waitForBrowserPaint/u);
+assert.match(captureRegionSource, /window\.__chelaInspector\?\.restoreCaptureVisuals\?\.\(\)/u);
+assert.match(captureRegionSource, /upsertScreenshotMarker/u);
+assert.doesNotMatch(captureRegionSource, /screenshotMarkerCounterRef\.current = markerNumber/u);
+assert.doesNotMatch(captureRegionSource, /saveFromClipboard/u);
+assert.doesNotMatch(captureRegionSource, /onScreenshotCaptured/u);
+const submitScreenshotSource = browserPreviewPanelSource.slice(
+  browserPreviewPanelSource.indexOf("const submitPendingScreenshot"),
+  browserPreviewPanelSource.indexOf("useEffect(() => {", browserPreviewPanelSource.indexOf("const submitPendingScreenshot")),
+);
+assert.match(submitScreenshotSource, /screenshotMarkerCounterRef\.current = Math\.max/u);
+assert.match(browserPreviewPanelSource, /removeScreenshotMarker/u);
+assert.match(browserPreviewPanelSource, /syncScreenshotMarkers/u);
+assert.match(browserPreviewPanelSource, /createScreenshotMarkerPayloads/u);
+assert.match(browserPreviewPanelSource, /window\.__chelaInspector\?\.syncScreenshotMarkers\?\./u);
+const injectInspectorSource = browserPreviewPanelSource.slice(
+  browserPreviewPanelSource.indexOf("const injectInspector"),
+  browserPreviewPanelSource.indexOf("useEffect(() => {", browserPreviewPanelSource.indexOf("const injectInspector")),
+);
+assert.match(injectInspectorSource, /createBrowserInspectorScript/u);
+assert.match(injectInspectorSource, /syncScreenshotMarkers/u);
+const pinPollingSource = browserPreviewPanelSource.slice(
+  browserPreviewPanelSource.indexOf("void runInBrowser(\"window.__chelaInspector?.consumePin?.() ?? null\")"),
+  browserPreviewPanelSource.indexOf("void runInBrowser(\"window.__chelaInspector?.consumeCaptureRegion?.() ?? null\")"),
+);
+assert.match(pinPollingSource, /stopBrowserInteraction\(\)/u);
+const pollingGateStart = browserPreviewPanelSource.indexOf("if (!webviewElement || !pinModeEnabled");
+const pollingGateSource = browserPreviewPanelSource.slice(
+  pollingGateStart,
+  browserPreviewPanelSource.indexOf("void injectInspector();", pollingGateStart),
+);
+assert.match(pollingGateSource, /hasPendingComposer/u);
+assert.doesNotMatch(browserPreviewPanelSource, /选元素/u);
+
+const appSource = readFileSync(
+  new URL("../src/renderer/src/App.tsx", import.meta.url),
+  "utf8",
+);
+assert.match(appSource, /browserContextItems=\{/u);
+assert.match(appSource, /activeSessionId\s*\?\s*browserContextBySessionId\[activeSessionId\] \?\? \[\]/u);
+
+const screenshotItem = createBrowserScreenshotContextItem({
+  screenshotId: "browser-screenshot-linked",
+  comment: "这一块视觉层级太抢眼，压低一点",
+  sourceUrl: "http://localhost:5173/dashboard",
+  title: "Chela Dashboard",
+  imageName: "browser-region-dashboard.png",
+  imagePath: "C:/Users/Administrator/AppData/Roaming/Chela/attachments/browser-region-dashboard.png",
+  boundingRect: { x: 40, y: 50, width: 320, height: 180 },
+  viewport: { x: 0, y: 0, width: 1280, height: 720 },
+});
+assert.equal(screenshotItem.kind, "screenshot");
+assert.equal(
+  formatBrowserContextChipLabel(screenshotItem),
+  "截图 · 这一块视觉层级太抢眼，压低一点",
+);
+assert.match(describeBrowserContextItem(screenshotItem), /Image: browser-region-dashboard\.png/);
+assert.match(
+  buildBrowserContextPrompt("按截图批注修复", [screenshotItem]),
+  /页面截图批注 1: 截图: 这一块视觉层级太抢眼/,
+);
+assert.match(
+  buildBrowserContextPrompt("按截图批注修复", [screenshotItem]),
+  /图片附件: browser-region-dashboard\.png/,
+);
+const browserScreenshotAttachment = {
+  id: "browser-screenshot-linked",
+  name: "browser-region-dashboard.png",
+  displayName: "截图 · 这一块视觉层级太抢眼，压低一点",
+  description: "这一块视觉层级太抢眼，压低一点",
+  browserContextItemId: screenshotItem.id,
+  path: "C:/Users/Administrator/AppData/Roaming/Chela/attachments/browser-region-dashboard.png",
+  size: 1200,
+  extension: ".png",
+  kind: "image" as const,
+  mimeType: "image/png",
+};
+assert.equal(
+  toPersistedMessageAttachment(browserScreenshotAttachment).displayName,
+  "截图 · 这一块视觉层级太抢眼，压低一点",
+);
+assert.equal(
+  toPersistedMessageAttachment(browserScreenshotAttachment).browserContextItemId,
+  screenshotItem.id,
+);
+assert.equal(
+  selectedFileToCreateAttachment(toPersistedMessageAttachment(browserScreenshotAttachment)).name,
+  "截图 · 这一块视觉层级太抢眼，压低一点",
+);
+const chatMessageAdapterSource = readFileSync(
+  new URL("../src/main/chat-message-adapter.ts", import.meta.url),
+  "utf8",
+);
+assert.match(
+  chatMessageAdapterSource,
+  /图片说明：/,
+);
 
 const reviewQueue = createBrowserReviewQueue([pinItem.pin!], {
   title: "Dashboard Review",
@@ -170,6 +339,31 @@ const duplicateQueue = createBrowserReviewQueue([pinItem.pin!, updatedSameElemen
 });
 assert.equal(duplicateQueue.pins.length, 1);
 assert.equal(duplicateQueue.pins[0]?.comment, "同一个元素更新后的批注");
+assert.equal(
+  getBrowserReviewQueueSignature(reviewQueue.pins, reviewQueue.sourceUrl),
+  getBrowserReviewQueueSignature(duplicateQueue.pins, duplicateQueue.sourceUrl),
+);
+
+const olderReviewQueueItem = {
+  ...reviewQueueItem,
+  id: "older-review-queue",
+  createdAt: "2026-05-10T00:00:00.000Z",
+};
+const newerReviewQueueItem = {
+  ...createBrowserReviewQueueContextItem(duplicateQueue),
+  id: "newer-review-queue",
+  createdAt: "2026-05-10T01:00:00.000Z",
+};
+const dedupedReviewQueueItems = compactBrowserContextItems(
+  [newerReviewQueueItem, olderReviewQueueItem],
+  8,
+).filter((item) => item.kind === "review-queue");
+assert.equal(dedupedReviewQueueItems.length, 1);
+assert.equal(dedupedReviewQueueItems[0]?.id, "newer-review-queue");
+assert.equal(
+  dedupedReviewQueueItems[0]?.reviewQueue?.pins[0]?.comment,
+  "同一个元素更新后的批注",
+);
 
 const secondSnapshot = createBrowserPageSnapshotContextItem({
   sourceUrl: "http://localhost:5173/dashboard#details",
@@ -189,7 +383,15 @@ const newerDuplicateElement = {
   createdAt: "2026-05-10T01:00:00.000Z",
 };
 const governedItems = compactBrowserContextItems(
-  [pageSnapshot, contextItem, secondSnapshot, pinItem, reviewQueueItem, olderDuplicateElement, newerDuplicateElement],
+  [
+    pageSnapshot,
+    { ...contextItem, id: "initial-element", createdAt: "2026-05-09T00:00:00.000Z" },
+    secondSnapshot,
+    pinItem,
+    reviewQueueItem,
+    olderDuplicateElement,
+    newerDuplicateElement,
+  ],
   8,
 );
 assert.equal(governedItems[0].kind, "review-queue");
