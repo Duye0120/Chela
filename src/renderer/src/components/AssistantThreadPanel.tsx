@@ -75,6 +75,7 @@ type AssistantThreadPanelProps = {
   browserContextItems: BrowserContextItem[];
   onRemoveBrowserContextItem: (itemId: string) => void;
   onClearBrowserContextItems: () => void;
+  onComposerFocus: () => void;
   visible: boolean;
   disableGlobalSideEffects: boolean;
 };
@@ -898,6 +899,7 @@ function SessionRuntime({
   browserContextItems,
   onRemoveBrowserContextItem,
   onClearBrowserContextItems,
+  onComposerFocus,
   visible,
   disableGlobalSideEffects,
 }: AssistantThreadPanelProps) {
@@ -1622,6 +1624,7 @@ function SessionRuntime({
         browserContextItems={browserContextItems}
         onRemoveBrowserContextItem={onRemoveBrowserContextItem}
         onClearBrowserContextItems={onClearBrowserContextItems}
+        onComposerFocus={onComposerFocus}
         onResolvePendingApproval={async (requestId, allowed) => {
           await desktopApi.agent.confirmResponse({
             requestId,

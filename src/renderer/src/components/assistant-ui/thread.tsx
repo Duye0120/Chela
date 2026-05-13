@@ -126,12 +126,22 @@ import { cn } from "@renderer/lib/utils";
 import {
   BROWSER_CONTEXT_FALLBACK_INSTRUCTION,
   describeBrowserContextItem,
+  formatBrowserContextChipLabel,
   getBrowserContextItems,
-  summarizeBrowserContextBudget,
   type BrowserContextItem,
 } from "@renderer/lib/browser-interview";
 
 const EMPTY_BROWSER_CONTEXT_ITEMS: BrowserContextItem[] = [];
+
+function getAttachmentLinkedBrowserContextIds(
+  attachments: readonly { browserContextItemId?: string }[] | undefined,
+) {
+  return new Set(
+    (attachments ?? [])
+      .map((attachment) => attachment.browserContextItemId)
+      .filter((itemId): itemId is string => Boolean(itemId)),
+  );
+}
 
 type ComposerQueuedMessageRequest = {
   text: string;
@@ -180,6 +190,7 @@ type ThreadProps = {
   onGuideQueuedMessage?: (input: ComposerQueuedMessageRequest) => Promise<void>;
   onRemoveQueuedMessage?: (messageId: string) => Promise<void>;
   onBranchChanged?: () => void | Promise<void>;
+  onComposerFocus?: () => void;
   disableGlobalSideEffects?: boolean;
 };
 
@@ -221,6 +232,7 @@ type ThreadResolvedProps = {
   onGuideQueuedMessage: (input: ComposerQueuedMessageRequest) => Promise<void>;
   onRemoveQueuedMessage: (messageId: string) => Promise<void>;
   onBranchChanged: () => void | Promise<void>;
+  onComposerFocus: () => void;
   disableGlobalSideEffects: boolean;
 };
 
@@ -279,6 +291,7 @@ export const Thread: FC<ThreadProps> = ({
   onGuideQueuedMessage = async () => undefined,
   onRemoveQueuedMessage = async () => undefined,
   onBranchChanged = () => undefined,
+  onComposerFocus = () => undefined,
   disableGlobalSideEffects = false,
 }) => {
   const aui = useAui();
@@ -494,6 +507,7 @@ export const Thread: FC<ThreadProps> = ({
               onGuideQueuedMessage={onGuideQueuedMessage}
               onRemoveQueuedMessage={onRemoveQueuedMessage}
               onBranchChanged={onBranchChanged}
+              onComposerFocus={onComposerFocus}
               disableGlobalSideEffects={disableGlobalSideEffects}
             />
           </div>
@@ -573,6 +587,7 @@ const Composer: FC<ThreadResolvedProps> = ({
   onGuideQueuedMessage,
   onRemoveQueuedMessage,
   onBranchChanged,
+  onComposerFocus,
   disableGlobalSideEffects,
 }) => {
   const aui = useAui();
@@ -602,6 +617,10 @@ const Composer: FC<ThreadResolvedProps> = ({
   const isThreadRunning = useAuiState((s) => s.thread.isRunning);
   const queuedHeadMessage = queuedMessages[0] ?? null;
   const remainingQueuedCount = Math.max(queuedMessages.length - 1, 0);
+  const visibleBrowserContextItems = useMemo(() => {
+    const linkedBrowserContextIds = getAttachmentLinkedBrowserContextIds(attachments);
+    return browserContextItems.filter((item) => !linkedBrowserContextIds.has(item.id));
+  }, [attachments, browserContextItems]);
   const createQueuedMessageRequest = useCallback(
     (
       text: string,
@@ -860,10 +879,10 @@ const Composer: FC<ThreadResolvedProps> = ({
     }
   }, [contextSummary, onEnqueueQueuedMessage]);
   const showComposerMetaRow =
-    attachments.length > 0 || browserContextItems.length > 0;
+    attachments.length > 0 || visibleBrowserContextItems.length > 0;
 
   return (
-    <ComposerPrimitive.Root className="relative flex w-full flex-col gap-1.5">
+    <ComposerPrimitive.Root className="relative z-20 flex w-full flex-col gap-1.5">
       <ComposerAttachmentSync
         attachments={attachments}
         onRemoveAttachment={onRemoveAttachment}
@@ -907,11 +926,11 @@ const Composer: FC<ThreadResolvedProps> = ({
       ) : null}
       <div className="flex w-full flex-col gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-composer-surface)] p-3 shadow-[0_12px_32px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.05)] transition-shadow focus-within:ring-2 focus-within:ring-ring/12">
         {showComposerMetaRow ? (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {attachments.length > 0 ? <ComposerAttachments /> : null}
-            {browserContextItems.length > 0 ? (
+          <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto">
+            {attachments.length > 0 ? <ComposerAttachments inline /> : null}
+            {visibleBrowserContextItems.length > 0 ? (
               <BrowserContextChips
-                items={browserContextItems}
+                items={visibleBrowserContextItems}
                 onRemove={onRemoveBrowserContextItem}
                 onClear={onClearBrowserContextItems}
               />
@@ -920,7 +939,7 @@ const Composer: FC<ThreadResolvedProps> = ({
         ) : null}
 
         <ComposerPrimitive.Input
-          placeholder="Add instructions, ask Chela, or describe what to do with attachments..."
+          placeholder="输入指令、询问 Chela，或描述附件要处理什么..."
           ref={composerInputRef}
           className={`min-h-[88px] w-full resize-none bg-transparent px-1 py-2 text-[15px] leading-6 text-foreground outline-none placeholder:text-[color:var(--color-text-secondary)]/75 ${inputScrollable ? "overflow-y-auto pr-2" : "overflow-y-hidden"
             }`}
@@ -934,6 +953,7 @@ const Composer: FC<ThreadResolvedProps> = ({
             requestAnimationFrame(syncInputOverflow);
           }}
           onPaste={handleInputPaste}
+          onFocus={onComposerFocus}
           onKeyDown={(event) => {
             if (
               event.key !== "Enter" ||
@@ -1032,19 +1052,8 @@ const BrowserContextChips: FC<{
     return null;
   }
 
-  const budget = summarizeBrowserContextBudget(items);
-  const budgetClassName =
-    budget.level === "heavy"
-      ? "text-[color:var(--color-status-warning)]"
-      : budget.level === "medium"
-        ? "text-[color:var(--color-text-secondary)]"
-        : "text-muted-foreground";
-
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-      <span className={cn("shrink-0 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2 py-1 text-[11px] font-medium", budgetClassName)}>
-Context · {budget.label}
-      </span>
+    <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5">
       {items.map((item) => (
         <BrowserDomTag
           key={item.id}
@@ -1055,7 +1064,7 @@ Context · {budget.label}
       <button
         type="button"
         onClick={onClear}
-        className="ml-auto shrink-0 rounded-[var(--radius-shell)] px-2 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground"
+        className="shrink-0 rounded-[var(--radius-shell)] px-2 py-1 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground"
       >
         清空
       </button>
@@ -1065,16 +1074,7 @@ Context · {budget.label}
 
 
 function getBrowserContextChipLabel(item: BrowserContextItem) {
-  if (item.kind === "pin") {
-    return `pin ${item.label}`;
-  }
-  if (item.kind === "page-snapshot") {
-    return item.label;
-  }
-  if (item.kind === "review-queue") {
-    return `review ${item.label}`;
-  }
-  return `dom ${item.label}`;
+  return formatBrowserContextChipLabel(item);
 }
 
 const BrowserContextIcon: FC<{ item: BrowserContextItem }> = ({ item }) => {
@@ -1104,11 +1104,11 @@ const BrowserDomTag: FC<{
           type="button"
           onClick={onRemove}
           className={cn(
-            "group inline-flex h-8 max-w-[240px] items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-selection-muted-bg)] px-2.5 font-medium text-foreground transition-colors hover:bg-[color:var(--color-control-bg-hover)]",
+            "group inline-flex h-8 max-w-[240px] items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2.5 font-medium text-foreground transition-colors hover:bg-[color:var(--color-control-bg-hover)]",
             compact ? "text-[12px]" : "text-[13px]",
             !onRemove && "cursor-help",
           )}
-          aria-label={`DOM tag ${item.label}`}
+          aria-label={getBrowserContextChipLabel(item)}
         >
           <BrowserContextIcon item={item} />
           <span className="truncate">{getBrowserContextChipLabel(item)}</span>
@@ -1805,9 +1805,17 @@ const UserMessage: FC = () => {
       | undefined;
     return custom?.browserContextItems ?? null;
   });
+  const messageAttachments = useAuiState((s) => s.message.attachments);
   const browserContextItems = useMemo(
-    () => getBrowserContextItems(rawBrowserContextItems),
-    [rawBrowserContextItems],
+    () => {
+      const linkedBrowserContextIds = getAttachmentLinkedBrowserContextIds(
+        messageAttachments as readonly { browserContextItemId?: string }[] | undefined,
+      );
+      return getBrowserContextItems(rawBrowserContextItems).filter(
+        (item) => !linkedBrowserContextIds.has(item.id),
+      );
+    },
+    [messageAttachments, rawBrowserContextItems],
   );
 
   return (
