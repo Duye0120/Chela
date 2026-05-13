@@ -124,6 +124,7 @@ export function useSessionAttachments({
   return {
     isPickingFiles,
     attachFiles,
+    appendAttachmentsToSession,
     pasteFiles,
     removeAttachment,
   };

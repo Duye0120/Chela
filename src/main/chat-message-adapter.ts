@@ -14,6 +14,9 @@ type AttachmentLike = Pick<
   SelectedFile,
   | "id"
   | "name"
+  | "displayName"
+  | "description"
+  | "browserContextItemId"
   | "path"
   | "size"
   | "extension"
@@ -82,11 +85,15 @@ async function attachmentToUserContent(
   attachment: AttachmentLike,
   allowImages: boolean,
 ): Promise<(TextContent | ImageContent)[]> {
+  const description = attachment.description?.trim();
   if (attachment.kind === "image") {
     if (!allowImages) {
       return [
         createTextBlock(
-          `已附加图片“${attachment.name}”，但当前模型不支持直接查看图片内容。`,
+          [
+            `已附加图片“${attachment.displayName || attachment.name}”，但当前模型不支持直接查看图片内容。`,
+            description ? `图片说明：${description}` : "",
+          ].filter(Boolean).join("\n"),
         ),
       ];
     }
@@ -97,18 +104,26 @@ async function attachmentToUserContent(
     );
 
     if (imageContent) {
-      return [
+      const content: (TextContent | ImageContent)[] = [];
+      if (description) {
+        content.push(createTextBlock(`图片说明：${description}`));
+      }
+      content.push(
         {
           type: "image",
           data: imageContent.data,
           mimeType: imageContent.mimeType,
         },
-      ];
+      );
+      return content;
     }
 
     return [
       createTextBlock(
-        `已附加图片“${attachment.name}”，但当前无法读取图片内容。`,
+        [
+          `已附加图片“${attachment.displayName || attachment.name}”，但当前无法读取图片内容。`,
+          description ? `图片说明：${description}` : "",
+        ].filter(Boolean).join("\n"),
       ),
     ];
   }

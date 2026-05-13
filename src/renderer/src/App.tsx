@@ -10,6 +10,7 @@ import type {
   InterruptedApprovalGroup,
   ModelRoutingRole,
   RightPanelState,
+  SelectedFile,
   Settings,
   SessionGroup,
   ThinkingLevel,
@@ -154,6 +155,7 @@ export default function App() {
   const [sidebarAnimating, setSidebarAnimating] = useState(false);
   const [rightPanelAnimating, setRightPanelAnimating] = useState(false);
   const [rightPanelDragging, setRightPanelDragging] = useState(false);
+  const [browserInteractionResetSignal, setBrowserInteractionResetSignal] = useState(0);
 
   const settingsSection = useMemo(
     () => resolveSettingsSectionFromPath(location.pathname) ?? "general",
@@ -200,6 +202,7 @@ export default function App() {
   const archivedSummariesRef = useRef<ChatSessionSummary[]>([]);
   const groupsRef = useRef<SessionGroup[]>([]);
   const settingsRef = useRef<Settings | null>(null);
+  const activeSessionRef = useRef<ChatSession | null>(null);
   const activeSessionIdRef = useRef<string | null>(null);
   const sessionCacheRef = useRef<Record<string, ChatSession>>({});
   const appliedCustomThemeKeysRef = useRef<string[]>([]);
@@ -240,8 +243,9 @@ export default function App() {
   }, [settings]);
 
   useEffect(() => {
+    activeSessionRef.current = activeSession;
     activeSessionIdRef.current = activeSessionId;
-  }, [activeSessionId]);
+  }, [activeSession, activeSessionId]);
 
   useEffect(() => {
     sessionCacheRef.current = sessionCache;
@@ -511,6 +515,7 @@ export default function App() {
   const {
     isPickingFiles,
     attachFiles,
+    appendAttachmentsToSession,
     pasteFiles,
     removeAttachment,
   } = useSessionAttachments({
@@ -518,6 +523,32 @@ export default function App() {
     desktopApi,
     persistSession,
   });
+
+  const removeAttachmentAndLinkedBrowserContext = useCallback(
+    (attachmentId: string) => {
+      const session = activeSessionRef.current;
+      const linkedBrowserContextItemId = session?.attachments.find(
+        (attachment) => attachment.id === attachmentId,
+      )?.browserContextItemId;
+
+      removeAttachment(attachmentId);
+
+      if (!session || !linkedBrowserContextItemId) {
+        return;
+      }
+
+      setBrowserContextBySessionId((current) => {
+        const nextItems = (current[session.id] ?? []).filter(
+          (item) => item.id !== linkedBrowserContextItemId,
+        );
+        return {
+          ...current,
+          [session.id]: nextItems,
+        };
+      });
+    },
+    [removeAttachment],
+  );
 
   const handleSessionRunStateChange = useCallback(
     (sessionId: string, isRunning: boolean) => {
@@ -1045,6 +1076,13 @@ export default function App() {
       };
     });
   }, []);
+
+  const handleBrowserScreenshotCaptured = useCallback(
+    async (files: SelectedFile[]) => {
+      await appendAttachmentsToSession(files);
+    },
+    [appendAttachmentsToSession],
+  );
 
   const handleRemoveBrowserContextItem = useCallback(
     (sessionId: string, itemId: string) => {
@@ -1595,7 +1633,7 @@ export default function App() {
                 isPickingFiles={isPickingFiles}
                 onAttachFiles={attachFiles}
                 onPasteFiles={pasteFiles}
-                onRemoveAttachment={removeAttachment}
+                onRemoveAttachment={removeAttachmentAndLinkedBrowserContext}
                 onModelChange={handleModelChange}
                 onThinkingLevelChange={handleThinkingLevelChange}
                 onBranchChanged={handleGitStateChanged}
@@ -1619,6 +1657,9 @@ export default function App() {
                 onClearBrowserContextItems={() =>
                   handleClearBrowserContextItems(session.id)
                 }
+                onComposerFocus={() => {
+                  setBrowserInteractionResetSignal((current) => current + 1);
+                }}
                 visible={visible}
                 disableGlobalSideEffects={hasAnyRunningSessions}
               />
@@ -1645,7 +1686,7 @@ export default function App() {
     interruptedApprovalGroupsBySessionId,
     mountedSessionIds,
     openSettingsView,
-    removeAttachment,
+    removeAttachmentAndLinkedBrowserContext,
     pasteFiles,
     persistSession,
     gitBranchSummary,
@@ -1946,6 +1987,13 @@ export default function App() {
                             <BrowserPreviewPanel
                               onClose={closeRightPanel}
                               onElementSelected={handleBrowserElementSelected}
+                              onScreenshotCaptured={handleBrowserScreenshotCaptured}
+                              browserContextItems={
+                                activeSessionId
+                                  ? browserContextBySessionId[activeSessionId] ?? []
+                                  : []
+                              }
+                              resetInteractionSignal={browserInteractionResetSignal}
                               className="h-full"
                             />
                           </div>

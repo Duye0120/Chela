@@ -7,7 +7,17 @@ import type { SelectedFile } from "@shared/contracts";
 
 export type PersistedMessageAttachment = Pick<
   SelectedFile,
-  "id" | "name" | "size" | "kind" | "extension" | "path" | "mimeType" | "previewText"
+  | "id"
+  | "name"
+  | "displayName"
+  | "description"
+  | "browserContextItemId"
+  | "size"
+  | "kind"
+  | "extension"
+  | "path"
+  | "mimeType"
+  | "previewText"
 >;
 
 function selectedFileToAttachmentType(
@@ -27,10 +37,19 @@ function toFileUrl(filePath: string) {
 }
 
 function selectedFileToContent(
-  file: Pick<SelectedFile, "kind" | "mimeType" | "path" | "previewText" | "name">,
+  file: Pick<SelectedFile, "kind" | "mimeType" | "path" | "previewText" | "name" | "description">,
 ): ThreadUserMessagePart[] {
   if (file.mimeType?.startsWith("image/") || file.kind === "image") {
+    const description = file.description?.trim();
     return [
+      ...(description
+        ? [
+          {
+            type: "text" as const,
+            text: `图片说明：${description}`,
+          },
+        ]
+        : []),
       {
         type: "image",
         image: toFileUrl(file.path),
@@ -56,6 +75,9 @@ export function toPersistedMessageAttachment(
   return {
     id: file.id,
     name: file.name,
+    displayName: file.displayName,
+    description: file.description,
+    browserContextItemId: file.browserContextItemId,
     size: file.size,
     kind: file.kind,
     extension: file.extension,
@@ -71,7 +93,7 @@ export function selectedFileToCreateAttachment(
   return {
     id: file.id,
     type: selectedFileToAttachmentType(file),
-    name: file.name,
+    name: file.displayName || file.name,
     contentType: file.mimeType,
     content: selectedFileToContent(file),
   };
@@ -83,7 +105,7 @@ export function selectedFileToCompleteAttachment(
   return {
     id: file.id,
     type: selectedFileToAttachmentType(file),
-    name: file.name,
+    name: file.displayName || file.name,
     status: { type: "complete" },
     contentType: file.mimeType,
     content: selectedFileToContent(file),
