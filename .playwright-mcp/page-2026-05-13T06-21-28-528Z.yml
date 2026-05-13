@@ -1,0 +1,174 @@
+- main [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: 节点库
+      - heading "拖拽编排的最小模型" [level=2] [ref=e7]
+      - paragraph [ref=e8]: 每个节点由类型、输入桩、输出桩和运行时元数据组成。画布只负责渲染和交互，业务模型保持独立。
+      - generic [ref=e9]:
+        - button "Webhook 触发 0 输入桩 / 1 输出桩" [ref=e10] [cursor=pointer]:
+          - img [ref=e12]
+          - generic [ref=e19]:
+            - strong [ref=e20]: Webhook 触发
+            - generic [ref=e21]: 0 输入桩 / 1 输出桩
+        - button "字段清洗 1 输入桩 / 1 输出桩" [ref=e22] [cursor=pointer]:
+          - img [ref=e24]
+          - generic [ref=e25]:
+            - strong [ref=e26]: 字段清洗
+            - generic [ref=e27]: 1 输入桩 / 1 输出桩
+        - button "条件分支 1 输入桩 / 1 输出桩" [ref=e28] [cursor=pointer]:
+          - img [ref=e30]
+          - generic [ref=e34]:
+            - strong [ref=e35]: 条件分支
+            - generic [ref=e36]: 1 输入桩 / 1 输出桩
+        - button "发送通知 1 输入桩 / 0 输出桩" [ref=e37] [cursor=pointer]:
+          - img [ref=e39]
+          - generic [ref=e42]:
+            - strong [ref=e43]: 发送通知
+            - generic [ref=e44]: 1 输入桩 / 0 输出桩
+    - generic [ref=e45]:
+      - generic [ref=e46]: 模型面板
+      - heading "DAG 数据状态" [level=2] [ref=e47]
+      - generic [ref=e48]:
+        - generic [ref=e49]:
+          - img [ref=e50]
+          - generic [ref=e60]: 节点
+          - strong [ref=e61]: "5"
+        - generic [ref=e62]:
+          - img [ref=e63]
+          - generic [ref=e67]: 边
+          - strong [ref=e68]: "4"
+        - generic [ref=e69]:
+          - img [ref=e70]
+          - generic [ref=e72]: 分支
+          - strong [ref=e73]: "1"
+        - generic [ref=e74]:
+          - img [ref=e75]
+          - generic [ref=e78]: 估算耗时
+          - strong [ref=e79]: 293ms
+      - generic "workflow model preview" [ref=e80]:
+        - generic [ref=e81]:
+          - generic [ref=e82]: Webhook 触发
+          - code [ref=e83]: trigger-webhook
+        - generic [ref=e84]:
+          - generic [ref=e85]: 订单标准化
+          - code [ref=e86]: transform-normalize
+        - generic [ref=e87]:
+          - generic [ref=e88]: 风险分流
+          - code [ref=e89]: gateway-risk
+        - generic [ref=e90]:
+          - generic [ref=e91]: 发送通知
+          - code [ref=e92]: action-notify
+        - generic [ref=e93]:
+          - generic [ref=e94]: 进入人工复核
+          - code [ref=e95]: action-review
+      - generic [ref=e96]:
+        - generic [ref=e97]: 连接校验
+        - strong [ref=e98]: 当前 DAG 合法，可以继续连线。
+      - generic [ref=e99]:
+        - generic [ref=e100]: 当前选中边
+        - paragraph [ref=e101]: 点击画布中的连线后，这里会显示删除按钮。也可以选中连线后按 Delete 或 Backspace。
+  - generic [ref=e102]:
+    - generic [ref=e103]:
+      - generic [ref=e104]:
+        - generic [ref=e105]: React + TypeScript + React Flow
+        - heading "工作流 DAG 画布 Demo" [level=1] [ref=e106]
+      - generic [ref=e107]: 5 nodes online
+    - generic [ref=e108]:
+      - generic "canvas actions" [ref=e109]:
+        - button "自动布局" [ref=e110] [cursor=pointer]:
+          - img [ref=e111]
+          - generic [ref=e115]: Auto layout
+        - button "适配视图" [ref=e116] [cursor=pointer]:
+          - img [ref=e117]
+          - generic [ref=e122]: Fit
+        - button "重置示例" [ref=e123] [cursor=pointer]:
+          - img [ref=e124]
+          - generic [ref=e127]: Reset
+        - generic [ref=e128]:
+          - img [ref=e129]
+          - text: 拖节点 / 拉连接桩 / 滚轮缩放
+      - application [ref=e135]:
+        - generic [ref=e137]:
+          - generic:
+            - generic:
+              - img
+              - img:
+                - group "Edge from trigger-webhook to transform-normalize" [ref=e138] [cursor=pointer]
+              - img:
+                - group "Edge from transform-normalize to gateway-risk" [ref=e141] [cursor=pointer]
+              - img:
+                - group "Edge from gateway-risk to action-notify" [ref=e144] [cursor=pointer]
+              - img:
+                - group "Edge from gateway-risk to action-review" [ref=e147] [cursor=pointer]
+            - generic:
+              - generic [ref=e151]: 事件数据
+              - generic [ref=e153]: 清洗结果
+              - generic [ref=e155]: 通过
+              - generic [ref=e157]: 需复核
+            - generic:
+              - group [ref=e158]:
+                - article [ref=e159]:
+                  - generic [ref=e160]:
+                    - img [ref=e162]
+                    - generic [ref=e169]: trigger
+                    - generic [ref=e170]: 24ms
+                  - heading "Webhook 触发" [level=3] [ref=e171]
+                  - paragraph [ref=e172]: 接收外部事件，启动整个 DAG。
+                  - generic [ref=e173]:
+                    - generic [ref=e174]: 入口层
+                    - generic [ref=e175]: 0 in / 1 out
+              - group [ref=e177]:
+                - article [ref=e178]:
+                  - generic [ref=e180]:
+                    - img [ref=e182]
+                    - generic [ref=e183]: transform
+                    - generic [ref=e184]: 86ms
+                  - heading "订单标准化" [level=3] [ref=e185]
+                  - paragraph [ref=e186]: 把原始字段映射成标准数据结构。
+                  - generic [ref=e187]:
+                    - generic [ref=e188]: 数据层
+                    - generic [ref=e189]: 1 in / 1 out
+              - group [ref=e191]:
+                - article [ref=e192]:
+                  - generic [ref=e194]:
+                    - img [ref=e196]
+                    - generic [ref=e200]: gateway
+                    - generic [ref=e201]: 12ms
+                  - heading "风险分流" [level=3] [ref=e202]
+                  - paragraph [ref=e203]: 根据金额和风险等级选择后续路径。
+                  - generic [ref=e204]:
+                    - generic [ref=e205]: 策略层
+                    - generic [ref=e206]: 1 in / 1 out
+              - group [ref=e208]:
+                - article [ref=e209]:
+                  - generic [ref=e211]:
+                    - img [ref=e213]
+                    - generic [ref=e216]: action
+                    - generic [ref=e217]: 43ms
+                  - heading "发送通知" [level=3] [ref=e218]
+                  - paragraph [ref=e219]: 调用消息服务推送处理结果。
+                  - generic [ref=e220]:
+                    - generic [ref=e221]: 业务层
+                    - generic [ref=e222]: 1 in / 0 out
+              - group [ref=e223]:
+                - article [ref=e224]:
+                  - generic [ref=e226]:
+                    - img [ref=e228]
+                    - generic [ref=e231]: action
+                    - generic [ref=e232]: 128ms
+                  - heading "进入人工复核" [level=3] [ref=e233]
+                  - paragraph [ref=e234]: 创建复核任务并同步到运营后台。
+                  - generic [ref=e235]:
+                    - generic [ref=e236]: 运营层
+                    - generic [ref=e237]: 1 in / 0 out
+        - img
+        - generic "Control Panel" [ref=e238]:
+          - button "Zoom In" [ref=e239] [cursor=pointer]:
+            - img [ref=e240]
+          - button "Zoom Out" [ref=e242] [cursor=pointer]:
+            - img [ref=e243]
+          - button "Fit View" [ref=e245] [cursor=pointer]:
+            - img [ref=e246]
+          - button "Toggle Interactivity" [ref=e248] [cursor=pointer]:
+            - img [ref=e249]
+        - img "Mini Map" [ref=e252]
