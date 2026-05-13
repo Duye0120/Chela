@@ -233,6 +233,12 @@
   --color-selection-bg: var(--chela-control-selected-bg);
   --color-selection-fg: var(--chela-control-selected-text);
   --color-selection-muted-bg: var(--chela-control-bg-hover);
+  --color-browser-pin-bg: var(--chela-warning);
+  --color-browser-pin-fg: #ffffff;
+  --color-browser-pin-subtle: rgba(245, 127, 23, 0.14);
+  --color-browser-select-bg: var(--color-selection-bg);
+  --color-browser-select-fg: var(--color-selection-fg);
+  --color-browser-select-subtle: var(--chela-selection-bg);
   --shadow-subtle: var(--chela-shadow-md);
   --shadow-flyout: var(--chela-control-panel-shadow);
   --shadow-inset-soft: var(--chela-control-shadow);
@@ -443,6 +449,12 @@
   --color-selection-bg: var(--chela-control-selected-bg);
   --color-selection-fg: var(--chela-control-selected-text);
   --color-selection-muted-bg: var(--chela-control-bg-hover);
+  --color-browser-pin-bg: var(--chela-warning);
+  --color-browser-pin-fg: #0d0d0d;
+  --color-browser-pin-subtle: rgba(255, 179, 0, 0.18);
+  --color-browser-select-bg: var(--color-selection-bg);
+  --color-browser-select-fg: var(--color-selection-fg);
+  --color-browser-select-subtle: var(--chela-selection-bg);
   --shadow-subtle: var(--chela-shadow-lg);
   --shadow-flyout: var(--chela-control-panel-shadow);
   --shadow-inset-soft: var(--chela-control-shadow);

@@ -30,6 +30,10 @@ type AttachmentImageState = {
   isImage: boolean;
 };
 
+type AttachmentDescriptionState = {
+  description?: string;
+};
+
 function fileUrlToPath(fileUrl: string) {
   try {
     const url = new URL(fileUrl);
@@ -147,6 +151,21 @@ const useAttachmentSrc = () => {
   return resolvedSrc;
 };
 
+const useAttachmentDescription = () => {
+  return useAuiState(
+    useShallow((s): AttachmentDescriptionState => {
+      const descriptionPart = s.attachment.content?.find(
+        (content) =>
+          content.type === "text" &&
+          content.text.startsWith("图片说明："),
+      );
+      return descriptionPart && descriptionPart.type === "text"
+        ? { description: descriptionPart.text.replace(/^图片说明：/u, "").trim() }
+        : {};
+    }),
+  ).description;
+};
+
 const useAttachmentCardInfo = () => {
   const { name, contentType, fileSize } = useAuiState(
     useShallow((s) => ({
@@ -177,13 +196,14 @@ const AttachmentPreview: FC<{ src: string }> = ({ src }) => {
     <img
       src={src}
       alt="Attachment preview"
-      className="block h-auto max-h-[80vh] w-auto max-w-full object-contain"
+      className="block h-auto max-h-[80vh] w-auto max-w-full rounded-[var(--radius-shell)] object-contain"
     />
   );
 };
 
 const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
   const src = useAttachmentSrc();
+  const description = useAttachmentDescription();
 
   if (!src) return children;
 
@@ -195,10 +215,15 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
       >
         {children}
       </DialogTrigger>
-      <DialogContent className="p-2 sm:max-w-3xl [&>button]:rounded-full [&>button]:bg-foreground/60 [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0! [&_svg]:text-background [&>button]:hover:[&_svg]:text-destructive">
+      <DialogContent className="rounded-[calc(var(--radius-shell)+4px)] p-2 sm:max-w-3xl [&>button]:rounded-[var(--radius-shell)] [&>button]:bg-foreground/60 [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0! [&_svg]:text-background [&>button]:hover:[&_svg]:text-destructive">
         <DialogTitle className="sr-only">Image Attachment Preview</DialogTitle>
-        <div className="relative mx-auto flex max-h-[80dvh] w-full items-center justify-center overflow-hidden bg-background">
+        <div className="relative mx-auto flex max-h-[80dvh] w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-[var(--radius-shell)] bg-background">
           <AttachmentPreview src={src} />
+          {description ? (
+            <p className="w-full rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-2 text-[13px] leading-5 text-foreground">
+              {description}
+            </p>
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>
@@ -233,6 +258,7 @@ const AttachmentTile: FC = () => {
   const aui = useAui();
   const isComposer = aui.attachment.source !== "message";
   const src = useAttachmentSrc();
+  const description = useAttachmentDescription();
   const { name, subtitle } = useAttachmentCardInfo();
   const typeLabel = useAuiState((s) => {
     switch (s.attachment.type) {
@@ -275,8 +301,8 @@ const AttachmentTile: FC = () => {
         </AttachmentPreviewDialog>
         {isComposer ? <AttachmentRemove /> : null}
       </AttachmentPrimitive.Root>
-      <TooltipContent side="top">
-        {src ? "点击预览" : name}
+      <TooltipContent side="top" className="max-w-[320px] whitespace-pre-wrap text-left">
+        {description ? `${description}\n点击预览` : src ? "点击预览" : name}
       </TooltipContent>
     </Tooltip>
   );
@@ -338,6 +364,7 @@ const AttachmentChip: FC = () => {
   const aui = useAui();
   const isComposer = aui.attachment.source !== "message";
   const src = useAttachmentSrc();
+  const description = useAttachmentDescription();
   const { name, subtitle } = useAttachmentCardInfo();
 
   return (
@@ -369,17 +396,23 @@ const AttachmentChip: FC = () => {
             </button>
           </TooltipTrigger>
         </AttachmentPreviewDialog>
-        <TooltipContent side="top">
-          {src ? "点击预览" : subtitle}
+        <TooltipContent side="top" className="max-w-[320px] whitespace-pre-wrap text-left">
+          {description ? `${description}\n点击预览` : src ? "点击预览" : subtitle}
         </TooltipContent>
       </AttachmentPrimitive.Root>
     </Tooltip>
   );
 };
 
-export const ComposerAttachments: FC = () => {
+export const ComposerAttachments: FC<{ inline?: boolean }> = ({ inline = false }) => {
   return (
-    <div className="flex w-full flex-row items-center gap-1.5 overflow-x-auto px-1 pb-1 empty:hidden">
+    <div
+      className={
+        inline
+          ? "flex min-w-0 shrink-0 flex-row items-center gap-1.5 overflow-x-auto empty:hidden"
+          : "flex w-full flex-row items-center gap-1.5 overflow-x-auto px-1 pb-1 empty:hidden"
+      }
+    >
       <ComposerPrimitive.Attachments>
         {() => <AttachmentChip />}
       </ComposerPrimitive.Attachments>
