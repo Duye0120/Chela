@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { useShallow } from "zustand/shallow";
 import type {
   DesktopApi,
-  GitBranchSummary,
-  GitDiffOverview,
   Settings,
 } from "@shared/contracts";
+import { useGitStore } from "@renderer/stores/git-store";
 
 type AppView = "thread" | "settings";
 
@@ -19,114 +19,52 @@ export function useAppGitState({
   mainView: AppView;
   diffPanelOpen: boolean;
 }) {
-  const [gitBranchSummary, setGitBranchSummary] =
-    useState<GitBranchSummary | null>(null);
-  const [gitOverview, setGitOverview] = useState<GitDiffOverview | null>(null);
-  const [gitOverviewLoading, setGitOverviewLoading] = useState(false);
-  const lastGitBranchRefreshRef = useRef(0);
-  const gitBranchRequestRef = useRef<Promise<GitBranchSummary | null> | null>(null);
-  const gitBranchRequestWorkspaceRef = useRef<string | null>(null);
-  const gitBranchRequestSerialRef = useRef(0);
-  const gitOverviewRequestRef = useRef<Promise<GitDiffOverview | null> | null>(null);
-  const gitOverviewRequestWorkspaceRef = useRef<string | null>(null);
-  const gitOverviewRequestSerialRef = useRef(0);
+  const {
+    gitBranchSummary,
+    gitOverview,
+    gitOverviewLoading,
+    lastGitBranchRefreshAt,
+    refreshGitBranchSummary: refreshGitBranchSummaryInStore,
+    refreshGitOverview: refreshGitOverviewInStore,
+  } = useGitStore(useShallow((state) => ({
+    gitBranchSummary: state.gitBranchSummary,
+    gitOverview: state.gitOverview,
+    gitOverviewLoading: state.gitOverviewLoading,
+    lastGitBranchRefreshAt: state.lastGitBranchRefreshAt,
+    refreshGitBranchSummary: state.refreshGitBranchSummary,
+    refreshGitOverview: state.refreshGitOverview,
+  })));
   const diffPanelAutoRefreshArmedRef = useRef(false);
 
+  const getWorkspace = useCallback(
+    () => settingsRef.current?.workspace ?? null,
+    [settingsRef],
+  );
+
   const refreshGitBranchSummary = useCallback(async () => {
-    if (!desktopApi?.git) {
-      setGitBranchSummary(null);
-      return null;
-    }
-
-    const workspace = settingsRef.current?.workspace ?? null;
-
-    if (
-      gitBranchRequestRef.current &&
-      gitBranchRequestWorkspaceRef.current === workspace
-    ) {
-      return gitBranchRequestRef.current;
-    }
-
-    lastGitBranchRefreshRef.current = Date.now();
-    gitBranchRequestWorkspaceRef.current = workspace;
-    const requestSerial = ++gitBranchRequestSerialRef.current;
-    const request = desktopApi.git
-      .getSummary()
-      .then((nextSummary) => {
-        if (
-          gitBranchRequestSerialRef.current === requestSerial &&
-          settingsRef.current?.workspace === workspace
-        ) {
-          setGitBranchSummary(nextSummary);
-        }
-        return nextSummary;
-      })
-      .finally(() => {
-        if (gitBranchRequestRef.current === request) {
-          gitBranchRequestRef.current = null;
-          gitBranchRequestWorkspaceRef.current = null;
-        }
-      });
-
-    gitBranchRequestRef.current = request;
-    return request;
-  }, [desktopApi, settingsRef]);
+    return refreshGitBranchSummaryInStore(desktopApi, getWorkspace());
+  }, [desktopApi, getWorkspace, refreshGitBranchSummaryInStore]);
 
   const refreshGitOverview = useCallback(async () => {
-    if (!desktopApi?.git) {
-      setGitBranchSummary(null);
-      setGitOverview(null);
-      return null;
-    }
-
-    const workspace = settingsRef.current?.workspace ?? null;
-
-    if (
-      gitOverviewRequestRef.current &&
-      gitOverviewRequestWorkspaceRef.current === workspace
-    ) {
-      return gitOverviewRequestRef.current;
-    }
-
-    setGitOverviewLoading(true);
-    gitOverviewRequestWorkspaceRef.current = workspace;
-    const requestSerial = ++gitOverviewRequestSerialRef.current;
-
-    const request = desktopApi.git
-      .getSnapshot()
-      .then((nextOverview) => {
-        if (
-          gitOverviewRequestSerialRef.current === requestSerial &&
-          settingsRef.current?.workspace === workspace
-        ) {
-          setGitOverview(nextOverview);
-          setGitBranchSummary(nextOverview.branch);
-        }
-        return nextOverview;
-      })
-      .finally(() => {
-        if (gitOverviewRequestRef.current === request) {
-          gitOverviewRequestRef.current = null;
-          gitOverviewRequestWorkspaceRef.current = null;
-        }
-        setGitOverviewLoading(false);
-      });
-
-    gitOverviewRequestRef.current = request;
-    return request;
-  }, [desktopApi, settingsRef]);
+    return refreshGitOverviewInStore(desktopApi, getWorkspace());
+  }, [desktopApi, getWorkspace, refreshGitOverviewInStore]);
 
   useEffect(() => {
     if (mainView !== "thread" || diffPanelOpen) {
       return;
     }
 
-    if (Date.now() - lastGitBranchRefreshRef.current < 1_500) {
+    if (Date.now() - lastGitBranchRefreshAt < 1_500) {
       return;
     }
 
     void refreshGitBranchSummary();
-  }, [diffPanelOpen, mainView, refreshGitBranchSummary]);
+  }, [
+    diffPanelOpen,
+    lastGitBranchRefreshAt,
+    mainView,
+    refreshGitBranchSummary,
+  ]);
 
   useEffect(() => {
     if (mainView !== "thread" || !diffPanelOpen) {

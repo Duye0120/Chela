@@ -3,7 +3,7 @@ import type {
   ChatSessionSummary,
   SessionGroup,
 } from "@shared/contracts";
-import { upsertSummary } from "@renderer/lib/session";
+import { upsertSummary } from "./session";
 
 export function applySessionToLiveSummaries(
   current: ChatSessionSummary[],

@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   CommandLineIcon,
 } from "@heroicons/react/24/outline";
 import { ActivityIcon, Globe2Icon, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { useShallow } from "zustand/shallow";
 import type {
   ChatSession,
   ChatSessionSummary,
-  ContextSummary,
   InterruptedApprovalGroup,
   ModelRoutingRole,
   RightPanelState,
@@ -14,7 +14,6 @@ import type {
   Settings,
   SessionGroup,
   ThinkingLevel,
-  WindowFrameState,
 } from "@shared/contracts";
 import { AssistantThreadPanel } from "@renderer/components/assistant-ui/assistant-thread-panel";
 import {
@@ -82,80 +81,111 @@ import {
   applySessionToArchivedSummaries,
   applySessionToLiveSummaries,
   findGroupByPath,
-  removeRecordKey,
   resolveGroupName,
   resolveGroupPath,
   resolveSessionProjectPath,
-  updateRunningSessionIds,
 } from "@renderer/lib/app-session-state";
 import { useAppGitState } from "@renderer/hooks/use-app-git-state";
 import { useSessionAttachments } from "@renderer/hooks/use-session-attachments";
+import { useAppStore } from "@renderer/stores/app-store";
+import { useSessionStore } from "@renderer/stores/session-store";
 import type { PanelImperativeHandle, PanelSize } from "react-resizable-panels";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { BrowserContextItem } from "@renderer/lib/browser-interview";
-import { compactBrowserContextItems } from "@renderer/lib/browser-interview";
 
 export default function App() {
   const desktopApi = window.desktopApi;
   const navigate = useNavigate();
   const location = useLocation();
-  const [booting, setBooting] = useState(true);
-  const [bootError, setBootError] = useState<string | null>(null);
-  const [summaries, setSummaries] = useState<ChatSessionSummary[]>([]);
-  const [archivedSummaries, setArchivedSummaries] = useState<
-    ChatSessionSummary[]
-  >([]);
-  const [groups, setGroups] = useState<SessionGroup[]>([]);
-  const [activeSession, setActiveSession] = useState<ChatSession | null>(null);
-  const [sessionCache, setSessionCache] = useState<Record<string, ChatSession>>(
-    {},
-  );
-  const [runningSessionIds, setRunningSessionIds] = useState<string[]>([]);
-  const [browserContextBySessionId, setBrowserContextBySessionId] = useState<
-    Record<string, BrowserContextItem[]>
-  >({});
-  const [contextSummaryBySessionId, setContextSummaryBySessionId] = useState<
-    Record<string, ContextSummary>
-  >({});
-  const [interruptedApprovalGroupsBySessionId, setInterruptedApprovalGroupsBySessionId] =
-    useState<Record<string, InterruptedApprovalGroup[]>>({});
-  const [rightPanelState, setRightPanelState] = useState<RightPanelState>({
-    open: false,
-    activeView: "diff",
-    width: null,
-  });
-  const [frameState, setFrameState] = useState<WindowFrameState>({
-    isMaximized: false,
-  });
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [terminalOpen, setTerminalOpen] = useState(false);
-  const [threadWorkspaceWidth, setThreadWorkspaceWidth] = useState(0);
-  const [sidebarSize, setSidebarSize] = useState(() => {
-    const storedWidth = readStoredNumber([
-      SIDEBAR_WIDTH_STORAGE_KEY,
-      LEGACY_SIDEBAR_WIDTH_STORAGE_KEY,
-    ]);
-    if (storedWidth === null) {
-      return DEFAULT_SIDEBAR_SIZE;
-    }
-
-    return migrateLegacySidebarWidth(storedWidth);
-  });
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-
-    return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
-  });
-  const [currentModelId, setCurrentModelId] = useState(
-    "builtin:anthropic:claude-sonnet-4-20250514",
-  );
-  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("off");
-  const [sidebarAnimating, setSidebarAnimating] = useState(false);
-  const [rightPanelAnimating, setRightPanelAnimating] = useState(false);
-  const [rightPanelDragging, setRightPanelDragging] = useState(false);
-  const [browserInteractionResetSignal, setBrowserInteractionResetSignal] = useState(0);
+  const {
+    booting,
+    bootError,
+    terminalOpen,
+    threadWorkspaceWidth,
+    sidebarSize,
+    sidebarCollapsed,
+    currentModelId,
+    thinkingLevel,
+    sidebarAnimating,
+    rightPanelAnimating,
+    rightPanelDragging,
+    browserInteractionResetSignal,
+    rightPanelState,
+    frameState,
+    settings,
+  } = useAppStore(useShallow((state) => ({
+    booting: state.booting,
+    bootError: state.bootError,
+    terminalOpen: state.terminalOpen,
+    threadWorkspaceWidth: state.threadWorkspaceWidth,
+    sidebarSize: state.sidebarSize,
+    sidebarCollapsed: state.sidebarCollapsed,
+    currentModelId: state.currentModelId,
+    thinkingLevel: state.thinkingLevel,
+    sidebarAnimating: state.sidebarAnimating,
+    rightPanelAnimating: state.rightPanelAnimating,
+    rightPanelDragging: state.rightPanelDragging,
+    browserInteractionResetSignal: state.browserInteractionResetSignal,
+    rightPanelState: state.rightPanelState,
+    frameState: state.frameState,
+    settings: state.settings,
+  })));
+  const appActions = useAppStore(useShallow((state) => ({
+    setBooting: state.setBooting,
+    setBootError: state.setBootError,
+    setTerminalOpen: state.setTerminalOpen,
+    setThreadWorkspaceWidth: state.setThreadWorkspaceWidth,
+    setSidebarSize: state.setSidebarSize,
+    setSidebarCollapsed: state.setSidebarCollapsed,
+    setCurrentModelId: state.setCurrentModelId,
+    setThinkingLevel: state.setThinkingLevel,
+    setSidebarAnimating: state.setSidebarAnimating,
+    setRightPanelAnimating: state.setRightPanelAnimating,
+    setRightPanelDragging: state.setRightPanelDragging,
+    bumpBrowserInteractionResetSignal: state.bumpBrowserInteractionResetSignal,
+    setRightPanelState: state.setRightPanelState,
+    setFrameState: state.setFrameState,
+    setSettings: state.setSettings,
+  })));
+  const {
+    summaries,
+    archivedSummaries,
+    groups,
+    activeSession,
+    sessionCache,
+    runningSessionIds,
+    browserContextBySessionId,
+    contextSummaryBySessionId,
+    interruptedApprovalGroupsBySessionId,
+  } = useSessionStore(useShallow((state) => ({
+    summaries: state.summaries,
+    archivedSummaries: state.archivedSummaries,
+    groups: state.groups,
+    activeSession: state.activeSession,
+    sessionCache: state.sessionCache,
+    runningSessionIds: state.runningSessionIds,
+    browserContextBySessionId: state.browserContextBySessionId,
+    contextSummaryBySessionId: state.contextSummaryBySessionId,
+    interruptedApprovalGroupsBySessionId: state.interruptedApprovalGroupsBySessionId,
+  })));
+  const sessionActions = useSessionStore(useShallow((state) => ({
+    setSummaries: state.setSummaries,
+    setArchivedSummaries: state.setArchivedSummaries,
+    setGroups: state.setGroups,
+    cacheSession: state.cacheSession,
+    removeCachedSession: state.removeCachedSession,
+    hydrateSession: state.hydrateSession,
+    clearActiveSession: state.clearActiveSession,
+    persistSessionLocally: state.persistSessionLocally,
+    removeSessionState: state.removeSessionState,
+    setSessionRunning: state.setSessionRunning,
+    setContextSummary: state.setContextSummary,
+    setInterruptedApprovalGroups: state.setInterruptedApprovalGroups,
+    upsertBrowserContextItem: state.upsertBrowserContextItem,
+    removeBrowserContextItem: state.removeBrowserContextItem,
+    clearBrowserContextItems: state.clearBrowserContextItems,
+    removeAttachmentLinkedBrowserContext: state.removeAttachmentLinkedBrowserContext,
+  })));
 
   const settingsSection = useMemo(
     () => resolveSettingsSectionFromPath(location.pathname) ?? "general",
@@ -263,9 +293,9 @@ export default function App() {
 
     const updateWidth = () => {
       const nextWidth = Math.round(element.getBoundingClientRect().width);
-      setThreadWorkspaceWidth((current) =>
-        current === nextWidth ? current : nextWidth,
-      );
+      if (useAppStore.getState().threadWorkspaceWidth !== nextWidth) {
+        appActions.setThreadWorkspaceWidth(nextWidth);
+      }
     };
 
     updateWidth();
@@ -304,12 +334,12 @@ export default function App() {
   );
 
   const armRightPanelAnimation = useCallback(() => {
-    setRightPanelAnimating(true);
+    appActions.setRightPanelAnimating(true);
     clearTimeout(rightPanelAnimatingTimerRef.current);
     rightPanelAnimatingTimerRef.current = setTimeout(() => {
-      setRightPanelAnimating(false);
+      appActions.setRightPanelAnimating(false);
     }, 520);
-  }, []);
+  }, [appActions]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -384,18 +414,8 @@ export default function App() {
   });
 
   const cacheSession = useCallback((session: ChatSession) => {
-    setSessionCache((current) => {
-      const existing = current[session.id];
-      if (existing === session) {
-        return current;
-      }
-
-      return {
-        ...current,
-        [session.id]: session,
-      };
-    });
-  }, []);
+    sessionActions.cacheSession(session);
+  }, [sessionActions]);
 
   const refreshContextSummary = useCallback(
     async (sessionId: string) => {
@@ -405,72 +425,56 @@ export default function App() {
 
       try {
         const nextSummary = await desktopApi.context.getSummary(sessionId);
-        setContextSummaryBySessionId((current) => ({
-          ...current,
-          [sessionId]: nextSummary,
-        }));
+        sessionActions.setContextSummary(sessionId, nextSummary);
         return nextSummary;
       } catch {
-        setContextSummaryBySessionId((current) => ({
-          ...current,
-          [sessionId]: EMPTY_CONTEXT_USAGE_SUMMARY,
-        }));
+        sessionActions.setContextSummary(sessionId, EMPTY_CONTEXT_USAGE_SUMMARY);
         return EMPTY_CONTEXT_USAGE_SUMMARY;
       }
     },
-    [desktopApi],
+    [desktopApi, sessionActions],
   );
 
   const refreshInterruptedApprovalGroups = useCallback(
     async (sessionId: string) => {
       if (!desktopApi?.agent?.listInterruptedApprovalGroups) {
-        setInterruptedApprovalGroupsBySessionId((current) => ({
-          ...current,
-          [sessionId]: [],
-        }));
+        sessionActions.setInterruptedApprovalGroups(sessionId, []);
         return [] as InterruptedApprovalGroup[];
       }
 
       try {
         const groups = await desktopApi.agent.listInterruptedApprovalGroups(sessionId);
-        setInterruptedApprovalGroupsBySessionId((current) => ({
-          ...current,
-          [sessionId]: groups,
-        }));
+        sessionActions.setInterruptedApprovalGroups(sessionId, groups);
         return groups;
       } catch {
-        setInterruptedApprovalGroupsBySessionId((current) => ({
-          ...current,
-          [sessionId]: [],
-        }));
+        sessionActions.setInterruptedApprovalGroups(sessionId, []);
         return [] as InterruptedApprovalGroup[];
       }
     },
-    [desktopApi],
+    [desktopApi, sessionActions],
   );
 
   const removeCachedSession = useCallback((sessionId: string) => {
-    setSessionCache((current) => removeRecordKey(current, sessionId));
-    setContextSummaryBySessionId((current) => removeRecordKey(current, sessionId));
-  }, []);
+    sessionActions.removeCachedSession(sessionId);
+  }, [sessionActions]);
 
   const hydrateSession = useCallback((session: ChatSession) => {
     cacheSession(session);
     // R2: 同步更新 ref，避免下面这种 race —
     // hydrateSession(sessB) → 等 useEffect 同步 ref → 期间 persistSession(sessA) 看到 ref 仍是 sessA → 把 active 回退到 sessA。
     activeSessionIdRef.current = session.id;
-    setActiveSession(session);
+    sessionActions.hydrateSession(session);
     localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, session.id);
-  }, [cacheSession]);
+  }, [cacheSession, sessionActions]);
 
   const clearActiveSession = useCallback(() => {
     activeSessionIdRef.current = null;
-    setActiveSession(null);
+    sessionActions.clearActiveSession();
     clearStoredStrings([
       ACTIVE_SESSION_STORAGE_KEY,
       LEGACY_ACTIVE_SESSION_STORAGE_KEY,
     ]);
-  }, []);
+  }, [sessionActions]);
 
   const reloadSession = useCallback(
     async (sessionId: string) => {
@@ -485,31 +489,27 @@ export default function App() {
 
       cacheSession(session);
       if (activeSessionIdRef.current === sessionId) {
-        setActiveSession(session);
+        sessionActions.hydrateSession(session);
       }
-      setSummaries((current) => applySessionToLiveSummaries(current, session));
-      setArchivedSummaries((current) =>
-        applySessionToArchivedSummaries(current, session),
-      );
+      sessionActions.persistSessionLocally(session);
       await refreshContextSummary(sessionId);
       await refreshInterruptedApprovalGroups(sessionId);
     },
-    [cacheSession, desktopApi, refreshContextSummary, refreshInterruptedApprovalGroups],
+    [
+      cacheSession,
+      desktopApi,
+      refreshContextSummary,
+      refreshInterruptedApprovalGroups,
+      sessionActions,
+    ],
   );
 
   const persistSession = useCallback(
     (session: ChatSession) => {
-      cacheSession(session);
-      if (activeSessionIdRef.current === session.id) {
-        setActiveSession(session);
-      }
-      setSummaries((current) => applySessionToLiveSummaries(current, session));
-      setArchivedSummaries((current) =>
-        applySessionToArchivedSummaries(current, session),
-      );
+      sessionActions.persistSessionLocally(session);
       void desktopApi?.sessions.save(session);
     },
-    [cacheSession, desktopApi],
+    [desktopApi, sessionActions],
   );
 
   const {
@@ -537,26 +537,19 @@ export default function App() {
         return;
       }
 
-      setBrowserContextBySessionId((current) => {
-        const nextItems = (current[session.id] ?? []).filter(
-          (item) => item.id !== linkedBrowserContextItemId,
-        );
-        return {
-          ...current,
-          [session.id]: nextItems,
-        };
-      });
+      sessionActions.removeAttachmentLinkedBrowserContext(
+        session.id,
+        linkedBrowserContextItemId,
+      );
     },
-    [removeAttachment],
+    [removeAttachment, sessionActions],
   );
 
   const handleSessionRunStateChange = useCallback(
     (sessionId: string, isRunning: boolean) => {
-      setRunningSessionIds((current) =>
-        updateRunningSessionIds(current, sessionId, isRunning),
-      );
+      sessionActions.setSessionRunning(sessionId, isRunning);
     },
-    [],
+    [sessionActions],
   );
 
   const refreshSessionLists = useCallback(async () => {
@@ -569,11 +562,11 @@ export default function App() {
       desktopApi.sessions.listArchived(),
     ]);
 
-    setSummaries(sessionSummaries);
-    setArchivedSummaries(archivedList);
+    sessionActions.setSummaries(sessionSummaries);
+    sessionActions.setArchivedSummaries(archivedList);
 
     return { sessionSummaries, archivedList };
-  }, [desktopApi]);
+  }, [desktopApi, sessionActions]);
 
   const refreshGroups = useCallback(async () => {
     if (!desktopApi) {
@@ -581,9 +574,9 @@ export default function App() {
     }
 
     const nextGroups = await desktopApi.groups.list();
-    setGroups(nextGroups);
+    sessionActions.setGroups(nextGroups);
     return nextGroups;
-  }, [desktopApi]);
+  }, [desktopApi, sessionActions]);
 
   const switchWorkspacePath = useCallback(
     async (nextWorkspace: string) => {
@@ -602,22 +595,22 @@ export default function App() {
 
       if (nextSettings) {
         settingsRef.current = nextSettings;
-        setSettings(nextSettings);
+        appActions.setSettings(nextSettings);
       }
 
       await desktopApi.settings.update({ workspace: normalizedWorkspace });
       await refreshGitOverview();
       await refreshGitBranchSummary();
     },
-    [desktopApi, refreshGitBranchSummary, refreshGitOverview],
+    [appActions, desktopApi, refreshGitBranchSummary, refreshGitOverview],
   );
 
   const bootApp = useCallback(async () => {
     if (!desktopApi) {
-      setBootError(
+      appActions.setBootError(
         "桌面桥接没有注入成功，renderer 无法访问 Electron API。现在不会再整窗黑掉，而是直接把问题暴露出来。",
       );
-      setBooting(false);
+      appActions.setBooting(false);
       return;
     }
 
@@ -640,16 +633,16 @@ export default function App() {
         loadProviderDirectory(desktopApi).catch(() => null),
       ]);
 
-      setRightPanelState(uiState.rightPanel);
-      setFrameState(frame);
-      setSummaries(sessionSummaries);
-      setArchivedSummaries(archivedList);
-      setGroups(groupList);
+      appActions.setRightPanelState(uiState.rightPanel);
+      appActions.setFrameState(frame);
+      sessionActions.setSummaries(sessionSummaries);
+      sessionActions.setArchivedSummaries(archivedList);
+      sessionActions.setGroups(groupList);
       if (settings) {
         settingsRef.current = settings;
-        setSettings(settings);
-        setCurrentModelId(settings.modelRouting.chat.modelId);
-        setThinkingLevel(settings.thinkingLevel);
+        appActions.setSettings(settings);
+        appActions.setCurrentModelId(settings.modelRouting.chat.modelId);
+        appActions.setThinkingLevel(settings.thinkingLevel);
         void refreshGitBranchSummary();
         void refreshGitOverview();
       }
@@ -675,13 +668,14 @@ export default function App() {
       void refreshContextSummary(nextSession.id);
       void refreshInterruptedApprovalGroups(nextSession.id);
     } catch (error) {
-      setBootError(
+      appActions.setBootError(
         error instanceof Error ? error.message : "桌面壳初始化失败。",
       );
     } finally {
-      setBooting(false);
+      appActions.setBooting(false);
     }
   }, [
+    appActions,
     clearActiveSession,
     desktopApi,
     hydrateSession,
@@ -689,6 +683,7 @@ export default function App() {
     refreshGitBranchSummary,
     refreshGitOverview,
     refreshInterruptedApprovalGroups,
+    sessionActions,
   ]);
 
   // 用 ref 持有键盘快捷键需要的动态值，避免 effect 因这些值变化而重新执行 bootApp
@@ -712,7 +707,7 @@ export default function App() {
     }
 
     const cleanup = desktopApi.window.onStateChange((state) => {
-      setFrameState(state);
+      appActions.setFrameState(state);
     });
 
     // Global keyboard shortcuts
@@ -722,7 +717,7 @@ export default function App() {
       if (mod && e.key === "j") {
         if (!kb.terminalOpen) {
           e.preventDefault();
-          setTerminalOpen(true);
+          appActions.setTerminalOpen(true);
         }
       } else if (mod && e.key === "b") {
         e.preventDefault();
@@ -749,7 +744,7 @@ export default function App() {
       cleanup();
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [desktopApi]);
+  }, [appActions, desktopApi]);
 
   const createNewSession = useCallback(async () => {
     if (!desktopApi) {
@@ -757,11 +752,17 @@ export default function App() {
     }
 
     const nextSession = await desktopApi.sessions.create();
-    setSummaries((current) => upsertSummary(current, nextSession));
+    sessionActions.setSummaries(upsertSummary(summariesRef.current, nextSession));
     hydrateSession(nextSession);
     void refreshContextSummary(nextSession.id);
     void refreshInterruptedApprovalGroups(nextSession.id);
-  }, [desktopApi, hydrateSession, refreshContextSummary, refreshInterruptedApprovalGroups]);
+  }, [
+    desktopApi,
+    hydrateSession,
+    refreshContextSummary,
+    refreshInterruptedApprovalGroups,
+    sessionActions,
+  ]);
 
   const createSessionInGroup = useCallback(
     async (groupId: string) => {
@@ -908,10 +909,7 @@ export default function App() {
 
       const wasActive = activeSessionIdRef.current === sessionId;
       await desktopApi.sessions.delete(sessionId);
-      removeCachedSession(sessionId);
-      setRunningSessionIds((current) =>
-        updateRunningSessionIds(current, sessionId, false),
-      );
+      sessionActions.removeSessionState(sessionId);
       const { sessionSummaries } = await refreshSessionLists();
 
       if (!wasActive) {
@@ -925,7 +923,13 @@ export default function App() {
         return;
       }
     },
-    [clearActiveSession, desktopApi, refreshSessionLists, removeCachedSession, selectSession],
+    [
+      clearActiveSession,
+      desktopApi,
+      refreshSessionLists,
+      selectSession,
+      sessionActions,
+    ],
   );
 
   const setSessionPinned = useCallback(
@@ -1045,14 +1049,10 @@ export default function App() {
 
   const updateRightPanelState = useCallback(
     (partial: Partial<RightPanelState>) => {
-      setRightPanelState((current) => ({
-        ...current,
-        ...partial,
-        activeView: partial.activeView ?? current.activeView ?? "diff",
-      }));
+      appActions.setRightPanelState(partial);
       void desktopApi?.ui.setRightPanelState(partial);
     },
-    [desktopApi],
+    [appActions, desktopApi],
   );
 
   const closeRightPanel = useCallback(() => {
@@ -1066,16 +1066,8 @@ export default function App() {
       return;
     }
 
-    setBrowserContextBySessionId((current) => {
-      const existing = current[sessionId] ?? [];
-      const nextItems = compactBrowserContextItems([item, ...existing], 8);
-
-      return {
-        ...current,
-        [sessionId]: nextItems,
-      };
-    });
-  }, []);
+    sessionActions.upsertBrowserContextItem(sessionId, item);
+  }, [sessionActions]);
 
   const handleBrowserScreenshotCaptured = useCallback(
     async (files: SelectedFile[]) => {
@@ -1086,31 +1078,14 @@ export default function App() {
 
   const handleRemoveBrowserContextItem = useCallback(
     (sessionId: string, itemId: string) => {
-      setBrowserContextBySessionId((current) => {
-        const nextItems = (current[sessionId] ?? []).filter(
-          (item) => item.id !== itemId,
-        );
-        return {
-          ...current,
-          [sessionId]: nextItems,
-        };
-      });
+      sessionActions.removeBrowserContextItem(sessionId, itemId);
     },
-    [],
+    [sessionActions],
   );
 
   const handleClearBrowserContextItems = useCallback((sessionId: string) => {
-    setBrowserContextBySessionId((current) => {
-      if ((current[sessionId] ?? []).length === 0) {
-        return current;
-      }
-
-      return {
-        ...current,
-        [sessionId]: [],
-      };
-    });
-  }, []);
+    sessionActions.clearBrowserContextItems(sessionId);
+  }, [sessionActions]);
 
   const toggleDiffPanel = useCallback(() => {
     if (rightPanelToggleInFlightRef.current) return;
@@ -1263,7 +1238,7 @@ export default function App() {
       } catch {
         // Pointer capture can fail if the pointer was cancelled before React handled it.
       }
-      setRightPanelDragging(true);
+      appActions.setRightPanelDragging(true);
       const previousBodyCursor = document.body.style.cursor;
       const previousBodyUserSelect = document.body.style.userSelect;
       const previousRootCursor = document.documentElement.style.cursor;
@@ -1283,7 +1258,7 @@ export default function App() {
       const cleanupDrag = (commit: boolean) => {
         const dragState = rightPanelDragStateRef.current;
         rightPanelDragStateRef.current = null;
-        setRightPanelDragging(false);
+        appActions.setRightPanelDragging(false);
         document.body.style.cursor = previousBodyCursor;
         document.body.style.userSelect = previousBodyUserSelect;
         document.documentElement.style.cursor = previousRootCursor;
@@ -1361,6 +1336,7 @@ export default function App() {
     [
       browserPanelOpen,
       diffPanelOpen,
+      appActions,
       resolvedRightPanelWidth,
       threadWorkspaceWidth,
       tracePanelOpen,
@@ -1379,15 +1355,15 @@ export default function App() {
       ) {
         const resolvedSize = clampSidebarSize(panelSize.asPercentage);
         lastExpandedSidebarSizeRef.current = resolvedSize;
-        setSidebarSize(resolvedSize);
+        appActions.setSidebarSize(resolvedSize);
       }
       return;
     }
 
     sidebarCollapsedRef.current = isCollapsedByPanel;
-    setSidebarCollapsed((current) =>
-      current === isCollapsedByPanel ? current : isCollapsedByPanel,
-    );
+    if (useAppStore.getState().sidebarCollapsed !== isCollapsedByPanel) {
+      appActions.setSidebarCollapsed(isCollapsedByPanel);
+    }
 
     if (isCollapsedByPanel || panelSize.inPixels <= MIN_SIDEBAR_WIDTH + 1) {
       return;
@@ -1395,8 +1371,8 @@ export default function App() {
 
     const resolvedSize = clampSidebarSize(panelSize.asPercentage);
     lastExpandedSidebarSizeRef.current = resolvedSize;
-    setSidebarSize(resolvedSize);
-  }, []);
+    appActions.setSidebarSize(resolvedSize);
+  }, [appActions]);
 
   const sidebarAnimatingTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -1405,21 +1381,21 @@ export default function App() {
   useEffect(() => () => clearTimeout(sidebarAnimatingTimerRef.current), []);
 
   const toggleSidebarCollapsed = useCallback(() => {
-    setSidebarAnimating(true);
+    appActions.setSidebarAnimating(true);
     clearTimeout(sidebarAnimatingTimerRef.current);
     const nextCollapsed = !sidebarCollapsedRef.current;
     sidebarProgrammaticTargetRef.current = nextCollapsed;
     sidebarAnimatingTimerRef.current = setTimeout(() => {
       sidebarProgrammaticTargetRef.current = null;
-      setSidebarAnimating(false);
+      appActions.setSidebarAnimating(false);
     }, 520);
     if (nextCollapsed) {
       lastExpandedSidebarSizeRef.current = clampSidebarSize(sidebarSize);
     }
     sidebarCollapsedRef.current = nextCollapsed;
     applySidebarPanelState(nextCollapsed);
-    setSidebarCollapsed(nextCollapsed);
-  }, [applySidebarPanelState, sidebarSize]);
+    appActions.setSidebarCollapsed(nextCollapsed);
+  }, [appActions, applySidebarPanelState, sidebarSize]);
 
   const handleToggleMaximize = useCallback(() => {
     if (!desktopApi) {
@@ -1427,9 +1403,9 @@ export default function App() {
     }
 
     void desktopApi.window.toggleMaximize().then((nextState) => {
-      setFrameState(nextState);
+      appActions.setFrameState(nextState);
     });
-  }, [desktopApi]);
+  }, [appActions, desktopApi]);
 
   const openSettingsView = useCallback((section: SettingsSection = "general") => {
     navigate(`${SETTINGS_ROUTE_PREFIX}/${section}`);
@@ -1460,8 +1436,9 @@ export default function App() {
         return;
       }
 
-      setSettings((current) =>
-        current ? mergeSettingsState(current, partial) : current,
+      const currentSettings = useAppStore.getState().settings;
+      appActions.setSettings(
+        currentSettings ? mergeSettingsState(currentSettings, partial) : currentSettings,
       );
 
       void (async () => {
@@ -1472,22 +1449,23 @@ export default function App() {
         }
       })();
     },
-    [desktopApi, switchWorkspacePath],
+    [appActions, desktopApi, switchWorkspacePath],
   );
 
   const handleModelChange = useCallback(
     (modelEntryId: string) => {
-      setCurrentModelId(modelEntryId);
-      setSettings((current) =>
-        current
-          ? mergeSettingsState(current, {
-            modelRouting: {
-              chat: {
-                modelId: modelEntryId,
+      appActions.setCurrentModelId(modelEntryId);
+      const currentSettings = useAppStore.getState().settings;
+      appActions.setSettings(
+        currentSettings
+          ? mergeSettingsState(currentSettings, {
+              modelRouting: {
+                chat: {
+                  modelId: modelEntryId,
+                },
               },
-            },
-          })
-          : current,
+            })
+          : currentSettings,
       );
       void desktopApi?.settings.update({
         modelRouting: {
@@ -1497,7 +1475,7 @@ export default function App() {
         },
       } as Partial<Settings>);
     },
-    [desktopApi],
+    [appActions, desktopApi],
   );
 
   const handleRoleModelChange = useCallback(
@@ -1510,23 +1488,25 @@ export default function App() {
         },
       };
 
-      setSettings((current) =>
-        current ? mergeSettingsState(current, partial) : current,
+      const currentSettings = useAppStore.getState().settings;
+      appActions.setSettings(
+        currentSettings ? mergeSettingsState(currentSettings, partial) : currentSettings,
       );
       void desktopApi?.settings.update(partial as Partial<Settings>);
     },
-    [desktopApi],
+    [appActions, desktopApi],
   );
 
   const handleThinkingLevelChange = useCallback(
     (level: ThinkingLevel) => {
-      setThinkingLevel(level);
-      setSettings((current) =>
-        current ? { ...current, thinkingLevel: level } : current,
+      appActions.setThinkingLevel(level);
+      const currentSettings = useAppStore.getState().settings;
+      appActions.setSettings(
+        currentSettings ? { ...currentSettings, thinkingLevel: level } : currentSettings,
       );
       void desktopApi?.settings.update({ thinkingLevel: level });
     },
-    [desktopApi],
+    [appActions, desktopApi],
   );
 
   const handleGitStateChanged = useCallback(async () => {
@@ -1558,10 +1538,10 @@ export default function App() {
       name: getProjectNameFromPath(nextWorkspace),
       path: nextWorkspace,
     });
-    setGroups((current) => [...current, group]);
+    sessionActions.setGroups([...groupsRef.current, group]);
     await switchWorkspacePath(nextWorkspace);
     await createSessionInGroup(group.id);
-  }, [createSessionInGroup, desktopApi, switchWorkspacePath]);
+  }, [createSessionInGroup, desktopApi, sessionActions, switchWorkspacePath]);
 
   const handleSelectProject = useCallback(
     async (groupId: string) => {
@@ -1658,7 +1638,7 @@ export default function App() {
                   handleClearBrowserContextItems(session.id)
                 }
                 onComposerFocus={() => {
-                  setBrowserInteractionResetSignal((current) => current + 1);
+                  appActions.bumpBrowserInteractionResetSignal();
                 }}
                 visible={visible}
                 disableGlobalSideEffects={hasAnyRunningSessions}
@@ -1861,7 +1841,9 @@ export default function App() {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        onClick={() => setTerminalOpen((prev) => !prev)}
+                        onClick={() => {
+                          appActions.setTerminalOpen(!useAppStore.getState().terminalOpen);
+                        }}
                         className={`h-9 w-9 cursor-pointer rounded-[var(--radius-shell)] border-none bg-transparent shadow-none ring-0 hover:bg-shell-toolbar-hover ${terminalOpen ? "bg-shell-toolbar-hover text-foreground" : "text-muted-foreground"}`}
                         aria-label={terminalOpen ? "收起终端" : "展开终端"}
                       >
@@ -1945,7 +1927,9 @@ export default function App() {
                     <div className={mainView === "thread" && !rightPanelVisibleOrAnimating ? "" : "hidden"}>
                       <TerminalDrawer
                         open={threadTerminalOpen}
-                        onToggle={() => setTerminalOpen((prev) => !prev)}
+                        onToggle={() => {
+                          appActions.setTerminalOpen(!useAppStore.getState().terminalOpen);
+                        }}
                         settings={settings}
                       />
                     </div>
@@ -2010,7 +1994,9 @@ export default function App() {
 
                         <TerminalDrawer
                           open={terminalOpen}
-                          onToggle={() => setTerminalOpen((prev) => !prev)}
+                          onToggle={() => {
+                            appActions.setTerminalOpen(!useAppStore.getState().terminalOpen);
+                          }}
                           settings={settings}
                         />
                       </>

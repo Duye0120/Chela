@@ -84,6 +84,8 @@ Shell 分栏拖拽改动默认完整核对。`新增：2026-05-11 13:10:14`
 - 删除、保存、切换 session、清空 context 时，要同步所有派生 UI；聊天里的 context / attachment chip 和 Browser panel 里的 marker 必须联动。
 - 后续若同类同步继续增多，优先评估引入 Zustand store 或等价轻量状态层，把 session 附件、browser context、panel interaction state 从局部组件 state 中收拢。
 - 引入全局 store 时要先划清职责：持久化仍走 session service，store 负责 renderer 内同步、selector 和派生状态，不把主进程持久化逻辑混进 UI store。
+- Renderer 大范围共享状态默认使用 Zustand store；新增跨 session、跨 panel、跨聊天 / Browser / settings 的状态时，先进入 `src/renderer/src/stores/`，组件内只保留局部交互 state。
+- Zustand store 只负责 renderer 同步和派生 selector；IPC 持久化、主进程服务和磁盘写入继续由对应 service/action 编排。
 
 聊天默认语气保持克制与尊重。`新增：2026-04-10 23:20:43`
 - 用户明确不接受“黑化”、毒舌、阴阳怪气或带冒犯感的表达。

@@ -9,6 +9,7 @@ import {
   type ClipboardEvent,
   type FC,
 } from "react";
+import { useShallow } from "zustand/shallow";
 import {
   ActionBarPrimitive,
   AuiIf,
@@ -49,7 +50,6 @@ import type {
   PendingApprovalNotice,
   QueuedMessage,
   RuntimeSkillUsage,
-  ProviderSource,
   SelectedFile,
   ThinkingLevel,
 } from "@shared/contracts";
@@ -110,9 +110,9 @@ import {
 } from "@renderer/lib/interrupted-approval-run-config";
 import {
   findEntryLabel,
-  loadProviderDirectory,
   subscribeProviderDirectoryChanged,
 } from "@renderer/lib/provider-directory";
+import { useProviderDirectoryStore } from "@renderer/stores/provider-directory-store";
 import {
   canConfigureThinking,
   getEffectiveThinkingLevel,
@@ -242,6 +242,8 @@ type ThreadRunStatusContextValue = {
   isCancelling: boolean;
 };
 
+// Local subtree context: run status is scoped to one assistant-ui thread runtime.
+// Renderer-wide run/session state lives in Zustand stores.
 const ThreadRunStatusContext = createContext<ThreadRunStatusContextValue>({
   runStage: "idle",
   runStatusLabel: "",
@@ -369,8 +371,15 @@ export const Thread: FC<ThreadProps> = ({
     };
   }, [terminalOpen]);
 
-  const [sources, setSources] = useState<ProviderSource[]>([]);
-  const [entries, setEntries] = useState<ModelEntry[]>([]);
+  const {
+    sources,
+    entries,
+    refreshProviderDirectory,
+  } = useProviderDirectoryStore(useShallow((state) => ({
+    sources: state.sources,
+    entries: state.entries,
+    refreshProviderDirectory: state.refreshProviderDirectory,
+  })));
 
   useEffect(() => {
     if (!visible) {
@@ -388,7 +397,7 @@ export const Thread: FC<ThreadProps> = ({
       activeController = controller;
 
       try {
-        const nextDirectory = await loadProviderDirectory(window.desktopApi, {
+        await refreshProviderDirectory(window.desktopApi, {
           force,
           signal: controller.signal,
         });
@@ -396,9 +405,6 @@ export const Thread: FC<ThreadProps> = ({
         if (disposed || controller.signal.aborted || !visibleRef.current) {
           return;
         }
-
-        setSources(nextDirectory.sources);
-        setEntries(nextDirectory.entries);
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
           return;
@@ -423,7 +429,7 @@ export const Thread: FC<ThreadProps> = ({
       activeController?.abort();
       unsubscribe();
     };
-  }, [visible]);
+  }, [refreshProviderDirectory, visible]);
 
   const modelOptions = useMemo(
     () => buildModelOptions(sources, entries),

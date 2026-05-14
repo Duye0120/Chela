@@ -252,7 +252,10 @@ const appSource = readFileSync(
   "utf8",
 );
 assert.match(appSource, /browserContextItems=\{/u);
-assert.match(appSource, /activeSessionId\s*\?\s*browserContextBySessionId\[activeSessionId\] \?\? \[\]/u);
+assert.match(appSource, /useSessionStore/u);
+assert.match(appSource, /browserContextBySessionId/u);
+assert.match(appSource, /removeAttachmentLinkedBrowserContext/u);
+assert.match(appSource, /upsertBrowserContextItem/u);
 
 const screenshotItem = createBrowserScreenshotContextItem({
   screenshotId: "browser-screenshot-linked",

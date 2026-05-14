@@ -10,10 +10,9 @@ import type {
   MemoryRecord,
   MemoryRebuildResult,
   MemoryStats,
-  ModelEntry,
-  ProviderSource,
   Settings,
 } from "@shared/contracts";
+import { useShallow } from "zustand/shallow";
 import type { MemoryEmbeddingModelId } from "@shared/memory";
 import { MEMORY_EMBEDDING_MODELS, isLocalEmbeddingModelId } from "@shared/memory";
 import { formatDateTimeInTimeZone } from "@shared/timezone";
@@ -22,10 +21,10 @@ import { Checkbox } from "@renderer/components/assistant-ui/checkbox";
 import { ModelSelector } from "@renderer/components/assistant-ui/model-selector";
 import type { ModelOption } from "@renderer/components/assistant-ui/model-selector";
 import {
-  loadProviderDirectory,
   resolveModelEntryName,
   subscribeProviderDirectoryChanged,
 } from "@renderer/lib/provider-directory";
+import { useProviderDirectoryStore } from "@renderer/stores/provider-directory-store";
 import {
   SettingsCard,
   SettingsBlock,
@@ -188,18 +187,23 @@ export function MemorySection({
     id: number;
     kind: "delete" | "feedback";
   } | null>(null);
-  const [providerSources, setProviderSources] = useState<ProviderSource[]>([]);
-  const [providerEntries, setProviderEntries] = useState<ModelEntry[]>([]);
+  const {
+    providerSources,
+    providerEntries,
+    refreshProviderDirectory,
+  } = useProviderDirectoryStore(useShallow((state) => ({
+    providerSources: state.sources,
+    providerEntries: state.entries,
+    refreshProviderDirectory: state.refreshProviderDirectory,
+  })));
 
   useEffect(() => {
     if (!desktopApi) return;
     let cancelled = false;
     const refresh = () => {
-      void loadProviderDirectory(desktopApi)
-        .then((snapshot) => {
+      void refreshProviderDirectory(desktopApi)
+        .then(() => {
           if (cancelled) return;
-          setProviderSources(snapshot.sources);
-          setProviderEntries(snapshot.entries);
         })
         .catch(() => {
           /* 忽略加载失败，回落到本地嵌入选项 */
@@ -211,7 +215,7 @@ export function MemorySection({
       cancelled = true;
       unsubscribe();
     };
-  }, [desktopApi]);
+  }, [desktopApi, refreshProviderDirectory]);
 
   const loadStats = useCallback(async () => {
     if (!desktopApi) {

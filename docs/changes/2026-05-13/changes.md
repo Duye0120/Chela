@@ -273,10 +273,11 @@
 改了什么：
 - Browser panel 接收当前 session 的 Browser context 列表，并把其中的截图批注同步投影为 webview 内的蓝色区域 marker。
 - 注入脚本新增 `syncScreenshotMarkers`，按传入的截图批注列表新增、更新或删除页面上的截图 marker。
+- Browser inspector 每次注入完成后会立即按当前 session context 同步截图 marker，覆盖 webview 刷新、重新打开 panel 后的首帧状态。
 - 聊天输入区删除截图附件时，既有逻辑会删除绑定的 Browser screenshot context；Browser panel 现在会收到 context 变更并同步删除蓝色框。
 - 修正 Browser panel 传参中的 `activeSessionId` 空值类型问题。
 - 在 `AGENTS.md` 新增跨面板状态同步治理约束，记录后续评估 Zustand 或等价轻量状态层的方向。
-- 补充 Browser 回归测试，覆盖 `syncScreenshotMarkers`、Browser panel context 传入和 null-safe session 传参。
+- 补充 Browser 回归测试，覆盖 `syncScreenshotMarkers`、注入后立即同步 marker、Browser panel context 传入和 null-safe session 传参。
 
 为什么改：
 - 用户反馈聊天里删除了截图评论 session / 附件后，Browser panel 仍保留蓝色框。
@@ -295,4 +296,45 @@
 - `pnpm exec tsx tests/browser-interview-regression.test.ts` 通过。
 - `pnpm exec tsc --noEmit -p src/renderer/tsconfig.json` 通过。
 - `git diff --check` 通过，仅有既有 CRLF 提示。
+- 按项目约束未运行 build。
+
+## Zustand global state migration
+
+时间：2026-05-13 16:42:04
+
+改了什么：
+- 新增 renderer Zustand store 分层：app、session、git、provider directory。
+- 将 `App.tsx` 内大范围共享状态迁移到 store selector/action，保留 DOM refs、drag cleanup refs 和局部交互 state。
+- Browser context、聊天附件、Browser marker 继续以 session browser context 为事实源同步。
+- `useAppGitState` 改为 Git store-backed hook，保留 diff panel 自动刷新和请求去重。
+- Provider directory 改为共享 store，减少 Thread 与 Memory settings 重复加载。
+- 补充 Zustand store 回归测试和 Browser 回归断言。
+- 在 `AGENTS.md` 补充 renderer 大范围共享状态默认使用 Zustand store 的长期约束。
+
+为什么改：
+- 用户要求大范围状态统一迁移到 Zustand，降低后续功能开发和跨面板同步成本。
+- 当前 `App.tsx` 聚合过多共享状态，继续增加 Browser / memory / context 功能会放大 prop drilling 和同步竞态。
+
+涉及文件：
+- `AGENTS.md`
+- `src/renderer/src/stores/app-store.ts`
+- `src/renderer/src/stores/session-store.ts`
+- `src/renderer/src/stores/git-store.ts`
+- `src/renderer/src/stores/provider-directory-store.ts`
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/hooks/use-app-git-state.ts`
+- `src/renderer/src/components/assistant-ui/thread.tsx`
+- `src/renderer/src/components/assistant-ui/settings/memory-section.tsx`
+- `src/renderer/src/lib/app-session-state.ts`
+- `tests/renderer-zustand-store-regression.test.ts`
+- `tests/browser-interview-regression.test.ts`
+- `docs/superpowers/specs/2026-05-13-zustand-global-state-design.md`
+- `docs/superpowers/plans/2026-05-13-zustand-global-state-migration.md`
+- `docs/changes/2026-05-13/changes.md`
+
+结果：
+- `pnpm exec tsx tests/renderer-zustand-store-regression.test.ts` 通过。
+- `pnpm exec tsx tests/browser-interview-regression.test.ts` 通过。
+- `pnpm exec tsc --noEmit -p src/renderer/tsconfig.json` 通过。
+- `git diff --check` 通过。
 - 按项目约束未运行 build。
