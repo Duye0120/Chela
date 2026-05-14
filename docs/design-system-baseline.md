@@ -40,6 +40,21 @@
 - 分支切换器与 Context 浮层的内容卡、输入框和面板圆角统一对齐到 `8px`
 - `Context` 详情面板优先收成少量高信息密度分组，不再把每组信息都做成一块独立厚卡
 
+### UI Consistency Contract
+
+- 基础控件圆角统一落在入口组件上，默认使用 `rounded-[var(--radius-shell)]`。
+- 状态点、头像、进度环这类天然圆形元素使用 `rounded-full`。
+- 新增预览、面板、浮层先复用 `src/renderer/src/components/assistant-ui/surface.tsx`。
+- `PreviewSurface` 承载预览容器的圆角、裁切和背景；业务组件只负责内容和交互。
+- `Surface tone="panel"` 承载普通控制面，`Surface tone="overlay"` 承载悬浮批注、弹出编辑器和轻量浮层。
+- 基础 `Button`、`Badge`、`Select` 负责统一圆角、focus ring、hover、选中反馈；业务组件避免重复写裸色、任意圆角和厚边框。
+
+### Audit Guardrail
+
+- `pnpm audit:ui` 扫描 renderer UI 中的裸色、任意圆角和默认 border。
+- 审计输出作为迁移清单使用，每轮 UI 任务按当前范围处理对应项。
+- `--strict` 可用于把现有漂移收敛完成后的阻断式检查。
+
 ## 使用规则
 
 - 新组件默认优先使用语义 token，不直接写新的裸色值、阴影值和过渡曲线
@@ -47,6 +62,8 @@
 - 浮层优先复用 `shadow-flyout`，轻表面优先复用 `shadow-subtle`
 - 输入、按钮、标签等轻量控件优先通过背景分层表达层级，不新增重边框
 - 若已有 `Chela` 控件 token 可表达同一语义，优先复用 `Chela`，不要再发明第二套颜色系统
+- 新 UI 面板和 preview 容器优先使用 `Surface` / `PreviewSurface`
+- UI 交付前运行 `pnpm audit:ui`，记录本轮处理项和剩余漂移规模
 
 ## 暂不引入
 
