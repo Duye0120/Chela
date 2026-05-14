@@ -1,18 +1,13 @@
 ---
-description: 管理 /commit 工作流并生成 Conventional Commits 消息。用户提到“/commit”“提交消息”“Conventional Commits”或要求自动提交时使用。
-alwaysApply: false
----
-
----
 name: commit
-description: 管理 /commit 工作流并生成 Conventional Commits 消息。用户提到“/commit”“提交消息”“Conventional Commits”或要求自动提交时使用。
+description: 管理 /commit 工作流并生成 Conventional Commits 消息。用户提到“/commit”“提交消息”“Conventional Commits”或要求自动提交时使用；在 Chela 中不默认运行 build/check。
 ---
 
 # Commit
 
 ## 目标
 
-在本地执行 /commit 风格的提交流程：分析变更、生成规范提交消息、必要时执行预检。
+在本地执行 /commit 风格的提交流程：分析变更、生成规范提交消息、必要时执行最小预检。
 
 ## 触发场景
 
@@ -22,14 +17,14 @@ description: 管理 /commit 工作流并生成 Conventional Commits 消息。用
 
 ## 工作流
 
-1. 运行预检（默认启用）
-   - `pnpm lint`
-   - `pnpm build`
-   - `pnpm generate:docs`
-2. 变更分析
+1. 变更分析
    - `git status`
    - `git diff`（含暂存与未暂存）
    - `git log -1`（确定风格）
+2. 预检判断
+   - 默认不运行 `pnpm build` / `pnpm check`
+   - 只有用户明确要求、钩子要求、或本次改动风险确实需要时，才运行最小相关验证
+   - 需要运行验证时，先说明原因，并优先选 targeted tests / lint
 3. 需要时自动分拆提交（混合类型/多模块/跨系统）
 4. 生成提交消息（Conventional Commits）
 5. 依次执行：`git add` → `git commit` → `git status`
@@ -71,6 +66,7 @@ description: 管理 /commit 工作流并生成 Conventional Commits 消息。用
 - 提交消息动词使用现在时、祈使句，首行不加句号
 - 避免混合多个不相关改动
 - 不跳过钩子（除非用户明确要求）
+- 遵守 Chela 根规则：不把 `pnpm build` / `pnpm check` 当作默认提交前动作
 - 不使用 `git commit --amend`（除非用户明确要求且符合安全条件）
 - 不提交敏感文件（如 .env/credentials）
 
