@@ -11,18 +11,18 @@ export function AppBootingScreen() {
 
 export function AppBootErrorScreen({ message }: { message: string }) {
   return (
-    <main className="grid h-screen place-items-center bg-[#f0f0f0] px-6 text-gray-400">
-      <div className="max-w-lg rounded-xl border border-[color:var(--chela-status-error-text)]/20 bg-[color:var(--chela-status-error-bg)] px-6 py-4 shadow-sm">
+    <main className="grid h-screen place-items-center bg-shell-window px-6 text-[color:var(--color-text-muted)]">
+      <div className="max-w-lg rounded-[var(--radius-shell)] bg-[color:var(--chela-status-error-bg)] px-6 py-4 shadow-[var(--shadow-subtle)] ring-1 ring-[color:var(--chela-status-error-text)]/20">
         <p className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--chela-status-error-text)]/50">
           Renderer Error
         </p>
-        <h1 className="mt-2 text-lg font-medium text-gray-800">
+        <h1 className="mt-2 text-lg font-medium text-foreground">
           界面初始化失败
         </h1>
-        <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-gray-500">
+        <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-[color:var(--color-text-secondary)]">
           {message}
         </p>
-        <p className="mt-2 text-xs text-gray-400">
+        <p className="mt-2 text-xs text-[color:var(--color-text-muted)]">
           现在就算 preload 出问题，也不会再整窗发黑，而是直接显示诊断信息。
         </p>
       </div>
@@ -32,7 +32,7 @@ export function AppBootErrorScreen({ message }: { message: string }) {
 
 export function ThreadUnavailableState() {
   return (
-    <div className="grid min-h-0 flex-1 place-items-center px-6 text-sm text-gray-400">
+    <div className="grid min-h-0 flex-1 place-items-center px-6 text-sm text-[color:var(--color-text-muted)]">
       当前没有可用线程。
     </div>
   );

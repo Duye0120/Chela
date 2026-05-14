@@ -125,7 +125,7 @@ function getStatusMeta(status?: ToolCallMessagePartStatus) {
   if (status.reason === "cancelled") {
     return {
       label: "已停止",
-      tone: "text-[color:var(--color-text-secondary)] bg-black/5 dark:bg-white/5",
+      tone: "text-[color:var(--color-text-secondary)] bg-[color:var(--color-control-bg)]",
     };
   }
 
@@ -164,7 +164,7 @@ function ToolFallbackTrigger({
     >
       <span
         className={cn(
-          "flex size-5 shrink-0 items-center justify-center rounded-full transition-colors",
+          "flex size-5 shrink-0 items-center justify-center rounded-[var(--radius-shell)] transition-colors",
           statusMeta.tone,
         )}
       >
@@ -193,7 +193,7 @@ function ToolFallbackTrigger({
           {statusMeta.label ? (
             <span
               className={cn(
-                "inline-flex shrink-0 items-center rounded-full px-1.75 py-0.5 text-[10px] font-medium",
+                "inline-flex shrink-0 items-center rounded-[var(--radius-shell)] px-1.75 py-0.5 text-[10px] font-medium",
                 statusMeta.tone,
               )}
             >
@@ -258,7 +258,7 @@ function ToolFallbackArgs({
     <div
       data-slot="tool-fallback-args"
       className={cn(
-        "aui-tool-fallback-args border-l-2 border-slate-200/60 dark:border-slate-800/60 pl-4 py-0.5",
+        "aui-tool-fallback-args py-0.5 pl-4 shadow-[inset_2px_0_0_var(--color-control-border)]",
         className,
       )}
       {...props}
@@ -286,7 +286,7 @@ function ToolFallbackResult({
     <div
       data-slot="tool-fallback-result"
       className={cn(
-        "aui-tool-fallback-result border-l-2 border-slate-200/60 dark:border-slate-800/60 pl-4 py-0.5",
+        "aui-tool-fallback-result py-0.5 pl-4 shadow-[inset_2px_0_0_var(--color-control-border)]",
         className,
       )}
       {...props}
@@ -676,7 +676,7 @@ function CommandGroupRow({ command }: { command: CommandGroupItem }) {
       </CollapsibleTrigger>
 
       <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
-        <div className="mt-2 mb-2 rounded-[var(--radius-shell)] bg-black/[0.045] px-3 py-2.5 dark:bg-white/[0.06]">
+        <div className="mt-2 mb-2 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-2.5">
           <p className="mb-2 font-mono text-[12px] leading-5 text-[color:var(--chela-text-tertiary)]">
             {title}
           </p>
@@ -946,14 +946,14 @@ function ToolFallbackSummary({
       : [];
     if (entries.length === 0) {
       return (
-        <div className="border-l-2 border-slate-200/60 dark:border-slate-800/60 pl-4 py-0.5 text-[12px] leading-relaxed text-muted-foreground/80">
+        <div className="py-0.5 pl-4 text-[12px] leading-relaxed text-muted-foreground/80 shadow-[inset_2px_0_0_var(--color-control-border)]">
           暂无命令历史。
         </div>
       );
     }
 
     return (
-      <div className="border-l-2 border-slate-200/60 dark:border-slate-800/60 pl-4 py-0.5">
+      <div className="py-0.5 pl-4 shadow-[inset_2px_0_0_var(--color-control-border)]">
         <p className="mb-1 text-[11px] font-medium text-muted-foreground/50">
           最近命令
         </p>
@@ -970,7 +970,7 @@ function ToolFallbackSummary({
             return (
               <div key={`${command}-${index}`} className="grid grid-cols-[auto_1fr_auto] items-baseline gap-2 text-[11px] leading-5">
                 <span className={cn(
-                  "rounded-full px-1.5 py-0.5 font-medium tabular-nums",
+                  "rounded-[var(--radius-shell)] px-1.5 py-0.5 font-medium tabular-nums",
                   exitCode === 0
                     ? "bg-[color:var(--chela-status-success-bg)] text-[color:var(--chela-status-success-text)]"
                     : "bg-[color:var(--chela-status-error-bg)] text-[color:var(--chela-status-error-text)]",
@@ -999,7 +999,7 @@ function ToolFallbackSummary({
     const truncated = details?.truncated === true || parsed?.truncated === true;
 
     return (
-      <div className="border-l-2 border-slate-200/60 dark:border-slate-800/60 pl-4 py-0.5 text-[12px] leading-relaxed text-muted-foreground/80">
+      <div className="py-0.5 pl-4 text-[12px] leading-relaxed text-muted-foreground/80 shadow-[inset_2px_0_0_var(--color-control-border)]">
         <span className="font-medium text-foreground">MCP {action ?? "result"}</span>
         {server ? <span> · {server}</span> : null}
         {tool ? <span> / {tool}</span> : null}
@@ -1037,10 +1037,10 @@ function ToolFallbackError({
     <div
       data-slot="tool-fallback-error"
       className={cn(
-        "aui-tool-fallback-error border-l-2 pl-4 py-0.5",
+        "aui-tool-fallback-error py-0.5 pl-4 shadow-[inset_2px_0_0_var(--color-control-border)]",
         isCancelled
-          ? "border-slate-300 dark:border-slate-700"
-          : "border-[color:var(--chela-status-error-text)]/50 text-[color:var(--chela-status-error-text)]",
+          ? "text-[color:var(--color-text-secondary)]"
+          : "text-[color:var(--chela-status-error-text)] shadow-[inset_2px_0_0_var(--chela-status-error-text)]",
         className,
       )}
       {...props}

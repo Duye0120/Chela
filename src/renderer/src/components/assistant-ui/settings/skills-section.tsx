@@ -121,9 +121,9 @@ function SelectionPill({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center rounded-full px-3 py-1.5 text-[12px] transition",
+        "inline-flex items-center rounded-[var(--radius-shell)] px-3 py-1.5 text-[12px] transition",
         active
-          ? "bg-[color:var(--color-control-bg-active)] text-foreground shadow-[var(--color-control-shadow)] ring-1 ring-black/5 dark:ring-white/5"
+          ? "bg-[color:var(--color-control-bg-active)] text-foreground shadow-[var(--color-control-shadow)] ring-1 ring-[color:var(--color-control-border)]"
           : "bg-[color:var(--color-control-panel-bg)] text-muted-foreground hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground",
       )}
     >
@@ -148,7 +148,7 @@ function FilterTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] transition",
+        "inline-flex items-center gap-2 rounded-[var(--radius-shell)] px-3 py-1.5 text-[12px] transition",
         active
           ? "bg-[color:var(--color-control-bg-active)] text-foreground shadow-[var(--color-control-shadow)]"
           : "text-muted-foreground hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground",
@@ -157,9 +157,9 @@ function FilterTab({
       <span>{label}</span>
       <span
         className={cn(
-          "rounded-full px-1.5 py-0.5 text-[10px]",
+          "rounded-[var(--radius-shell)] px-1.5 py-0.5 text-[10px]",
           active
-            ? "bg-[color:rgba(255,255,255,0.55)] text-foreground"
+            ? "bg-[color:var(--color-control-panel-bg)] text-foreground"
             : "bg-[color:var(--color-control-panel-bg)] text-muted-foreground",
         )}
       >
@@ -196,13 +196,13 @@ function InlineInstance({
           {showSource ? (
             <Badge
               variant="secondary"
-              className="rounded-full px-2 py-0.5 text-[11px]"
+              className="rounded-[var(--radius-shell)] px-2 py-0.5 text-[11px]"
             >
               {sourceLabel(instance.source)}
             </Badge>
           ) : null}
           {instance.missingSkillFile ? (
-            <Badge variant="warning" className="rounded-full px-2 py-0.5 text-[11px]">
+            <Badge variant="warning" className="rounded-[var(--radius-shell)] px-2 py-0.5 text-[11px]">
               缺少 SKILL.md
             </Badge>
           ) : null}
@@ -297,9 +297,9 @@ function TransferPreview({
               type="button"
               onClick={() => onChangeMode("copy")}
               className={cn(
-                "flex flex-col gap-0.5 rounded-lg px-3 py-2 text-left transition",
+                "flex flex-col gap-0.5 rounded-[var(--radius-shell)] px-3 py-2 text-left transition",
                 transferMode === "copy"
-                  ? "bg-[color:var(--color-control-bg-active)] shadow-[var(--color-control-shadow)] ring-1 ring-black/5 dark:ring-white/5"
+                  ? "bg-[color:var(--color-control-bg-active)] shadow-[var(--color-control-shadow)] ring-1 ring-[color:var(--color-control-border)]"
                   : "bg-[color:var(--color-control-panel-bg)] hover:bg-[color:var(--color-control-bg-active)]/50"
               )}
             >
@@ -310,9 +310,9 @@ function TransferPreview({
               type="button"
               onClick={() => onChangeMode("move")}
               className={cn(
-                "flex flex-col gap-0.5 rounded-lg px-3 py-2 text-left transition",
+                "flex flex-col gap-0.5 rounded-[var(--radius-shell)] px-3 py-2 text-left transition",
                 transferMode === "move"
-                  ? "bg-[color:var(--color-control-bg-active)] shadow-[var(--color-control-shadow)] ring-1 ring-black/5 dark:ring-white/5"
+                  ? "bg-[color:var(--color-control-bg-active)] shadow-[var(--color-control-shadow)] ring-1 ring-[color:var(--color-control-border)]"
                   : "bg-[color:var(--color-control-panel-bg)] hover:bg-[color:var(--color-control-bg-active)]/50"
               )}
             >
@@ -338,11 +338,11 @@ function TransferPreview({
                   disabled={sameAsSource}
                   onClick={() => onChangeTarget(location.id)}
                   className={cn(
-                    "flex flex-col gap-1 rounded-lg px-3 py-2.5 text-left transition",
+                    "flex flex-col gap-1 rounded-[var(--radius-shell)] px-3 py-2.5 text-left transition",
                     sameAsSource
                       ? "cursor-not-allowed opacity-40 bg-[color:var(--color-control-panel-bg)]/50"
                       : selected
-                        ? "bg-[color:var(--color-control-bg-active)] shadow-[var(--color-control-shadow)] ring-1 ring-black/5 dark:ring-white/5"
+                        ? "bg-[color:var(--color-control-bg-active)] shadow-[var(--color-control-shadow)] ring-1 ring-[color:var(--color-control-border)]"
                         : "bg-[color:var(--color-control-panel-bg)] hover:bg-[color:var(--color-control-bg-active)]/50",
                   )}
                 >
@@ -350,9 +350,9 @@ function TransferPreview({
                     <div className="flex items-center gap-2">
                       <span className={cn("text-[13px] font-medium", selected ? "text-foreground" : "text-muted-foreground")}>{location.label}</span>
                       {sameAsSource ? (
-                        <span className="rounded-full bg-muted/20 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">当前</span>
+                        <span className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">当前</span>
                       ) : installed && !selected ? (
-                        <span className="rounded-full bg-[color:var(--chela-status-warning-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--chela-status-warning-text)]">已存在</span>
+                        <span className="rounded-[var(--radius-shell)] bg-[color:var(--chela-status-warning-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--chela-status-warning-text)]">已存在</span>
                       ) : null}
                     </div>
                     <span className="text-[11px] text-muted-foreground/70">{location.hint}</span>
@@ -377,7 +377,7 @@ function TransferPreview({
               type="button"
               variant="default"
               size="sm"
-              className="bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              className="bg-[color:var(--color-accent)] text-[color:var(--chela-text-inverse)] shadow-[var(--color-control-shadow)] transition hover:bg-[color:var(--color-accent-hover)]"
               onClick={onTransfer}
               disabled={isTransferring || mapSourceToLocationId(transferSource) === transferTarget}
             >
@@ -427,7 +427,7 @@ function InstalledSkillRow({
         className={cn(
           "flex w-full items-center gap-4 px-4 py-4 text-left transition",
           expanded
-            ? "bg-[color:rgba(248,244,238,0.92)]"
+            ? "bg-[color:var(--color-control-bg-active)]"
             : "hover:bg-[color:var(--color-control-bg-hover)]",
         )}
       >
@@ -445,7 +445,7 @@ function InstalledSkillRow({
                 <Badge
                   key={`${skill.id}:${source}`}
                   variant="secondary"
-                  className="rounded-full px-2 py-0.5 text-[10px]"
+                  className="rounded-[var(--radius-shell)] px-2 py-0.5 text-[10px]"
                 >
                   {sourceLabel(source)}
                 </Badge>
@@ -459,7 +459,7 @@ function InstalledSkillRow({
                 {skill.usageTargets.map((target) => (
                   <span
                     key={`${skill.id}:${target.entryPointId}`}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--color-control-bg)] px-2 py-1 text-[10px] text-muted-foreground shadow-[var(--color-control-shadow)]"
+                    className="inline-flex items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2 py-1 text-[10px] text-muted-foreground shadow-[var(--color-control-shadow)]"
                   >
                     <SparklesIcon className="size-3.5" />
                     <span>{target.label}</span>
@@ -546,7 +546,7 @@ function DiscoveryRow({
             {entry.sourceLabel ? (
               <Badge
                 variant="secondary"
-                className="rounded-full px-2 py-0.5 text-[10px]"
+                className="rounded-[var(--radius-shell)] px-2 py-0.5 text-[10px]"
               >
                 {entry.sourceLabel}
               </Badge>
@@ -888,7 +888,7 @@ export function SkillsSection() {
       </SettingsCard>
 
       {error ? (
-        <div className="rounded-[var(--radius-shell)] bg-[color:rgba(239,68,68,0.08)] px-4 py-3 text-[12px] leading-6 text-[color:rgb(185,28,28)]">
+        <div className="rounded-[var(--radius-shell)] bg-[color:var(--chela-status-error-bg)] px-4 py-3 text-[12px] leading-6 text-[color:var(--chela-status-error-text)]">
           {error}
         </div>
       ) : null}
@@ -980,7 +980,7 @@ export function SkillsSection() {
               正在查询可安装 skills…
             </div>
           ) : discovery?.error ? (
-            <div className="rounded-[var(--radius-shell)] bg-[color:rgba(239,68,68,0.08)] px-4 py-3 text-[12px] leading-6 text-[color:rgb(185,28,28)]">
+            <div className="rounded-[var(--radius-shell)] bg-[color:var(--chela-status-error-bg)] px-4 py-3 text-[12px] leading-6 text-[color:var(--chela-status-error-text)]">
               {discovery.error}
             </div>
           ) : discovery && discovery.entries.length > 0 ? (

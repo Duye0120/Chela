@@ -22,13 +22,13 @@ const GROUP_ORDER = ["core", "observability", "agent", "integration", "experimen
 
 function statusTone(status: RuntimeDiagnosticsServiceStatusValue): string {
   if (status === "healthy") {
-    return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    return "bg-[color:var(--chela-status-success-bg)] text-[color:var(--chela-status-success-text)]";
   }
   if (status === "degraded" || status === "starting") {
-    return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    return "bg-[color:var(--chela-status-warning-bg)] text-[color:var(--chela-status-warning-text)]";
   }
   if (status === "failed") {
-    return "bg-red-500/10 text-red-700 dark:text-red-300";
+    return "bg-[color:var(--chela-status-error-bg)] text-[color:var(--chela-status-error-text)]";
   }
   return "bg-[color:var(--color-control-bg)] text-muted-foreground";
 }
@@ -199,7 +199,7 @@ export function RuntimeDiagnosticsSection({ timeZone }: { timeZone: string }) {
       </div>
 
       {error ? (
-        <div className="rounded-[var(--radius-shell)] bg-red-500/10 px-4 py-3 text-[12px] text-red-700 dark:text-red-300">
+        <div className="rounded-[var(--radius-shell)] bg-[color:var(--chela-status-error-bg)] px-4 py-3 text-[12px] text-[color:var(--chela-status-error-text)]">
           {error}
         </div>
       ) : null}

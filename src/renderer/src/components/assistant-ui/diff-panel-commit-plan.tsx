@@ -134,7 +134,7 @@ export function CommitPlanCard({
     >
       <div className="flex items-center justify-between gap-3 relative z-10">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="inline-flex h-6 items-center rounded-full bg-[color:var(--color-control-panel-bg)] px-2.5 text-[11px] font-medium text-[color:var(--color-text-secondary)] shadow-[var(--color-control-shadow)]">
+          <span className="inline-flex h-6 items-center rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-2.5 text-[11px] font-medium text-[color:var(--color-text-secondary)] shadow-[var(--color-control-shadow)]">
             提交 {index + 1}
           </span>
           <span className="text-[11px] text-muted-foreground">

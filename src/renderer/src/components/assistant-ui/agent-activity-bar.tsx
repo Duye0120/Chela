@@ -140,7 +140,7 @@ function getStatusMeta(status: ActivityStatus) {
         return {
           icon: XCircleIcon,
           iconClassName: "text-[color:var(--color-text-muted)]",
-          badgeClassName: "bg-black/5 text-[color:var(--color-text-secondary)] dark:bg-white/8",
+          badgeClassName: "bg-[color:var(--color-control-bg)] text-[color:var(--color-text-secondary)]",
           badgeLabel: "已停止",
           dotClassName: "bg-[color:var(--color-text-muted)]",
         };
@@ -351,7 +351,7 @@ const ActivityRowItem: FC<ActivityRowProps> = ({
     <div className="relative pb-3 last:pb-0">
       <span
         className={cn(
-          "absolute left-[-26px] top-4 size-2.5 rounded-full shadow-[0_0_0_4px_rgba(255,255,255,0.72)] dark:shadow-[0_0_0_4px_rgba(15,23,42,0.85)]",
+          "absolute left-[-26px] top-4 size-2.5 rounded-full shadow-[0_0_0_4px_var(--color-control-panel-bg)]",
           statusMeta.dotClassName,
         )}
       />
@@ -360,12 +360,12 @@ const ActivityRowItem: FC<ActivityRowProps> = ({
         <CollapsibleTrigger
           disabled={!canExpand}
           className={cn(
-            "group flex w-full items-start gap-3 rounded-[var(--radius-shell)] bg-white/78 px-3 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] transition hover:bg-white/90 dark:bg-white/6 dark:hover:bg-white/10",
-            row.isRunning && "bg-[var(--color-accent-subtle)]/55 dark:bg-[var(--color-accent-subtle)]/20",
+            "group flex w-full items-start gap-3 rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-3 py-3 text-left shadow-[var(--color-control-shadow)] transition hover:bg-[color:var(--color-control-bg-hover)]",
+            row.isRunning && "bg-[var(--color-accent-subtle)]",
             !canExpand && "cursor-default",
           )}
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-black/5 text-[color:var(--color-text-secondary)] dark:bg-white/8">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] text-[color:var(--color-text-secondary)]">
             <row.icon className="size-4" />
           </span>
 
@@ -376,7 +376,7 @@ const ActivityRowItem: FC<ActivityRowProps> = ({
               </span>
               <span
                 className={cn(
-                  "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+                  "inline-flex shrink-0 items-center rounded-[var(--radius-shell)] px-2 py-0.5 text-[10px] font-medium",
                   statusMeta.badgeClassName,
                 )}
               >
@@ -414,9 +414,9 @@ const ActivityRowItem: FC<ActivityRowProps> = ({
 
         {canExpand ? (
           <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
-            <div className="mt-2 ml-2 space-y-2 rounded-[var(--radius-shell)] bg-white/58 px-4 py-3 dark:bg-white/5">
+            <div className="mt-2 ml-2 space-y-2 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-4 py-3">
               {row.detailText ? (
-                <div className="rounded-[var(--radius-shell)] bg-white/72 px-3 py-2.5 text-[12px] leading-6 whitespace-pre-wrap text-[color:var(--color-text-secondary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] dark:bg-black/16">
+                <div className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-3 py-2.5 text-[12px] leading-6 whitespace-pre-wrap text-[color:var(--color-text-secondary)] shadow-[var(--color-control-shadow)]">
                   <span className={cn(row.isRunning && "streaming-cursor")}>
                     {row.detailText}
                   </span>
@@ -424,7 +424,7 @@ const ActivityRowItem: FC<ActivityRowProps> = ({
               ) : null}
 
               {row.argsText ? (
-                <div className="rounded-[var(--radius-shell)] bg-white/72 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] dark:bg-black/16">
+                <div className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-3 py-2.5 shadow-[var(--color-control-shadow)]">
                   <p className="mb-1.5 text-[10px] font-medium tracking-[0.08em] text-[color:var(--color-text-muted)] uppercase">
                     Args
                   </p>
@@ -444,7 +444,7 @@ const ActivityRowItem: FC<ActivityRowProps> = ({
               ) : null}
 
               {row.resultText && !row.errorText ? (
-                <div className="rounded-[var(--radius-shell)] bg-white/72 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] dark:bg-black/16">
+                <div className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-3 py-2.5 shadow-[var(--color-control-shadow)]">
                   <p className="mb-1.5 text-[10px] font-medium tracking-[0.08em] text-[color:var(--color-text-muted)] uppercase">
                     Output
                   </p>
@@ -539,17 +539,17 @@ const AgentActivityBarImpl: FC<AgentActivityBarProps> = ({
     <div
       className={cn(
         "mb-4 w-full max-w-[760px] overflow-hidden rounded-[var(--radius-shell)]",
-        "border border-[color:var(--color-control-border)] bg-[color:var(--color-control-panel-bg)] shadow-[var(--color-control-panel-shadow)]",
+        "bg-[color:var(--color-control-panel-bg)] shadow-[var(--color-control-panel-shadow)] ring-1 ring-[color:var(--color-control-border)]",
         className,
       )}
     >
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
-        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-white/28 dark:hover:bg-white/4"
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-[color:var(--color-control-bg-hover)]"
         aria-label={expanded ? "收起流程" : "展开流程"}
       >
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-shell-panel text-[color:var(--color-text-secondary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] dark:bg-white/8">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] text-[color:var(--color-text-secondary)] shadow-[var(--color-control-shadow)]">
           {thinkingRow ? (
             <BrainCircuitIcon className="size-4" />
           ) : (
@@ -566,7 +566,7 @@ const AgentActivityBarImpl: FC<AgentActivityBarProps> = ({
           </span>
         </span>
 
-        <span className="inline-flex shrink-0 items-center rounded-full bg-shell-panel px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-text-secondary)] dark:bg-white/8">
+        <span className="inline-flex shrink-0 items-center rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-text-secondary)]">
           {rows.length} 步
         </span>
 
@@ -580,7 +580,7 @@ const AgentActivityBarImpl: FC<AgentActivityBarProps> = ({
 
       {expanded ? (
         <div className="px-4 pb-4">
-          <div className="relative ml-6 border-l border-white/58 pl-5 dark:border-white/10">
+          <div className="relative ml-6 pl-5 shadow-[inset_1px_0_0_var(--color-control-border)]">
             {rows.map((row) => (
               <ActivityRowItem
                 key={row.id}

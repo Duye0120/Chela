@@ -112,7 +112,7 @@ function getStatusIcon(status: StepStatus, isRunning?: boolean) {
     case "success":
       return <CheckCircle2Icon className="size-3.5 text-[color:var(--chela-status-success-text)]" />;
     case "error":
-      return <XCircleIcon className="size-3.5 text-red-500" />;
+      return <XCircleIcon className="size-3.5 text-[color:var(--chela-status-error-text)]" />;
     case "cancelled":
       return <XCircleIcon className="size-3.5 text-muted-foreground" />;
     default:
@@ -141,7 +141,7 @@ const StepRow = memo(function StepRow({
     <div className="group/step">
       <div
         className={cn(
-          "flex items-start gap-2 py-1.5 px-2 rounded-md transition-colors",
+          "flex items-start gap-2 py-1.5 px-2 rounded-[var(--radius-shell)] transition-colors",
           "hover:bg-[color:var(--color-control-bg)]",
           isExecuting && "bg-[color:var(--color-control-bg)]/50",
         )}
@@ -208,7 +208,7 @@ const StepRow = memo(function StepRow({
               style={{ marginLeft: paddingLeft + 24 }}
             >
               {step.toolError ? (
-                <span className="text-red-400">{truncate(String(step.toolError), 2000)}</span>
+                <span className="text-[color:var(--chela-status-error-text)]">{truncate(String(step.toolError), 2000)}</span>
               ) : (
                 truncate(String(step.streamOutput ?? step.toolResult ?? ""), 2000)
               )}
@@ -282,7 +282,7 @@ const RunCard = memo(function RunCard({
               <span className={cn(
                 "text-[11px] font-medium",
                 run.status === "completed" && "text-[color:var(--chela-status-success-text)]",
-                run.status === "error" && "text-red-500",
+                run.status === "error" && "text-[color:var(--chela-status-error-text)]",
                 run.status === "cancelled" && "text-muted-foreground",
               )}>
                 {run.status === "completed" && "已完成"}

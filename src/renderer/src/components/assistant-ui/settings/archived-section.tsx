@@ -58,7 +58,7 @@ export function ArchivedSection({
                   type="button"
                   variant="ghost"
                   onClick={() => onDeleteSession(summary.id)}
-                  className="h-8 rounded-[var(--radius-shell)] px-3 text-[12px] text-red-500 hover:bg-red-50"
+                  className="h-8 rounded-[var(--radius-shell)] px-3 text-[12px] text-[color:var(--chela-status-error-text)] hover:bg-[color:var(--chela-status-error-bg)]"
                 >
                   删除
                 </Button>

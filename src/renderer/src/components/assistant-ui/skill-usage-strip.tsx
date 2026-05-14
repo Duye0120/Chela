@@ -24,7 +24,7 @@ export function SkillUsageStrip({
       {skillUsages.map((usage) => (
         <div
           key={`${usage.skillId}:${usage.entryPointId}`}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--color-control-bg)] px-2.5 py-1 text-[11px] text-muted-foreground shadow-[var(--color-control-shadow)]"
+      className="inline-flex items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2.5 py-1 text-[11px] text-muted-foreground shadow-[var(--color-control-shadow)]"
         >
           <SparklesIcon className="size-3.5 text-[color:var(--color-accent)]" />
           <span>{leadLabel}</span>

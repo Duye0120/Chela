@@ -167,7 +167,7 @@ export function TerminalTab({ terminalId, visible, settings }: Props) {
     terminal.options.theme = getTerminalTheme();
     container.style.backgroundColor = getCssVariable(
       "--color-shell-terminal",
-      "#f8f9fc",
+      getCssVariable("--chela-bg-surface", ""),
     );
     fitRef.current?.fit();
   }, [

@@ -50,7 +50,7 @@ export function CommitDescriptionEditor({
           "w-full max-w-none focus:outline-none min-h-0",
           "[&_p]:my-1 [&_h1]:text-[16px] [&_h1]:font-semibold [&_h1]:my-2 [&_h2]:text-[14px] [&_h2]:font-semibold [&_h2]:my-2 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:my-1.5 [&_h4]:text-[12px] [&_h4]:font-semibold [&_h4]:my-1",
           "[&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5",
-          "[&_code]:bg-secondary/50 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_pre]:bg-secondary/30 [&_pre]:p-2 [&_pre]:rounded [&_a]:text-blue-400 [&_a]:underline",
+          "[&_code]:bg-[color:var(--color-control-bg)] [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded-[var(--radius-shell)] [&_pre]:bg-[color:var(--color-control-bg)] [&_pre]:p-2 [&_pre]:rounded-[var(--radius-shell)] [&_a]:text-[color:var(--color-accent)] [&_a]:underline",
           "[&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground/30 [&_blockquote]:pl-3 [&_blockquote]:my-2 [&_blockquote]:text-muted-foreground [&_blockquote]:italic",
           "[&_strong]:font-semibold [&_em]:italic"
         ),

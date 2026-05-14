@@ -586,7 +586,7 @@ export function KeysSection({
                         }
                         className={`inline-block h-2 w-2 rounded-full ${workspace.sourceDraft.enabled
                           ? "bg-[color:var(--chela-status-success-text)]"
-                          : "bg-zinc-400"
+                          : "bg-[color:var(--color-text-muted)]"
                           }`}
                       />
                       <span>
@@ -685,7 +685,7 @@ export function KeysSection({
                       type="button"
                       tooltip="删除提供商"
                       aria-label="删除提供商"
-                      className="h-9 w-9 rounded-[var(--radius-shell)] text-red-500 hover:bg-red-50 hover:text-red-600"
+                      className="h-9 w-9 rounded-[var(--radius-shell)] text-[color:var(--chela-status-error-text)] hover:bg-[color:var(--chela-status-error-bg)]"
                     >
                       <Trash2Icon className="h-4 w-4" />
                     </TooltipIconButton>
@@ -1028,7 +1028,7 @@ export function KeysSection({
                                   }),
                                 );
                               }}
-                              className="h-8 w-8 rounded-[var(--radius-shell)] text-muted-foreground hover:bg-red-500/10 hover:text-red-500 dark:hover:bg-red-500/20"
+                              className="h-8 w-8 rounded-[var(--radius-shell)] text-muted-foreground hover:bg-[color:var(--chela-status-error-bg)] hover:text-[color:var(--chela-status-error-text)]"
                             >
                               <Trash2Icon className="h-4 w-4" />
                             </TooltipIconButton>
@@ -1121,7 +1121,7 @@ export function KeysSection({
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="text-[12px] text-muted-foreground">
                 {error ? (
-                  <span className="text-red-500">{error}</span>
+                  <span className="text-[color:var(--chela-status-error-text)]">{error}</span>
                 ) : testResult ? (
                   <span
                     className={
@@ -1158,7 +1158,7 @@ export function KeysSection({
                   onClick={() => void handleSave()}
                   disabled={saving || !dirty}
                   className={`h-9 rounded-[var(--radius-shell)] px-4 text-[12px] ${dirty && !saving
-                      ? "animate-pulse bg-[color:var(--color-accent)] text-white hover:bg-[color:var(--color-accent-hover)] shadow-sm"
+                      ? "animate-pulse bg-[color:var(--color-accent)] text-[color:var(--chela-text-inverse)] hover:bg-[color:var(--color-accent-hover)] shadow-[var(--color-control-shadow)]"
                       : "bg-foreground text-background hover:bg-foreground/90"
                     }`}
                 >

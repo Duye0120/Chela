@@ -112,7 +112,7 @@ export const AssistantMessageRunChangeSummary: FC = () => {
             <span className="text-[13px] font-medium text-[color:var(--chela-text-secondary)]">
               已编辑的文件
             </span>
-            <span className="rounded-full bg-[color:var(--color-control-panel-bg)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--chela-text-tertiary)]">
+          <span className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--chela-text-tertiary)]">
               {summary.fileCount}
             </span>
             <ChevronUpIcon className="ml-auto size-3.5 text-[color:var(--chela-text-tertiary)]" />

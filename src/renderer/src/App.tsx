@@ -1865,7 +1865,7 @@ export default function App() {
                               <PanelRightOpen className="h-4 w-4" strokeWidth={1.9} />
                             )}
                             {gitBranchSummary?.hasChanges && !diffPanelOpen && (
-                              <span className="absolute right-1 top-1 size-1.5 rounded-full bg-red-500" />
+                              <span className="absolute right-1 top-1 size-1.5 rounded-full bg-[color:var(--chela-status-error-text)]" />
                             )}
                           </Button>
                         </TooltipTrigger>
@@ -1939,7 +1939,7 @@ export default function App() {
                 {mainView === "thread" ? (
                   <div
                     ref={rightPanelShellRef}
-                    className={`chela-right-panel-shell relative flex min-h-0 shrink-0 flex-col overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-surface)] ${diffPanelOpen || tracePanelOpen || browserPanelOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"} ${diffPanelOpen || tracePanelOpen || browserPanelOpen || rightPanelAnimating ? "border border-black/5 dark:border-white/6" : "border border-transparent"}`}
+                    className={`chela-right-panel-shell relative flex min-h-0 shrink-0 flex-col overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-surface)] ${diffPanelOpen || tracePanelOpen || browserPanelOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"} ${diffPanelOpen || tracePanelOpen || browserPanelOpen || rightPanelAnimating ? "ring-1 ring-[color:var(--color-control-border)]" : "ring-1 ring-transparent"}`}
                     style={{
                       width: diffPanelOpen || tracePanelOpen || browserPanelOpen ? resolvedRightPanelWidth : 0,
                       marginLeft: diffPanelOpen || tracePanelOpen || browserPanelOpen ? RIGHT_PANEL_GAP_PX : 0,

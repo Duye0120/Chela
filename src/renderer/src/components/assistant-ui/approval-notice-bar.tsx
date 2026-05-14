@@ -122,7 +122,7 @@ export const PendingApprovalNoticeBar: FC<PendingApprovalNoticeBarProps> = ({
             <div className="min-w-0 space-y-2">
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="rounded-full bg-[color:var(--color-control-bg)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--color-text-secondary)]">
+        <span className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--color-text-secondary)]">
                     {pendingApprovalKindLabels[latestApproval.approval.kind]}
                   </span>
                   <p className="font-medium text-[color:var(--color-text-primary)]">
@@ -212,7 +212,7 @@ export const InterruptedApprovalNoticeBar: FC<InterruptedApprovalNoticeBarProps>
             <div className="min-w-0 space-y-2">
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="rounded-full bg-[color:var(--color-control-bg)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--color-text-secondary)]">
+        <span className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--color-text-secondary)]">
                     {interruptedApprovalKindLabels[latestApproval.approval.kind]}
                   </span>
                   <p className="font-medium text-[color:var(--color-text-primary)]">

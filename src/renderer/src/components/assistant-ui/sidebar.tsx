@@ -468,7 +468,7 @@ function SidebarImpl({
                   setArchiveConfirmFor(null);
                   setContextMenu(null);
                 }}
-                className="chela-danger-soft pointer-events-auto h-6 cursor-pointer rounded-full px-2.5 text-[10px] leading-none font-medium transition hover:brightness-[0.98]"
+                className="chela-danger-soft pointer-events-auto h-6 cursor-pointer rounded-[var(--radius-shell)] px-2.5 text-[10px] leading-none font-medium transition hover:brightness-[0.98]"
               >
                 确认
               </button>
@@ -657,7 +657,7 @@ function SidebarImpl({
                                   {group.name}
                                 </span>
                                 {!hasPath ? (
-                                  <span className="shrink-0 rounded-full bg-[color:var(--chela-status-warning-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--chela-status-warning-text)]">
+                                  <span className="shrink-0 rounded-[var(--radius-shell)] bg-[color:var(--chela-status-warning-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--chela-status-warning-text)]">
                                     待绑定
                                   </span>
                                 ) : null}
@@ -757,7 +757,7 @@ function SidebarImpl({
           ref={(node) => {
             contextMenuRef.current = node;
           }}
-          className="fixed z-50 min-w-[188px] rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-surface)] p-1.5 shadow-[0_12px_32px_rgba(15,23,42,0.12)] ring-1 ring-black/6"
+          className="fixed z-50 min-w-[188px] rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-surface)] p-1.5 shadow-[var(--shadow-flyout)] ring-1 ring-[color:var(--color-control-border)]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           {contextMenu.actions.map((action) => (

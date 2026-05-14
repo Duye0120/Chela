@@ -313,7 +313,7 @@ const AttachmentRemove: FC = () => {
     <AttachmentPrimitive.Remove asChild>
       <TooltipIconButton
         tooltip="Remove file"
-        className="absolute top-1.5 right-1.5 size-5 rounded-full bg-white/92 text-muted-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:bg-white [&_svg]:size-3.5 [&_svg]:text-black hover:[&_svg]:text-destructive"
+        className="absolute top-1.5 right-1.5 size-5 rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] text-muted-foreground opacity-0 shadow-[var(--color-control-shadow)] transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:bg-[color:var(--color-control-bg-hover)] [&_svg]:size-3.5 [&_svg]:text-[color:var(--color-text-primary)] hover:[&_svg]:text-[color:var(--chela-status-error-text)]"
         side="top"
       >
         <XIcon className="dark:stroke-[2.5px]" />

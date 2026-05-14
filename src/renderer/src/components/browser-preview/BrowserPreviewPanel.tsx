@@ -17,6 +17,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { Button } from "@renderer/components/assistant-ui/button";
+import { PreviewSurface, Surface } from "@renderer/components/assistant-ui/surface";
 import {
   Tooltip,
   TooltipContent,
@@ -990,17 +991,20 @@ export function BrowserPreviewPanel({
 
       </form>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)]">
+      <PreviewSurface className="flex-1">
         <webview
           ref={handleWebviewRef}
           src={currentUrl}
-          className="h-full w-full bg-white"
+          className="h-full w-full bg-[color:var(--chela-bg-surface)]"
           partition="persist:chela-browser-preview"
           allowpopups={false}
         />
         {pendingPin ? (
-          <div
-            className="absolute z-40 rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] p-2.5 shadow-[var(--color-control-shadow)]"
+          <Surface
+            tone="overlay"
+            shadow="inset"
+            padding="sm"
+            className="absolute z-40"
             style={getPinComposerStyle(pendingPin)}
           >
             <div className="mb-2 flex items-start justify-between gap-2">
@@ -1060,11 +1064,14 @@ export function BrowserPreviewPanel({
                 {pendingPin.comment ? "更新" : "保存"}
               </Button>
             </div>
-          </div>
+          </Surface>
         ) : null}
         {pendingScreenshot ? (
-          <div
-            className="absolute z-40 rounded-[var(--radius-shell)] bg-[color:var(--color-control-panel-bg)] p-2.5 shadow-[var(--color-control-shadow)]"
+          <Surface
+            tone="overlay"
+            shadow="inset"
+            padding="sm"
+            className="absolute z-40"
             style={getScreenshotComposerStyle(pendingScreenshot)}
           >
             <div className="mb-2 flex items-start justify-between gap-2">
@@ -1128,9 +1135,9 @@ export function BrowserPreviewPanel({
                 保存
               </Button>
             </div>
-          </div>
+          </Surface>
         ) : null}
-      </div>
+      </PreviewSurface>
     </section>
   );
 }

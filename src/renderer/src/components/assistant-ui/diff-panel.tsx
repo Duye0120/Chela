@@ -1006,7 +1006,7 @@ export function DiffPanel(props: DiffPanelProps) {
     <>
       <div
         className={cn(
-          "fixed inset-0 z-40 bg-black/10 transition-opacity duration-300",
+        "fixed inset-0 z-40 bg-[color:var(--color-shell-overlay)]/70 transition-opacity duration-300",
           props.open ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         onClick={props.onClose}

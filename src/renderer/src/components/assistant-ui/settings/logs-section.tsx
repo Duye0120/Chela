@@ -243,7 +243,7 @@ export function LogsSection({ timeZone }: { timeZone: string }) {
       </div>
 
       {error ? (
-        <div className="rounded-[var(--radius-shell)] bg-[color:rgba(239,68,68,0.08)] px-4 py-3 text-[12px] leading-6 text-[color:rgb(185,28,28)]">
+        <div className="rounded-[var(--radius-shell)] bg-[color:var(--chela-status-error-bg)] px-4 py-3 text-[12px] leading-6 text-[color:var(--chela-status-error-text)]">
           {error}
         </div>
       ) : null}

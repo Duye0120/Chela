@@ -133,14 +133,14 @@ function DiffImagePreview({
         <span>{status === "deleted" ? "图片已删除，无法按当前工作区预览。" : "图片文件预览"}</span>
       </div>
 
-      <div className="mt-3 grid min-h-[180px] place-items-center overflow-hidden rounded-[14px] bg-black/20 px-4 py-4">
+      <div className="mt-3 grid min-h-[180px] place-items-center overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-4 py-4">
         {imageUrl === undefined ? (
           <p className="text-sm text-muted-foreground">正在读取图片预览…</p>
         ) : imageUrl ? (
           <img
             src={imageUrl}
             alt={fileName ?? "Diff image preview"}
-            className="block h-auto max-h-[320px] w-auto max-w-full rounded-[12px] object-contain"
+            className="block h-auto max-h-[320px] w-auto max-w-full rounded-[var(--radius-shell)] object-contain"
           />
         ) : (
           <div className="flex flex-col items-center gap-2 text-center text-sm text-muted-foreground">
@@ -160,7 +160,7 @@ function DiffBinaryPreview({ status }: { status?: GitDiffFile["status"] }) {
         <FileWarningIcon className="size-4" />
         <span>{status === "deleted" ? "二进制文件已删除" : "二进制文件"}</span>
       </div>
-      <div className="mt-3 grid min-h-[160px] place-items-center rounded-[14px] bg-code-bg px-4 py-4 text-center">
+      <div className="mt-3 grid min-h-[160px] place-items-center rounded-[var(--radius-shell)] bg-code-bg px-4 py-4 text-center">
         <div className="max-w-[260px]">
           <p className="text-sm font-medium text-foreground">暂不支持文本差异预览</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">

@@ -1433,7 +1433,7 @@ const ComposerAction: FC<
                 variant="default"
                 size="icon"
                 disabled
-                className="size-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-white shadow-none hover:bg-[color:var(--color-accent-hover)]"
+                className="size-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-[color:var(--chela-text-inverse)] shadow-none hover:bg-[color:var(--color-accent-hover)]"
                 aria-label="Send message"
               >
                 <ArrowUpIcon className="size-4" />
@@ -1447,7 +1447,7 @@ const ComposerAction: FC<
                   variant="default"
                   size="icon"
                   onClick={sendComposerWithBrowserFallback}
-                  className="size-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-white shadow-none hover:bg-[color:var(--color-accent-hover)]"
+                  className="size-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-[color:var(--chela-text-inverse)] shadow-none hover:bg-[color:var(--color-accent-hover)]"
                   aria-label="Send message"
                 >
                   <ArrowUpIcon className="size-4" />
@@ -1460,7 +1460,7 @@ const ComposerAction: FC<
                     type="button"
                     variant="default"
                     size="icon"
-                    className="size-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-white shadow-none hover:bg-[color:var(--color-accent-hover)]"
+                    className="size-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-[color:var(--chela-text-inverse)] shadow-none hover:bg-[color:var(--color-accent-hover)]"
                     aria-label="Send message"
                   >
                     <ArrowUpIcon className="size-4" />
@@ -1514,7 +1514,7 @@ const ComposerStatusBar: FC<{
 
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 overflow-hidden">
           {showBtw ? (
-            <span className="shrink-0 rounded-full bg-[var(--color-accent-subtle)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-accent)]">
+            <span className="shrink-0 rounded-[var(--radius-shell)] bg-[var(--color-accent-subtle)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--color-accent)]">
               /btw 旁路补充
             </span>
           ) : null}
@@ -1572,7 +1572,7 @@ const AssistantRunningNotice: FC<{ label: string; compact?: boolean }> = ({
         compact && "mb-2",
       )}
     >
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--chela-status-info-bg)] text-[color:var(--chela-status-info-text)]">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-[var(--radius-shell)] bg-[color:var(--chela-status-info-bg)] text-[color:var(--chela-status-info-text)]">
         <LoaderCircleIcon className="size-3 animate-spin" />
       </span>
       <span className="text-[13px] font-medium text-foreground/80">
@@ -1592,7 +1592,7 @@ const AssistantCancelledNotice: FC<{ compact?: boolean }> = ({
         compact && "mb-2",
       )}
     >
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-control-bg)] text-[color:var(--color-text-tertiary)]">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] text-[color:var(--color-text-tertiary)]">
         <SquareIcon className="size-3 fill-current" />
       </span>
       <span className="text-[13px] font-medium text-foreground/80">
@@ -1671,7 +1671,7 @@ const AssistantMessageStatus: FC = () => {
 const MessageError: FC = () => {
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="mt-2 rounded-[var(--radius-shell)] bg-destructive/10 p-3 text-sm text-destructive dark:bg-destructive/5 dark:text-red-200">
+      <ErrorPrimitive.Root className="mt-2 rounded-[var(--radius-shell)] bg-[color:var(--chela-status-error-bg)] p-3 text-sm text-[color:var(--chela-status-error-text)]">
         <ErrorPrimitive.Message className="line-clamp-2" />
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>

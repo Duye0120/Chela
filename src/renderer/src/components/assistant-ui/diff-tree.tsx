@@ -114,14 +114,14 @@ function CustomCheckbox({ checked, indeterminate, onChange }: { checked: boolean
     <div
       onClick={(e) => { e.stopPropagation(); onChange?.(); }}
       className={cn(
-        "flex size-[14px] shrink-0 cursor-pointer items-center justify-center rounded-[3px] border transition-colors",
+        "flex size-[14px] shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-shell)] ring-1 transition-colors",
         checked || indeterminate
-          ? "border-[color:var(--color-diff-add-text)] bg-[color:var(--color-diff-add-text)] text-white"
-          : "border-muted-foreground/40 bg-transparent hover:border-foreground/40"
+          ? "bg-[color:var(--color-diff-add-text)] text-[color:var(--chela-text-inverse)] ring-[color:var(--color-diff-add-text)]"
+          : "bg-transparent ring-[color:var(--color-control-border)] hover:ring-[color:var(--color-text-secondary)]"
       )}
     >
       {indeterminate ? (
-        <div className="h-0.5 w-[8px] rounded-full bg-current" />
+        <div className="h-0.5 w-[8px] rounded-[var(--radius-shell)] bg-current" />
       ) : checked ? (
         <CheckIcon className="size-[10px]" strokeWidth={3.5} />
       ) : null}
@@ -218,7 +218,7 @@ const TreeItem = memo(function TreeItem({
 
   const colorClass =
     status === "modified" ? "text-[color:var(--color-diff-del-text)]/80" :
-      status === "deleted" ? "text-red-500/70" :
+      status === "deleted" ? "text-[color:var(--color-diff-del-marker)]/70" :
         status === "untracked" ? "text-[color:var(--color-diff-add-text)]/80" : "text-muted-foreground";
 
   useEffect(() => {
@@ -238,7 +238,7 @@ const TreeItem = memo(function TreeItem({
       <div
         ref={rowRef}
         className={cn(
-          "flex cursor-pointer select-none items-center gap-1.5 rounded-[4px] pl-1.5 pr-2 py-1 hover:bg-[color:var(--color-control-bg-hover)] group/item",
+          "flex cursor-pointer select-none items-center gap-1.5 rounded-[var(--radius-shell)] pl-1.5 pr-2 py-1 hover:bg-[color:var(--color-control-bg-hover)] group/item",
           !isDir && "group"
         )}
         onMouseDown={(e) => {
