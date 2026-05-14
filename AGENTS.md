@@ -1,94 +1,35 @@
-如无必要，不要 build。**哪怕是改了代码也不要习惯性去 pnpm build**。
-如无必要，不要 check。
+# Chela Agent Instructions
 
-产品命名统一。`新增：2026-04-09 14:17:38`
+本文件只保留每次进入仓库都必须常驻的规则。场景化、细节化的工作方法放到 `.agents/skills/`，按任务触发加载。
+
+## 常驻硬约束
+
+- 如无必要，不要 build；哪怕改了代码也不要习惯性运行 `pnpm build`。
+- 如无必要，不要 check；验证优先选择和本次改动直接相关的最小命令。
 - 项目 / 产品对外名称统一为 `Chela`。
 - 除历史文档、旧路径兼容、数据迁移场景外，不再新增 `first_pi_agent` / `first-pi-agent` 作为产品名。
 - 涉及包名、窗口标题、README、UI 展示、运行时 client 标识时，默认优先使用 `Chela`；必须兼容旧存储键或旧 userData 目录时，要显式标注 legacy。
+- 每轮有效改动都必须留下文档记录，默认追加到 `docs/changes/YYYY-MM-DD/changes.md`；格式和细节使用 `chela-doc-trace` skill。
+- 用户多次确认过的偏好、禁忌或长期约束，要沉淀成稳定规则，优先写进本文件或对应 skill，不写成一次性聊天记录。
+- 回答和诊断要基于证据；证据不足时要说明边界，不要把推测说成事实。
+- 沟通默认克制、礼貌、直接；不使用黑化、毒舌、阴阳怪气或带冒犯感的表达，除非用户明确要求。
 
-文档留痕是强约束。`新增：2026-04-07 15:32:45`
-- 每次完成一轮有效改动，必须留下记录；不能只改文件不记事。
-- 留痕至少写清：日期、时间、改了什么、为什么改、改到哪些文件。
-- 留痕范围不限于 spec；`docs/`、`specs/`、方案稿、约束文档都算，必须能回头查。
-- `docs/changes` 统一按日期目录组织：`docs/changes/YYYY-MM-DD/*.md`；时间写在文档正文里，不要继续把时分秒写进文件名。
-- `docs/changes` 每个日期目录默认只维护一个 `changes.md`；当天新增记录继续追加到这个文件里。
-- `changes.md` 用二级标题区分每一轮有效改动；标题直接写改动主题，正文继续写时间、改了什么、为什么改、涉及文件、结果。
-- 如果这次改动本身就在文档里完成，文档内也要带上时间和本次变更摘要；不要只改正文不留更新时间。
-- 如果是代码改动，也要同步在对应文档或专门的变更记录里补一句，不准只让 git diff 充当记忆。
-- 只要用户多次提到同一条要求、偏好、约束、禁忌，就必须沉淀到文档里，优先写进 `AGENTS.md` 或对应 spec，避免下次再犯。
-- 用户后续手动补的规则、我补的规则、spec 里反复确认过的规则，都要视为长期约束；发现缺少沉淀时要主动补文档。
-- 新增规则时，优先写成稳定约束，不要写成一次性聊天记录。
+## Skill 路由
 
-架构梳理默认术语。`新增：2026-04-08 10:17:37`
-- 讨论 harness 架构时，强制区分 `run memory`、`session memory`、`semantic memory`；不要把活动 run 持久化误写成完整记忆系统。
-- 默认按 `Harness Runtime / Context Engine / Memory System / Transcript Persistence` 拆层；先收边界，再加高级能力。
-- 新开 session 想接上上次任务，默认依赖 `session transcript + session memory snapshot + T0/T1`，不是只靠 `harness-runs.json`。
+开始任务时先判断是否需要加载 Chela 专属 skill。多个场景同时出现时，只加载当前必要的最小集合。
 
-工具链默认性能优先。`新增：2026-04-08 14:39:31`
-- 检索、扫描、批量读写这类重活，优先原生可执行或成熟现成包，不为语言统一硬扛纯 `TS`。
-- 只要 UI 保持可用，底层实现可直接选更快的方案；默认先保速度，再谈形式统一。
-- 搜索类能力交付前必须做真实烟测，不能只看类型过没过。
+- `chela-doc-trace`：写改动记录、整理变更摘要、回看某天 `docs/changes` / `docs/todos`、沉淀长期规则。
+- `chela-ui-guidelines`：改 renderer UI、颜色 token、选择态、圆角、border、设置页、diff panel、shadcn 组件或 React 性能。
+- `chela-chat-surface`：改聊天区、composer、context、thinking、消息发送、附件、多模态、分支切换、模型选择、队列/续写文案。
+- `chela-shell-panels`：改左侧 sidebar、右侧 Browser / diff / trace 工作区、分栏宽度、拖拽或 `webview` 相关布局。
+- `chela-renderer-state`：改跨 session、跨 panel、聊天 / Browser / settings 共享状态、附件 marker、Zustand store。
+- `chela-runtime-harness`：讨论或修改 harness runtime、context engine、memory、transcript、readiness、observability。
+- `chela-electron-ipc`：改 Electron main/preload/IPC、MCP/plugins 设置、`shell.openPath`、Node-side test 会导入的 service 模块。
+- `commit`：用户提到 `/commit`、提交消息、Conventional Commits、自动提交时使用；仍然遵守“不默认 build/check”。
 
-UI 设计默认谨慎使用 border。
-- 当前项目更偏好直接用不同背景色、明度和留白来表达层级。
-- 默认先考虑颜色分层，不要先想到 border。
-- 优先使用留白、层级、分组、背景明暗和排版来建立结构。
-- 只有在信息分区、可点击边界、输入区域、错误态等确有必要时才加 border。
-- 需要 border 时，优先使用低对比、轻描边，不要做厚重外框。
-- 不要习惯性给开关、轻量按钮、标签、小型状态控件额外再套一层描边容器。
-- 如果必须使用 border，优先弱化处理，避免页面出现过多边框盒子感。
-- UI 控件圆角默认统一使用项目 token，如 `rounded-[var(--radius-shell)]`；轻量按钮、下拉触发器、分支切换器也要沿用统一圆角。只有头像、进度环、状态点这类天然圆形元素才使用 `rounded-full`。
+## 执行默认值
 
-UI 颜色 token 默认按语义统一。`新增：2026-05-13 11:38:00`
-- 改 UI 颜色前先确认现有 token 的语义，优先复用已有 token，不要随手新增近似色或临时色。
-- 同一界面、同一层级、同一语义的控件必须使用同一背景 / 文本 / hover token；例如同一行 chip 默认统一背景，只通过 icon、文案或局部状态表达类型差异。
-- 新增或调整颜色时，先归类为 shell、composer、control、selection、status、accent、message 等语义层，再选择对应 token。
-- 只有确实存在新的 UI 语义时才新增 token；新增时必须同步说明用途、适用范围和避免与哪些现有 token 混用。
-- 后续需要专项整理全项目颜色 token，目标是消除同语义多 token、同层级多背景和散落的硬编码颜色。
-
-UI 交付默认同时满足表现和性能。
-- 所有 UI 改动同时追求观感质量、交互清晰度和运行性能。
-- 不接受只提升视觉而牺牲渲染稳定性、响应速度或列表滚动性能的实现。
-- 涉及 React 组件、设置页、聊天区、diff panel 这类高频界面时，默认优先稳定 selector、减少无意义重渲染、控制派生对象创建。
-
-Shell 分栏拖拽改动默认完整核对。`新增：2026-05-11 13:10:14`
-- 改左侧 sidebar、右侧 diff/browser/trace 工作区、聊天主区域宽度和拖拽前，先同时查 `src/renderer/src/App.tsx`、`src/renderer/src/components/assistant-ui/sidebar.tsx`、`src/renderer/src/components/assistant-ui/diff-panel.tsx`、`src/renderer/src/components/browser-preview/BrowserPreviewPanel.tsx`、`src/renderer/src/components/assistant-ui/trace-panel.tsx`、`src/renderer/src/components/ui/resizable.tsx`。
-- 先确认实际生效的拖拽源：左侧 shell sidebar 由 `react-resizable-panels` 的 `ResizableHandle` 承载，右侧 workspace 由 `App.tsx` 的 panel state 和 pointer drag 承载；旧 `diff-panel.tsx` 内部 `useResizable` 按调用点确认。
-- 左侧 sidebar 拉手默认视觉透明，只保留命中区域；防止出现多条硬竖线。
-- 右侧含 Browser `<webview>` 的拖拽必须有 pointer capture、全窗 pointerup/pointercancel、lostpointercapture/blur 兜底和覆盖 webview 的透明遮罩，避免释放后残留拖拽态。
-
-选择态的视觉语言要统一。
-- 下拉、列表、分支切换、模型选择等“已选中”状态，优先复用项目里已经存在的选中底色和反馈方式。
-- 如无充分理由，不要为新的选择器额外发明一套选中色、选中徽标或强调色。
-- 同一界面里如果已经有成熟的选择样式，新组件默认向它对齐，避免一个页面出现多套“选中态”颜色系统。
-
-聊天区改动默认先做防回归自检。
-- 不要为了去掉视觉瑕疵而隐藏已有控件；先保住能力，再修样式。
-- 改聊天区时，`context` 入口、hover 摘要、click 展开、消息发送、思考展示这几条要一起回归，不能修一个丢一个。
-- `context` 必须是用户可控能力，不准只做自动黑盒压缩；后续要预留手动 `compact` 入口。
-- 手动 `compact` 的职责属于 context 管理链路，不属于纯 UI；UI 负责触发，真正压缩发生在 Agent Core / context 层。
-- 底部 `context` 入口固定为圆形进度环；无 usage 时也要显示，按 `0%` 灰色空环处理，不要隐藏，也不要改成纯文本。
-- hover `context` 时，底部圆环本体必须仍然可见；hover 只负责展示紧凑摘要，click 后仍要能展开更大的详情卡片，二者不能互相打架。
-- `context` 浮层在浅色模式下不要用发黑、发重的阴影；深色模式才允许更重一点的阴影。
-- 聊天区新增或调整选择态时，默认对齐模型选择器已有的选中底色，不要再发明新的选中色。
-- 分支切换器默认走缓存，不要每次点击都重新查询；切换或创建分支成功后再刷新缓存和 git snapshot。
-- 聊天链路改动后，要确认 assistant 的最终 `text` 和最终 `thinking` 都能在 `message_end` 兜底恢复，不能只依赖流式 delta。
-- OpenAI-compatible / DashScope 兼容层改动后，至少验证一次真实聊天发送，避免再出现 `400` 或“发了没反应”。
-- 图片附件必须真实进入 agent 的多模态消息，不能只停留在 UI 占位；模型明确不支持视觉时，要在发送前拦截并提示。
-- 中断审批恢复、内部续写提示、runtime 诊断文案只走内部链路；用户可见聊天消息、重试动作、恢复动作统一展示产品级文案，不展示 `sessionId`、`runId`、`payloadHash` 这类内部字段。
-- 引导消息和“下一条继续说”统一走正式队列模型；主进程负责 FIFO、抢占置顶、run 结束后续发，`pendingRedirectDraft` 这类单条临时草稿语义只保留迁移兼容职责。
-- 交付前至少手动确认：纯文本聊天能发、`思考` 还能显示、`context` 圆环与 hover/展开都在、`0%` 灰环正常、分支切换器选中态和缓存正常。
-
-跨面板状态同步默认集中治理。`新增：2026-05-13 14:32:00`
-- 聊天 session、附件、Browser context、Browser marker、右侧 panel 这类跨组件共享状态，默认先找唯一事实源。
-- 删除、保存、切换 session、清空 context 时，要同步所有派生 UI；聊天里的 context / attachment chip 和 Browser panel 里的 marker 必须联动。
-- 后续若同类同步继续增多，优先评估引入 Zustand store 或等价轻量状态层，把 session 附件、browser context、panel interaction state 从局部组件 state 中收拢。
-- 引入全局 store 时要先划清职责：持久化仍走 session service，store 负责 renderer 内同步、selector 和派生状态，不把主进程持久化逻辑混进 UI store。
-- Renderer 大范围共享状态默认使用 Zustand store；新增跨 session、跨 panel、跨聊天 / Browser / settings 的状态时，先进入 `src/renderer/src/stores/`，组件内只保留局部交互 state。
-- Zustand store 只负责 renderer 同步和派生 selector；IPC 持久化、主进程服务和磁盘写入继续由对应 service/action 编排。
-
-聊天默认语气保持克制与尊重。`新增：2026-04-10 23:20:43`
-- 用户明确不接受“黑化”、毒舌、阴阳怪气或带冒犯感的表达。
-- 无论使用中文还是英文，默认都保持中性、礼貌、直接，不主动切换到攻击性或嘲讽式语气。
-- 即使发生 context 压缩、summary 丢失、session 切换或续聊失败，也不能把这条偏好当成可丢弃信息。
-- 若用户单次想要更强烈的玩笑或吐槽风格，也必须先得到明确授权，不能自行推断。
+- 检索、扫描、批量处理优先使用快工具或成熟现成包，不为了语言统一牺牲性能。
+- 搜索类能力交付前要做真实烟测；不能只看类型或静态检查。
+- 代码改动保持小范围、贴合现有架构；不要顺手做无关重构。
+- 遇到用户正在进行的本地改动，默认保留并协作，不要回滚未确认的变更。
