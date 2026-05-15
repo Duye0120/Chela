@@ -432,7 +432,7 @@ function InstalledSkillRow({
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-4">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] text-muted-foreground">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-[var(--radius-shell)] bg-[color:var(--color-skill-bg)] text-[color:var(--color-skill)]">
             <Squares2X2Icon className="size-4" />
           </div>
 
@@ -459,9 +459,9 @@ function InstalledSkillRow({
                 {skill.usageTargets.map((target) => (
                   <span
                     key={`${skill.id}:${target.entryPointId}`}
-                    className="inline-flex items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-2 py-1 text-[10px] text-muted-foreground shadow-[var(--color-control-shadow)]"
+                    className="inline-flex items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-skill-bg)] px-2 py-1 text-[10px] text-[color:var(--color-skill-text)] shadow-[var(--color-control-shadow)]"
                   >
-                    <SparklesIcon className="size-3.5" />
+                    <SparklesIcon className="size-3.5 text-[color:var(--color-skill)]" />
                     <span>{target.label}</span>
                   </span>
                 ))}
