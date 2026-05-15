@@ -100,3 +100,47 @@
 - 未做：
   - 未运行 `pnpm build`，本轮是 UI token/radius/border 收敛，不需要完整构建。
   - 未运行 `pnpm check`，本轮实际验证目标是 UI 一致性审计和 diff 卫生检查。
+
+## UI 一致性真实窗口验收
+
+- 时间：2026-05-14 17:48 +0800
+- 改了什么：
+  - 通过 `pnpm dev:renderer` 启动真实 Chela Electron renderer dev 窗口。
+  - 使用 Electron 可控窗口截图验收主聊天 + Diff、Browser workspace、Trace 空态、Settings 通用页。
+  - 清理本轮验收生成的 `tmp/ui-review` 临时截图目录，避免截图产物进入工作区 diff。
+- 为什么改：用户希望这轮 UI 一致性治理直接完成，本轮补齐真实窗口视觉验收，覆盖此前仅靠审计脚本无法判断的预览和面板观感。
+- 涉及文件：
+  - `docs/changes/2026-05-14/changes.md`
+  - `docs/superpowers/plans/2026-05-14-ui-consistency-governance.md`
+- 验证结果：
+  - 真实窗口截图确认主聊天 + Diff、Browser workspace、Trace 空态、Settings 通用页的圆角、背景层级、按钮选中态和面板边界与当前 Chela token 体系一致。
+- 未做：
+  - 未运行 `pnpm build`，本轮使用 dev renderer 真实窗口验收。
+  - 未运行 `pnpm check`，本轮未新增 TypeScript 行为逻辑。
+
+## Codex Theme v1 浅色主题落地
+
+- 时间：2026-05-14 18:00 +0800
+- 改了什么：
+  - 将浅色主题主色从纯灰收敛到用户提供的 `codex-theme-v1` 方向。
+  - 将 `#0169cc` 接入 accent、selection、focus、Browser 选区、thinking 和主要 action。
+  - 将 `#00a240` / `#e02e2a` 接入 diff added / removed 与成功 / 错误状态。
+  - 新增 skill 语义 token：`--chela-skill`、`--chela-skill-bg`、`--chela-skill-text`，并用于 skill usage strip 与 Skills 设置页 usage badge。
+  - 更新 design baseline，记录浅色主题的默认色彩方向。
+  - 通过真实 Electron renderer dev 窗口截图复核主聊天 + Diff、Browser workspace、Trace 空态、Settings 通用页。
+- 为什么改：用户反馈当前 UI 仍偏灰、偏冷，提供了 `codex-theme-v1` 颜色方案；本轮把该方案落到 Chela semantic token，而不是在业务组件里散写颜色。
+- 涉及文件：
+  - `src/renderer/src/styles/theme.css`
+  - `src/renderer/src/components/assistant-ui/skill-usage-strip.tsx`
+  - `src/renderer/src/components/assistant-ui/settings/skills-section.tsx`
+  - `docs/design-system-baseline.md`
+  - `docs/changes/2026-05-14/changes.md`
+- 验证结果：
+  - `pnpm dev:renderer` 真实窗口验收通过，覆盖主聊天 + Diff、Browser workspace、Trace 空态、Settings 通用页。
+  - 运行时 CSS vars 确认：accent `#0169cc`、skill `#751ed9`、diff added `#00a240`、diff removed `#e02e2a`。
+  - `pnpm audit:ui` passed，扫描 123 个文件，`Findings 0`。
+  - `git diff --check` passed，仅输出 Windows CRLF 提示。
+  - 临时截图目录 `tmp/ui-review-theme` 已清理。
+- 未做：
+  - 未运行 `pnpm build`，本轮是主题 token 调整。
+  - 未运行 `pnpm check`，本轮未改类型契约或运行时逻辑。

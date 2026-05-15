@@ -1,6 +1,6 @@
 # Design System Baseline
 
-> 更新时间：2026-04-10 23:38:24
+> 更新时间：2026-05-14 18:00 +0800
 
 ## 目标
 
@@ -13,6 +13,7 @@
 - 用户给出的 [awesome-design-systems](https://github.com/alexpate/awesome-design-systems) 是设计系统案例索引，不是可直接安装的 npm 包
 - 当前项目已经具备 `Chela + 语义 token + 深浅主题 + shadcn` 组件基础，更适合补齐本地 baseline，而不是强接外部框架
 - 项目现有长期约束已经明确：谨慎使用 border、统一选择态视觉语言、优先用背景层级和留白表达结构
+- 2026-05-14 起，默认浅色主题采用 `codex-theme-v1` 方向：白色 surface、`#0d0d0d` ink、`#0169cc` accent、`#00a240` diff added、`#e02e2a` diff removed、`#751ed9` skill
 
 ## 当前落地
 
@@ -21,6 +22,9 @@
 - `src/renderer/src/styles/theme.css`
 - 统一维护颜色、圆角、阴影、焦点态和动效 token
 - 以 `Chela` 主题 token 为底座，再补 `selection / focus / shadow / radius / motion` 基础变量，供后续组件复用
+- 浅色主题的 accent、selection、focus、browser selection、thinking、primary action 默认走 `#0169cc`
+- diff added / removed 默认走 `#00a240` / `#e02e2a`
+- skill 语义默认走独立紫色 token：`--chela-skill`、`--chela-skill-bg`、`--chela-skill-text`
 
 ### Tailwind Mapping
 

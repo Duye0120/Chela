@@ -45,3 +45,5 @@
 - 已把一致性契约沉淀到 `docs/design-system-baseline.md` 与 `chela-ui-guidelines` skill。
 - 2026-05-14 14:22 +0800：`pnpm audit:ui` 已归零，产品 UI 漂移从 212 个收敛到 0 个。
 - 合法例外已写进审计脚本：theme token 源、Tailwind token 映射、webview inspector 注入样式、头像圆形、markdown 内容分隔、diff 分栏线。
+- 2026-05-14 17:48 +0800：已完成真实 Electron renderer dev 窗口视觉验收，覆盖主聊天 + Diff、Browser workspace、Trace 空态、Settings 通用页；验收截图已作为临时产物清理。
+- 2026-05-14 18:07 +0800：已落地 `codex-theme-v1` 浅色主题方向，真实窗口确认 accent `#0169cc`、skill `#751ed9`、diff added `#00a240`、diff removed `#e02e2a` 生效。
