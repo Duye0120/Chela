@@ -1,0 +1,35 @@
+## pi-mono 依赖升级与当前口径收口
+
+- 时间：2026-05-29 11:08 +0800
+- 改了什么：
+  - 将项目运行时依赖从旧 `@mariozechner/*` 命名空间切到 `@earendil-works/pi-agent-core@0.77.0` 与 `@earendil-works/pi-ai@0.77.0`。
+  - 同步 `package.json` Node engine 到 `>=22.19 <23`，对齐 pi-mono 0.77.0 的运行要求和仓库 `.node-version` / `.nvmrc`。
+  - 修正 pi-mono 0.77.0 的 API / 类型兼容点，包括 `Agent.state` 写入、工具调用窄化、harness 工具返回类型、MCP 参数边界和 session 恢复状态字段。
+  - 更新 About 设置页、README、CLAUDE 和当前架构 spec 的运行时描述，统一写成 pi-mono / `@earendil-works` 包。
+  - 将 `src/shared/agent-events.ts` 注释中的旧 `pi-agent-core` 口径更新为 pi-mono agent。
+- 为什么改：旧 Python 主运行时已经舍弃，当前项目主链路回到 pi-mono agent；依赖、用户可见信息和当前文档需要统一到最新包名与版本。
+- 涉及文件：
+  - `package.json`
+  - `pnpm-lock.yaml`
+  - `src/main/**`
+  - `src/mcp/adapter.ts`
+  - `src/shared/agent-events.ts`
+  - `src/renderer/src/components/assistant-ui/settings/about-section.tsx`
+  - `README.md`
+  - `CLAUDE.md`
+  - `specs/01-overview.md`
+  - `specs/03-agent-core.md`
+  - `docs/backend-architecture-blueprint.md`
+  - `docs/harness-architecture-baseline.md`
+- 验证结果：
+  - `pnpm view @earendil-works/pi-agent-core version` -> `0.77.0`。
+  - `pnpm view @earendil-works/pi-ai version` -> `0.77.0`。
+  - `pnpm view pi-mono version` -> npm registry 404，当前可安装包名是 `@earendil-works/*`。
+  - `pnpm install` 通过，依赖解析到 `@earendil-works/pi-agent-core 0.77.0` 与 `@earendil-works/pi-ai 0.77.0`。
+  - `pnpm exec tsc --noEmit -p tsconfig.json` 通过。
+  - `pnpm exec tsc --noEmit -p tsconfig.renderer.json` 通过。
+  - `pnpm exec tsx tests/package-scripts-regression.test.ts` 通过。
+  - `pnpm exec tsx tests/doctor-regression.test.ts` 通过。
+  - `rg '@mariozechner|Engine: pi-agent-core|Phase 0: returns mock|mock reply|python_backend|python-runtime' --glob '!node_modules/**' --glob '!.hermes-tmp-node_modules/**'` 只剩历史 `docs/changes` 记录。
+- 未做：
+  - 未运行 `pnpm build`，原因是本次只需要依赖解析和最小类型/回归验证。

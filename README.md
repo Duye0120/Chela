@@ -4,7 +4,7 @@
 
 仓库目录目前可能还是 `first_pi_agent`，但从现在开始，**产品名 / 对外名称统一使用 `Chela`**。
 
-现在这个仓库已经从“最小 MCP demo”切到了 **桌面壳优先**：
+现在这个仓库已经切到 **Chela 桌面 Agent 工作台**：
 
 - `Electron`
 - `React`
@@ -27,7 +27,7 @@
 - 本地文件选择
 - 文本文件预览
 - 本地会话持久化
-- 本地 mock assistant 回复
+- pi-mono agent 回复
 
 这版还没接真实模型，但已经把将来接 agent 的接口位留好了。
 
@@ -40,8 +40,8 @@ Chela/
 │  ├─ preload/           # 安全桥接 API
 │  ├─ renderer/          # React UI
 │  ├─ shared/            # 主进程 / 渲染进程共享类型
-│  ├─ chatgpt/           # 旧 MCP ChatGPT App 入口（保留）
-│  ├─ agent/             # 旧 agent 逻辑（保留）
+│  ├─ main/chat/         # 聊天 run 编排
+│  ├─ main/agent.ts      # pi-mono agent 装配
 │  ├─ tools/
 │  ├─ config.ts
 │  └─ main.ts            # 旧 CLI demo
@@ -82,17 +82,6 @@ pnpm build
 pnpm start
 ```
 
-## 兼容入口
-
-旧入口还保留着，方便你后面继续迁：
-
-- `pnpm demo:cli`
-  运行原来的命令行 pi-agent demo
-- `pnpm mcp:dev`
-  运行原来的 MCP ChatGPT App 开发服务
-- `pnpm mcp:start`
-  直接启动原来的 MCP 服务
-
 ## v1 已打通的能力
 
 ### 1. 桌面 UI
@@ -118,16 +107,7 @@ pnpm start
 
 ### 4. agent 接口位
 
-当前 `chat.send(...)` 先返回本地 mock 回复。
-
-后续你只要把这条链路替换成：
-
-- 本地 agent
-- 远程模型
-- MCP tool orchestration
-- 自己的 Electron 本地能力编排
-
-整个桌面壳就能继续长功能。
+当前 `chat.send(...)` 会进入 `src/main/chat/*`，创建 run 后调用 `src/main/agent.ts` 里的 pi-mono agent。
 
 ## preload 暴露给 React 的能力
 
@@ -156,10 +136,9 @@ window.desktopApi
 
 ## 后续最适合做什么
 
-1. 把 `chat.send()` 从 mock 改成真实 agent 调用
-2. 给右侧面板接入 tool 调用流 / agent 步骤流
-3. 把“选择文件”升级成“工作区浏览”
-4. 把旧的 `pi-agent-core` 逻辑迁入 Electron 主进程或本地服务层
+1. 继续收紧 Harness approval / recovery 链路
+2. 给右侧面板补齐 tool 调用流 / agent 步骤流
+3. 强化工作区浏览和上下文选择
 
 ## 常见问题
 

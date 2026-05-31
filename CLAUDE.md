@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Electron desktop chat workbench (Codex-style) — the host shell for a future AI agent. Currently uses mock assistant replies; real agent integration is the next phase. UI and all text are in Chinese.
+Electron desktop chat workbench (Codex-style) running the Chela agent on pi-mono packages. UI and all text are in Chinese.
 
 ## Commands
 
@@ -15,8 +15,6 @@ pnpm dev                # Launch Electron app in dev mode (hot reload)
 pnpm build              # Production build
 pnpm start              # Preview built app
 pnpm check              # Type-check both main and renderer tsconfigs
-pnpm demo:cli           # Run legacy CLI agent demo
-pnpm mcp:dev            # Run legacy MCP ChatGPT app (watch mode)
 ```
 
 If `pnpm dev` fails with "Electron uninstall", run `node node_modules/electron/install.js` or `pnpm approve-builds`.
@@ -41,18 +39,18 @@ Main Process (src/main/)       ── IPC ──  Preload (src/preload/)  ──
 
 ### Key Integration Point
 
-`src/main/index.ts` handles `chat:send` IPC — currently calls `buildMockAssistantReply()` from `src/main/mockChat.ts`. Replace this with real agent/model calls.
+`src/main/ipc/chat.ts` handles `chat:send` IPC and routes through `src/main/chat/*` into `src/main/agent.ts`.
 
 ### State Persistence
 
 Sessions, messages, drafts, attachments, and UI state are stored as JSON at `${app.getPath('userData')}/desktop-shell-state.json` via `src/main/store.ts`.
 
-### Legacy Code (preserved for migration)
+### Agent Runtime
 
-- `src/agent/` — pi-agent-core agent factory
-- `src/tools/` — example agent tools
-- `src/chatgpt/` — MCP ChatGPT app server
-- `src/main.ts` / `src/config.ts` — CLI demo entry and BYOK config
+- `src/main/agent.ts` — pi-mono agent factory and lifecycle
+- `src/main/chat/` — chat run prepare / execute / finalize orchestration
+- `src/main/tools/` — Chela built-in tools
+- `src/mcp/` — MCP client and tool adapter
 
 ## Conventions
 

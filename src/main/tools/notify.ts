@@ -1,6 +1,6 @@
 import { Notification } from "electron";
-import type { AgentTool } from "@mariozechner/pi-agent-core";
-import { Type } from "@mariozechner/pi-ai";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { Type } from "@earendil-works/pi-ai";
 import { BUS_EVENTS, bus } from "../event-bus.js";
 
 const parameters = Type.Object({

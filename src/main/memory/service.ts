@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { completeSimple, type TextContent } from "@mariozechner/pi-ai";
+import { completeSimple, type TextContent } from "@earendil-works/pi-ai";
 import type { MemoryStats } from "../../shared/contracts.js";
 import { executeBackgroundRun } from "../background-run.js";
 import { appLogger } from "../logger.js";

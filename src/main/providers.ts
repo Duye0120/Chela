@@ -2,7 +2,7 @@ import { app, safeStorage } from "electron";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { completeSimple, getModel, type Model } from "@mariozechner/pi-ai";
+import { completeSimple, getModel, type Model } from "@earendil-works/pi-ai";
 import type {
   ModelCapabilities,
   ModelCapabilitiesOverride,

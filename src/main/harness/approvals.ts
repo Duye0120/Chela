@@ -8,6 +8,28 @@ import type {
 import { buildInterruptedApprovalRecoveryPrompt } from "../../shared/interrupted-approval-recovery.js";
 import { harnessRuntime } from "./singleton.js";
 import { appendRunRecoveryRequestedEvent } from "../session/service.js";
+import type { InterruptedApprovalRecord } from "./types.js";
+
+function toInterruptedApprovalPromptInput(
+  record: InterruptedApprovalRecord,
+): Omit<InterruptedApprovalNotice, "recoveryPrompt"> {
+  return {
+    sessionId: record.sessionId,
+    runId: record.runId,
+    ownerId: record.ownerId,
+    modelEntryId: record.modelEntryId ?? null,
+    runKind: record.runKind ?? null,
+    runSource: record.runSource ?? null,
+    lane: record.lane ?? null,
+    state: record.state ?? null,
+    startedAt: record.startedAt ?? null,
+    currentStepId: record.currentStepId ?? null,
+    canResume: record.canResume ?? true,
+    recoveryStatus: record.recoveryStatus ?? "interrupted",
+    interruptedAt: record.interruptedAt,
+    approval: record.approval,
+  };
+}
 
 export function listPendingApprovalGroups(
   sessionId?: string,
@@ -77,20 +99,7 @@ export function listInterruptedApprovals(
     .getInterruptedApprovals(sessionId)
     .map((record) => {
       const noticeWithoutPrompt = {
-        sessionId: record.sessionId,
-        runId: record.runId,
-        ownerId: record.ownerId,
-        modelEntryId: record.modelEntryId ?? null,
-        runKind: record.runKind ?? null,
-        runSource: record.runSource ?? null,
-        lane: record.lane ?? null,
-        state: record.state ?? null,
-        startedAt: record.startedAt ?? null,
-        currentStepId: record.currentStepId ?? null,
-        canResume: record.canResume ?? true,
-        recoveryStatus: record.recoveryStatus ?? "interrupted",
-        interruptedAt: record.interruptedAt,
-        approval: record.approval,
+        ...toInterruptedApprovalPromptInput(record),
       } satisfies Omit<InterruptedApprovalNotice, "recoveryPrompt">;
 
       return {
@@ -153,7 +162,9 @@ export function resumeInterruptedApproval(runId: string): string {
       sessionId: approval.sessionId,
       runId: approval.runId,
       resumedRunId,
-      recoveryPrompt: buildInterruptedApprovalRecoveryPrompt(approval),
+      recoveryPrompt: buildInterruptedApprovalRecoveryPrompt(
+        toInterruptedApprovalPromptInput(approval),
+      ),
       source: "interrupted_approval",
     });
   }

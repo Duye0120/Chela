@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { dialog, type BrowserWindow } from "electron";
-import type { AgentEvent as CoreAgentEvent } from "@mariozechner/pi-agent-core";
+import type { AgentEvent as CoreAgentEvent } from "@earendil-works/pi-agent-core";
 import type {
   AgentEvent,
   AgentEventScope,

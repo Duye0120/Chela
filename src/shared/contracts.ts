@@ -1369,7 +1369,7 @@ export type DesktopApi = {
     delete: (groupId: string) => Promise<void>;
   };
   chat: {
-    /** Phase 0: returns mock reply. Phase 1+: returns void, response comes via agent.onEvent */
+    /** Sends through the Chela agent; response streams via agent.onEvent. */
     send: (input: SendMessageInput) => Promise<AssistantMessage | void>;
     trimSessionMessages: (input: TrimSessionMessagesInput) => Promise<void>;
     enqueueQueuedMessage: (input: EnqueueQueuedMessageInput) => Promise<QueuedMessage>;

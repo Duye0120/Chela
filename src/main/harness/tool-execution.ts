@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { ElectronAdapter } from "../adapter.js";
 import { BUS_EVENTS, bus } from "../event-bus.js";
 import { parallelManager, SIDE_EFFECT_FREE_TOOLS } from "../parallel-tools.js";
@@ -102,7 +102,7 @@ async function executeWithHarness(
   args: Record<string, unknown>,
   signal?: AbortSignal,
   onUpdate?: (update: any) => void,
-) {
+): Promise<AgentToolResult<any>> {
   const runScope = ensureRunScope(context.runtime, context.getRunScope);
   const adapter = context.getAdapter();
   context.runtime.assertRunActive(runScope);

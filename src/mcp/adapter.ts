@@ -1,5 +1,5 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
-import { Type } from "@mariozechner/pi-ai";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { Type } from "@earendil-works/pi-ai";
 import type { McpConnection, McpConnectionManager } from "./client.js";
 import { normalizeMcpIdentifier } from "./config.js";
 
@@ -42,6 +42,7 @@ function mcpToolToAgentTool(
     description: tool.description ?? `MCP 工具: ${tool.name}（来自 ${conn.name}）`,
     parameters,
     async execute(_toolCallId, params) {
+      const toolParams = asMcpToolParams(params);
       if (!conn.connected) {
         return {
           content: [{ type: "text", text: `MCP 服务 ${conn.name} 已断开连接` }],
@@ -52,7 +53,7 @@ function mcpToolToAgentTool(
       try {
         const result = await conn.client.callTool({
           name: tool.name,
-          arguments: params.args ?? {},
+          arguments: asMcpToolArgs(toolParams.args),
         });
 
         // Extract text from content blocks
@@ -142,7 +143,8 @@ export function getMcpResourceTools(
     description: "列出已连接 MCP server 暴露的资源。",
     parameters: listMcpResourcesParameters,
     async execute(_toolCallId, params) {
-      const connections = getConnectionsForServer(manager, params.server);
+      const toolParams = asListMcpResourcesParams(params);
+      const connections = getConnectionsForServer(manager, toolParams.server);
       if (connections.length === 0) {
         return {
           content: [{ type: "text", text: JSON.stringify({ resources: [], error: "当前没有可用的 MCP 资源服务。" }, null, 2) }],
@@ -196,36 +198,37 @@ export function getMcpResourceTools(
     description: "读取指定 MCP 资源的内容。",
     parameters: readMcpResourceParameters,
     async execute(_toolCallId, params) {
-      const connection = manager.getConnection(params.server);
+      const toolParams = asReadMcpResourceParams(params);
+      const connection = manager.getConnection(toolParams.server);
       if (!connection) {
         return {
-          content: [{ type: "text", text: JSON.stringify({ server: params.server, uri: params.uri, error: `MCP 服务不存在或未连接: ${params.server}` }, null, 2) }],
-          details: { server: params.server, uri: params.uri, contents: [] },
+          content: [{ type: "text", text: JSON.stringify({ server: toolParams.server, uri: toolParams.uri, error: `MCP 服务不存在或未连接: ${toolParams.server}` }, null, 2) }],
+          details: { server: toolParams.server, uri: toolParams.uri, contents: [] },
         };
       }
 
       try {
-        const result = await connection.client.readResource({ uri: params.uri });
+        const result = await connection.client.readResource({ uri: toolParams.uri });
         return {
           content: [{
             type: "text",
             text: JSON.stringify({
-              server: params.server,
-              uri: params.uri,
+              server: toolParams.server,
+              uri: toolParams.uri,
               contents: result.contents,
             }, null, 2),
           }],
           details: {
-            server: params.server,
-            uri: params.uri,
+            server: toolParams.server,
+            uri: toolParams.uri,
             contents: result.contents,
           },
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : "读取资源失败";
         return {
-          content: [{ type: "text", text: JSON.stringify({ server: params.server, uri: params.uri, error: message }, null, 2) }],
-          details: { server: params.server, uri: params.uri, contents: [], error: message },
+          content: [{ type: "text", text: JSON.stringify({ server: toolParams.server, uri: toolParams.uri, error: message }, null, 2) }],
+          details: { server: toolParams.server, uri: toolParams.uri, contents: [], error: message },
         };
       }
     },
@@ -237,7 +240,8 @@ export function getMcpResourceTools(
     description: "列出已连接 MCP server 暴露的资源模板。",
     parameters: listMcpResourceTemplatesParameters,
     async execute(_toolCallId, params) {
-      const connections = getConnectionsForServer(manager, params.server);
+      const toolParams = asListMcpResourcesParams(params);
+      const connections = getConnectionsForServer(manager, toolParams.server);
       if (connections.length === 0) {
         return {
           content: [{ type: "text", text: JSON.stringify({ templates: [], error: "当前没有可用的 MCP 资源模板服务。" }, null, 2) }],
@@ -291,7 +295,10 @@ export function getMcpResourceTools(
       name: "ListMcpResources",
       label: "列出 MCP 资源",
       async execute(toolCallId, params) {
-        return listMcpResourcesTool.execute(toolCallId, params);
+        return listMcpResourcesTool.execute(
+          toolCallId,
+          asListMcpResourcesParams(params),
+        );
       },
     },
     readMcpResourceTool,
@@ -300,7 +307,10 @@ export function getMcpResourceTools(
       name: "ReadMcpResource",
       label: "读取 MCP 资源",
       async execute(toolCallId, params) {
-        return readMcpResourceTool.execute(toolCallId, params);
+        return readMcpResourceTool.execute(
+          toolCallId,
+          asReadMcpResourceParams(params),
+        );
       },
     },
     listMcpResourceTemplatesTool,
@@ -322,6 +332,41 @@ const mcpBrokerParameters = Type.Object({
   includeSchema: Type.Optional(Type.Boolean({ description: "list 时是否包含压缩后的 inputSchema，默认 true" })),
   args: Type.Optional(Type.Any({ description: "调用 MCP 工具时传入的 JSON 参数" })),
 });
+
+type McpToolParams = {
+  args?: unknown;
+};
+
+type ListMcpResourcesParams = {
+  server?: string;
+};
+
+type ReadMcpResourceParams = {
+  server: string;
+  uri: string;
+};
+
+function asMcpToolParams(params: unknown): McpToolParams {
+  return params && typeof params === "object"
+    ? params as McpToolParams
+    : {};
+}
+
+function asMcpToolArgs(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function asListMcpResourcesParams(params: unknown): ListMcpResourcesParams {
+  return params && typeof params === "object"
+    ? params as ListMcpResourcesParams
+    : {};
+}
+
+function asReadMcpResourceParams(params: unknown): ReadMcpResourceParams {
+  return params as ReadMcpResourceParams;
+}
 
 type McpBrokerDetails = {
   action: "list" | "call";

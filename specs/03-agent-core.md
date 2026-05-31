@@ -37,9 +37,9 @@ Agent Core 不关心 UI 长什么样，也不直接碰高风险副作用。它�
 
 Harness 负责“这次 run 处于什么状态、能不能继续、要不要审批、怎么落盘”。
 
-## 3.2 技术选型：pi-agent-core
+## 3.2 技术选型：pi-mono
 
-我们不自己实现 agent loop，而是使用已安装的 `@mariozechner/pi-agent-core`。
+我们使用 pi-mono 发布的 `@earendil-works/pi-agent-core` 与 `@earendil-works/pi-ai`。
 
 ### 它帮我们做了什么
 
@@ -249,7 +249,7 @@ LLM 有 context window 限制（比如 Claude 200K、GPT-4o 128K）。但即使�
 transformContext(messages, signal) → 精简后的 messages
 ```
 
-执行时机：每轮 LLM 调用前（pi-agent-core 自动调用）。
+执行时机：每轮 LLM 调用前（pi-mono agent 自动调用）。
 
 **Step 1: 计算 token 预算**
 ```
@@ -312,7 +312,7 @@ pi-ai 支持的 provider 包括：OpenAI、Anthropic、Google、DeepSeek、Mistr
 
 ## 3.7 流式事件与前端桥接
 
-pi-agent-core 的 Agent 通过 `subscribe` 发出事件，我们需要通过 Electron IPC 转发给前端。
+pi-mono Agent 通过 `subscribe` 发出事件，我们需要通过 Electron IPC 转发给前端。
 
 ### 事件类型
 
@@ -387,8 +387,8 @@ context 过长
 
 | 错误场景 | 处理方式 |
 |---------|---------|
-| LLM API 调用失败（网络/限流） | pi-agent-core 内置重试机制（指数退避） |
-| LLM 返回格式异常 | pi-agent-core 自动重试一次 |
+| LLM API 调用失败（网络/限流） | pi-mono 内置重试机制（指数退避） |
+| LLM 返回格式异常 | pi-mono 自动重试一次 |
 | 工具参数校验失败 | 错误信息喂回 LLM，让它修正参数重试 |
 | 工具执行失败 | 错误信息喂回 LLM，让它决定重试还是换方案 |
 | Token 超限 | transformContext 自动压缩，压缩失败则告知用户"对话太长，建议新建会话" |

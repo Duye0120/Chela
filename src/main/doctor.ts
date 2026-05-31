@@ -185,8 +185,8 @@ export async function runDoctor(projectRoot = process.cwd()): Promise<DoctorSumm
     checkNativeModule("node-pty", "node-pty"),
     checkResolvableDependency("electron", "Electron"),
     checkResolvableDependency("electron-vite", "electron-vite"),
-    checkResolvableDependency("@mariozechner/pi-agent-core", "pi-agent-core"),
-    checkResolvableDependency("@mariozechner/pi-ai", "pi-ai"),
+    checkResolvableDependency("@earendil-works/pi-agent-core", "pi-agent-core"),
+    checkResolvableDependency("@earendil-works/pi-ai", "pi-ai"),
     checkResolvableDependency("@modelcontextprotocol/sdk", "MCP SDK"),
   ];
 
