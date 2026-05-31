@@ -62,7 +62,7 @@
 |---|---|---|---|
 | Adapter | IPC、事件桥接、确认入口 | `src/preload/` `src/main/adapter.ts` `src/shared/ipc.ts` `src/shared/agent-events.ts` | 已有 |
 | Harness Runtime | run 生命周期、policy、tool gate、audit、活动 run 持久化 | `src/main/harness/` | 已起骨架 |
-| Agent Core | pi-agent-core 封装、system prompt、消息适配、模型装配 | `src/main/agent.ts` `src/main/chat-message-adapter.ts` `src/main/soul.ts` | 部分完成 |
+| Agent Core | pi-mono 封装、system prompt、消息适配、模型装配 | `src/main/agent.ts` `src/main/chat-message-adapter.ts` `src/main/soul.ts` | 部分完成 |
 | Capability Ports | 内置工具、MCP 工具、系统能力调用 | `src/main/tools/` `src/mcp/` `src/tools/getTime.ts` | 已有 |
 | Data / Security | session/settings/providers/git/files/terminal/security | `src/main/store.ts` `src/main/settings.ts` `src/main/providers.ts` `src/main/security.ts` 等 | 已有 |
 

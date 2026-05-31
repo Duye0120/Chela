@@ -9,7 +9,7 @@ export function AboutSection() {
 
       <SettingsRow label="运行时" hint="前后端主要技术栈。">
         <div className="rounded-[var(--radius-shell)] border border-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] px-4 py-3 text-[12px] leading-6 text-muted-foreground shadow-[var(--color-control-shadow)]">
-          <p>Engine: pi-agent-core</p>
+          <p>Engine: pi-mono (@earendil-works/pi-agent-core 0.77.0)</p>
           <p>Runtime: Electron</p>
           <p>UI: React 19 + Tailwind CSS 4</p>
         </div>

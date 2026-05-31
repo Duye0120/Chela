@@ -15,6 +15,7 @@ import type {
   HarnessAuditEvent,
   HarnessRunLane,
   HarnessPendingApproval,
+  HarnessPolicyEvaluation,
   HarnessRunScope,
   HarnessRunSnapshot,
   HarnessRunState,
@@ -520,12 +521,7 @@ export class HarnessRuntime {
 
   recordToolPolicyEvaluation(
     scope: HarnessRunScope,
-    evaluation: {
-      toolName: string;
-      riskLevel: string;
-      decision: { type: string; reason?: string };
-      metadata?: Record<string, unknown>;
-    },
+    evaluation: HarnessPolicyEvaluation,
     metadata?: Record<string, unknown>,
   ): void {
     const run = this.getActiveRun(scope);

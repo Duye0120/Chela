@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 export const DEFAULT_MAX_AGENT_TOOL_CALL_TURNS = 12;
 

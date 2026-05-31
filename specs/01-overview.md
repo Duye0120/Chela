@@ -44,7 +44,7 @@ OpenClaw 在 2026 年初爆火（60 天 247k GitHub stars），证明了个人 A
 │  Agent Core（大脑）                                │
 │                                                   │
 │  职责：接收消息 → 思考 → 调用工具 → 继续思考 → 回复 │
-│  引擎：pi-agent-core（ReAct Loop）                 │
+│  引擎：pi-mono / @earendil-works/pi-agent-core    │
 │  能力：上下文管理、流式输出、BYOK 多 Provider       │
 ├──────────────────────────────────────────────────┤
 │  工具层（手和脚）                                   │
@@ -102,7 +102,7 @@ Harness 是夹在 Adapter、Agent Core、Tool System 之间的执行约束层，
 
 | 层 | 技术 | 状态 |
 |----|------|------|
-| Agent 引擎 | pi-agent-core + pi-ai (v0.56.2) | 已安装 |
+| Agent 引擎 | pi-mono：@earendil-works/pi-agent-core + @earendil-works/pi-ai (v0.77.0) | 已安装 |
 | 桌面框架 | Electron 41 | 已有 |
 | 前端 | React 19 + TypeScript | 已有 |
 | UI 组件 | HeroUI + Headless UI + Heroicons | 已有 |
@@ -121,7 +121,7 @@ Agent 面临的核心工程挑战：LLM 的 context window 有限，塞太多信
 我们用三个机制控制上下文质量：
 
 **第一板斧：transformContext 钩子**
-pi-agent-core 提供的钩子，每轮 LLM 调用前自动执行。当 token 超预算时，把早期对话压缩成摘要，保留最近 N 轮原文，注入检索到的长期记忆。
+pi-mono agent 提供的钩子，每轮 LLM 调用前自动执行。当 token 超预算时，把早期对话压缩成摘要，保留最近 N 轮原文，注入检索到的长期记忆。
 
 **第二板斧：工具结果裁剪**
 工具返回时就控制数据量。比如 file_read 读了一个 5000 行文件，不全塞进 context，而是截断+提示"文件共 5000 行，已截断"。
@@ -152,7 +152,7 @@ v2 规划中有更高级的方案（sub-agent 上下文蒸馏），但 v1 这三
 
 ### v1 做的
 
-- Harness 驱动的 Agent Core（pi-agent-core 集成 + 状态机 + 上下文管理）
+- Harness 驱动的 Agent Core（pi-mono 集成 + 状态机 + 上下文管理）
 - 5 个内置工具（file_read、file_write、shell_exec、web_fetch、memory_search）
 - MCP Client（配置文件驱动，能连能用）
 - 三层记忆系统（Soul 文件 + 长期 RAG + 会话记忆）

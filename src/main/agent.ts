@@ -1,5 +1,9 @@
-import { Agent } from "@mariozechner/pi-agent-core";
-import type { AgentEvent as CoreAgentEvent, AgentTool } from "@mariozechner/pi-agent-core";
+import { Agent } from "@earendil-works/pi-agent-core";
+import type {
+  AgentEvent as CoreAgentEvent,
+  AgentTool,
+  AgentToolCall,
+} from "@earendil-works/pi-agent-core";
 import type { ElectronAdapter } from "./adapter.js";
 import { PRIMARY_AGENT_OWNER } from "./agent-owners.js";
 import {
@@ -45,18 +49,11 @@ export interface AgentHandle {
   };
 }
 
-type CoreToolCallContent = {
-  type: "toolCall";
-  id: string;
-  name: string;
-  arguments?: Record<string, unknown>;
-};
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function isCoreToolCallContent(value: unknown): value is CoreToolCallContent {
+function isCoreToolCallContent(value: unknown): value is AgentToolCall {
   if (!isRecord(value)) {
     return false;
   }
@@ -69,7 +66,7 @@ function isCoreToolCallContent(value: unknown): value is CoreToolCallContent {
     return false;
   }
 
-  return value.arguments === undefined || isRecord(value.arguments);
+  return isRecord(value.arguments);
 }
 
 const handlesByOwner = new Map<string, AgentHandle>();
@@ -318,16 +315,14 @@ export async function promptAgent(
   text: string,
   attachments: SelectedFile[],
 ): Promise<void> {
-  handle.agent.setSystemPrompt(
-    await buildSystemPrompt({
-      workspacePath: handle.workspacePath,
-      sessionId: handle.sessionId,
-      latestUserText: text,
-      toolNames: handle.agent.state.tools.map((tool) => tool.name),
-      thinkingLevel: handle.thinkingLevel,
-      promptRuntime: handle.promptRuntime,
-    }),
-  );
+  handle.agent.state.systemPrompt = await buildSystemPrompt({
+    workspacePath: handle.workspacePath,
+    sessionId: handle.sessionId,
+    latestUserText: text,
+    toolNames: handle.agent.state.tools.map((tool) => tool.name),
+    thinkingLevel: handle.thinkingLevel,
+    promptRuntime: handle.promptRuntime,
+  });
   await handle.agent.prompt(
     await buildUserPromptMessage(
       text,
@@ -415,17 +410,15 @@ async function refreshHandleTools(handle: AgentHandle): Promise<void> {
     adapter: handle.adapter,
     getHandle: () => handleRef.current,
   });
-  handle.agent.setTools(tools);
-  handle.agent.setSystemPrompt(
-    await buildSystemPrompt({
-      workspacePath: handle.workspacePath,
-      sessionId: handle.sessionId,
-      latestUserText: null,
-      toolNames: tools.map((tool) => tool.name),
-      thinkingLevel: handle.thinkingLevel,
-      promptRuntime: handle.promptRuntime,
-    }),
-  );
+  handle.agent.state.tools = tools;
+  handle.agent.state.systemPrompt = await buildSystemPrompt({
+    workspacePath: handle.workspacePath,
+    sessionId: handle.sessionId,
+    latestUserText: null,
+    toolNames: tools.map((tool) => tool.name),
+    thinkingLevel: handle.thinkingLevel,
+    promptRuntime: handle.promptRuntime,
+  });
 }
 
 export async function reloadMcpConfigForActiveHandles(): Promise<McpServerStatus[]> {

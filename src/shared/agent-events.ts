@@ -2,7 +2,7 @@ import type { RunChangeSummary } from "./contracts.js";
 
 // ── Agent Event Types ──────────────────────────────────────────
 // Discriminated union of all events emitted by the agent engine
-// via IPC to the renderer. Maps 1:1 with pi-agent-core's subscribe events.
+// via IPC to the renderer. Maps 1:1 with pi-mono agent subscribe events.
 
 export type AgentEvent =
   | AgentStartEvent

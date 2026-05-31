@@ -2,17 +2,18 @@
 // Parallel Tool Execution — 无副作用工具的投机并行执行
 // ---------------------------------------------------------------------------
 //
-// pi-agent-core 的 agent-loop 按顺序执行工具（for + await）。
+// pi-mono agent-loop 按顺序执行工具（for + await）。
 // 本模块在不修改上游的前提下，对无副作用（只读）工具实现投机预执行：
 //
 // 流程：
 // 1. 监听 agent 事件，当 assistant 消息包含多个 toolCall 时注册批次
 // 2. 当第一个工具开始执行时，对其余只读工具启动并行预执行
 // 3. 预执行只做 I/O（跳过 harness 状态转换），结果缓存
-// 4. 当 pi-agent-core 的串行循环到达后续工具时，从缓存取结果
+// 4. 当 pi-mono 串行循环到达后续工具时，从缓存取结果
 // 5. harness 审批 + 状态转换仍在串行流程中完成，保证事件顺序
 // ---------------------------------------------------------------------------
 
+import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import { appLogger } from "./logger.js";
 
 // ---------------------------------------------------------------------------
@@ -43,16 +44,11 @@ interface BatchEntry {
   args: Record<string, unknown>;
 }
 
-interface ToolResult {
-  content: Array<{ type: string; text: string }>;
-  details?: Record<string, unknown>;
-}
-
 type ToolExecutor = (
   toolCallId: string,
   args: Record<string, unknown>,
   signal: AbortSignal,
-) => Promise<unknown>;
+) => Promise<AgentToolResult<any>>;
 
 // ---------------------------------------------------------------------------
 // ParallelExecutionManager
@@ -60,7 +56,7 @@ type ToolExecutor = (
 
 class ParallelExecutionManager {
   private batches = new Map<string, BatchEntry[]>();
-  private cache = new Map<string, Promise<unknown | null>>();
+  private cache = new Map<string, Promise<AgentToolResult<any> | null>>();
   private executors = new Map<string, ToolExecutor>();
   private activeSignals = new Map<string, AbortSignal>();
 
@@ -124,7 +120,7 @@ class ParallelExecutionManager {
   /**
    * 获取缓存的预执行结果
    */
-  async getCachedResult(toolCallId: string): Promise<unknown | null> {
+  async getCachedResult(toolCallId: string): Promise<AgentToolResult<any> | null> {
     const cached = this.cache.get(toolCallId);
     if (!cached) return null;
 

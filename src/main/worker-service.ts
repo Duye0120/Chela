@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { completeSimple, type TextContent, type ThinkingContent } from "@mariozechner/pi-ai";
+import { completeSimple, type TextContent, type ThinkingContent } from "@earendil-works/pi-ai";
 import type {
   CommitPlanGroup,
   GenerateCommitPlanRequest,

@@ -1,4 +1,4 @@
-import { completeSimple, type TextContent } from "@mariozechner/pi-ai";
+import { completeSimple, type TextContent } from "@earendil-works/pi-ai";
 import type {
   ChatMessage,
   ContextSummary,
@@ -752,12 +752,14 @@ function getRecoverableRun(events: SessionTranscriptEvent[]) {
       ? "上次运行失败，等待恢复。"
       : "上次运行已取消，等待恢复。");
   const failureKind = classifyRunFailureReason(reason);
+  const recoveryStatus: NonNullable<ContextSummary["recoverableRun"]>["recoveryStatus"] =
+    recoveryRequested ? "recovered" : "recoverable";
 
   return {
     runId: latestFinished.runId,
     reason,
     failureKind,
-    recoveryStatus: recoveryRequested ? "recovered" : "recoverable",
+    recoveryStatus,
     recoveryPrompt: buildRunRecoveryPrompt({
       runId: latestFinished.runId,
       finalState: latestFinished.finalState,
@@ -765,7 +767,7 @@ function getRecoverableRun(events: SessionTranscriptEvent[]) {
       latestToolFailure: latestToolFailure
         ? {
             toolName: latestToolFailure.toolName,
-            error: latestToolFailure.error,
+            error: latestToolFailure.error ?? "",
           }
         : null,
       todos,

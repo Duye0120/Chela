@@ -96161,7 +96161,7 @@ function AboutSection() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(SettingsCard, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsRow, { label: "应用", hint: "当前桌面应用版本。", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FieldInput, { value: "Chela v0.1.0-dev", readOnly: true }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsRow, { label: "运行时", hint: "前后端主要技术栈。", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[var(--radius-shell)] border border-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] px-4 py-3 text-[12px] leading-6 text-muted-foreground shadow-[var(--color-control-shadow)]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Engine: pi-agent-core" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Engine: pi-mono (@earendil-works/pi-agent-core 0.77.0)" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Runtime: Electron" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "UI: React 19 + Tailwind CSS 4" })
     ] }) }),

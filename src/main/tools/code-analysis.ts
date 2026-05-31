@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import * as ts from "typescript";
-import type { AgentTool } from "@mariozechner/pi-agent-core";
-import { Type } from "@mariozechner/pi-ai";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { Type } from "@earendil-works/pi-ai";
 import type {
   CodeDiagnostic,
   CodeDiagnosticsDetails,
@@ -148,6 +148,38 @@ function hasExportModifier(node: ts.Node): boolean {
     !!ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
 }
 
+function getDeclarationNameText(
+  node: ts.Node,
+): string | null {
+  if (
+    (ts.isFunctionDeclaration(node) ||
+      ts.isClassDeclaration(node) ||
+      ts.isInterfaceDeclaration(node) ||
+      ts.isTypeAliasDeclaration(node) ||
+      ts.isEnumDeclaration(node)) &&
+    node.name
+  ) {
+    return node.name.text;
+  }
+
+  return null;
+}
+
+function getExportedStatementName(statement: ts.Statement): string {
+  const declarationName = getDeclarationNameText(statement);
+  if (declarationName) {
+    return declarationName;
+  }
+
+  if (ts.isVariableStatement(statement)) {
+    return statement.declarationList.declarations
+      .flatMap((declaration) => collectBindingNames(declaration.name))
+      .join(", ");
+  }
+
+  return "default";
+}
+
 function isComponentName(name: string): boolean {
   return /^[A-Z]/.test(name);
 }
@@ -227,15 +259,8 @@ function collectExports(sourceFile: ts.SourceFile): CodeExportSummary[] {
 
   for (const statement of sourceFile.statements) {
     if (hasExportModifier(statement)) {
-      const named = "name" in statement && statement.name && ts.isIdentifier(statement.name)
-        ? statement.name.text
-        : ts.isVariableStatement(statement)
-          ? statement.declarationList.declarations
-            .flatMap((declaration) => collectBindingNames(declaration.name))
-            .join(", ")
-          : "default";
       exports.push({
-        name: named || "default",
+        name: getExportedStatementName(statement) || "default",
         kind: ts.SyntaxKind[statement.kind] ?? "export",
         line: positionOf(sourceFile, statement).line,
       });

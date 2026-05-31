@@ -80,7 +80,7 @@ src/main/harness/
 
 职责：
 
-- 包装 `pi-agent-core`
+- 包装 pi-mono agent
 - 拼装 system prompt
 - 做上下文管理
 - 订阅和转发流式事件

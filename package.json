@@ -6,7 +6,7 @@
   "type": "module",
   "main": "out/main/index.js",
   "engines": {
-    "node": ">=22.17 <23"
+    "node": ">=22.19 <23"
   },
   "scripts": {
     "dev": "electron-vite dev --watch",
@@ -28,8 +28,8 @@
     "@assistant-ui/react-markdown": "^0.12.7",
     "@headlessui/react": "^2.2.9",
     "@heroicons/react": "^2.2.0",
-    "@mariozechner/pi-agent-core": "0.56.2",
-    "@mariozechner/pi-ai": "0.56.2",
+    "@earendil-works/pi-agent-core": "0.77.0",
+    "@earendil-works/pi-ai": "0.77.0",
     "@modelcontextprotocol/ext-apps": "^1.0.1",
     "@modelcontextprotocol/sdk": "^1.20.2",
     "@radix-ui/react-avatar": "^1.1.11",

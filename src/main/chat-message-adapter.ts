@@ -6,7 +6,7 @@ import type {
   TextContent,
   Usage,
   UserMessage,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import type { ChatMessage, SelectedFile } from "../shared/contracts.js";
 import { readFilePreview, readImageContent } from "./files.js";
 
