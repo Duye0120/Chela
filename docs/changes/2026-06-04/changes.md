@@ -1,0 +1,85 @@
+## JS-only Readiness Mini Eval Gate
+
+- 时间：2026-06-04 15:03 +0800
+- 改了什么：
+  - 将 readiness report / Mini Eval assertion / Markdown report 全部收口到 TypeScript/Node。
+  - 新增 `chela:harness:eval`，用 sanitized JSONL fixture 生成 JSON + Markdown readiness report，并按 verdict / secret leakage 返回 exit code。
+  - 固定 10 个 deterministic Mini Eval scenarios：dangerous delete、file overwrite approval、secret redaction、context hard section、memory conflict、tool failure recovery、approval resume、provider 503、long task monitor、safe shell allow。
+  - 删除 Python readiness sidecar 和 analysis-sidecar runner 相关实现与测试。
+  - 同步 harness 文档，明确当前 readiness gate 为 JS-only，RAG / memory maintenance / independent analysis worker 后续单独规划。
+- 为什么改：
+  - 当前 main 分支的 readiness gate 已经可以由现有 TS harness 架构承载；继续保留 Python sidecar 会增加运行时边界、环境变量、测试路径和维护成本。
+- 涉及文件：
+  - `package.json`
+  - `scripts/readiness/run-readiness-report.ts`
+  - `scripts/readiness/README.md`
+  - `src/main/harness-readiness/types.ts`
+  - `src/main/harness-readiness/report.ts`
+  - `src/main/harness-readiness/markdown.ts`
+  - `src/main/harness-readiness/scenario-assertions.ts`
+  - `tests/harness-readiness-report-regression.test.ts`
+  - `tests/readiness-runner-regression.test.ts`
+  - `tests/package-scripts-regression.test.ts`
+  - `scripts/readiness/readiness_report.py`
+  - `tests/readiness_report_regression.py`
+  - `tests/analysis-sidecar-runner-regression.test.ts`
+  - `src/main/analysis-sidecar/artifacts.ts`
+  - `src/main/analysis-sidecar/env.ts`
+  - `src/main/analysis-sidecar/runner.ts`
+  - `docs/harness/trace-readiness-harness.md`
+  - `docs/harness/chela-runtime-analysis-layers.md`
+  - `docs/harness/backend-runtime-framework-optimization.md`
+  - `docs/harness/runtime-diagnostics-surface.md`
+- 验证结果：
+  - `pnpm exec tsx tests/harness-readiness-report-regression.test.ts`
+  - `pnpm exec tsx tests/readiness-runner-regression.test.ts`
+  - `pnpm exec tsx tests/package-scripts-regression.test.ts`
+  - `pnpm exec tsx tests/harness-readiness-recorder-regression.test.ts`
+  - `pnpm exec tsx tests/observability-dispatcher-regression.test.ts`
+  - `pnpm run chela:harness:eval`
+  - gate report verdict 为 `pass`，scenario count 为 10，secret leakage count 为 0，tool fail rate 为 0.25。
+- 未做：
+  - 未运行 `pnpm build` / `pnpm check`，原因是本轮改动集中在 readiness runner、纯 TS report 逻辑、fixture gate 和文档；已用相关 regression tests 与真实 gate 覆盖。
+  - 未接 RAG、AI judge、独立 analysis worker，原因是这些会引入模型、检索准确性和额外运行时边界，已延后到后续单独规划。
+
+## Runtime Diagnostics 回归纳入
+
+- 时间：2026-06-04 16:44 +0800
+- 改了什么：
+  - 核对 Runtime Diagnostics Surface 的现有闭环：shared contract、`runtime:get-diagnostics` IPC、main handler、preload API、System 设置页区块和 mapper regression test 均已存在。
+  - 将 `tests/runtime-diagnostics-regression.test.ts` 纳入 `test:regression`。
+  - 更新 `tests/package-scripts-regression.test.ts`，防止 runtime diagnostics 回归测试从总回归脚本里脱落。
+- 为什么改：
+  - 模型输出存在不确定性，Harness 的可观察状态需要进入稳定回归链路；Runtime Diagnostics 是用户看见 runtime / readiness / observability 健康状态的入口。
+- 涉及文件：
+  - `package.json`
+  - `tests/package-scripts-regression.test.ts`
+- 验证结果：
+  - 先让 `pnpm exec tsx tests/package-scripts-regression.test.ts` 失败，确认缺少 `tests/runtime-diagnostics-regression.test.ts` 的断言有效。
+  - `pnpm exec tsx tests/package-scripts-regression.test.ts`
+  - `pnpm exec tsx tests/runtime-diagnostics-regression.test.ts`
+  - `pnpm exec tsx tests/runtime-services-regression.test.ts`
+  - `pnpm exec tsx tests/ipc-contract-regression.test.ts`
+- 未做：
+  - 未运行 `pnpm build` / `pnpm check`，原因是本轮只补回归脚本覆盖，并用 runtime diagnostics、runtime services、IPC contract 和 package script focused tests 验证。
+
+## Runtime Diagnostics System 页真实窗口验收
+
+- 时间：2026-06-04 17:58 +0800
+- 改了什么：
+  - 启动 `pnpm dev:renderer`，打开 `#/settings/system`，用只读 mock `desktopApi.runtime.getDiagnostics()` 验收 System 设置页中的 Runtime Diagnostics 区块。
+  - 验收初始 degraded 状态：`Runtime Diagnostics` 标题、`readiness-trace-recorder` 服务、`降级` 状态、`trace sink unavailable` 摘要均可见。
+  - 点击 Runtime Diagnostics 的 `刷新` 按钮后，mock report 更新为 healthy，页面显示 `健康` 和 `recording`。
+  - 保存刷新后的截图到 `output/playwright/runtime-diagnostics-system-healthy.png`。
+- 为什么改：
+  - Runtime Diagnostics 是 Harness 可观察状态的用户可见面，需要真实 DOM/窗口层面的确认，避免只靠 mapper 和 IPC 回归测试。
+- 涉及文件：
+  - `output/playwright/runtime-diagnostics-system-healthy.png`
+  - `docs/changes/2026-06-04/changes.md`
+- 验证结果：
+  - Chrome DevTools snapshot 确认 System 页包含 Runtime Diagnostics、总体状态、5 个后台服务、service rows、日志和应用信息。
+  - 脚本断言刷新前 `hasRuntimeDiagnostics=true`、`hasRecorder=true`、`hasDegraded=true`、`hasTraceSink=true`。
+  - 脚本断言刷新后 `afterHealthy=true`、`afterRecording=true`。
+  - console 只剩 dev server 的 `favicon.ico` 404。
+- 未做：
+  - 未运行 `pnpm build` / `pnpm check`，原因是本轮为真实窗口验收；代码层验证沿用前一轮 focused tests。

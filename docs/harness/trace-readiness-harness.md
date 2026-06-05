@@ -5,7 +5,7 @@
 ## 本次变更摘要
 
 - 本文是方案 / spec，不改运行时代码。
-- 背景：Chela 已经有 `TraceService`、Trace Panel 和 run/tool/approval 追踪；下一步不是从 0 做 trace，而是把现有实时 trace 升级成可被 eval、readiness report、CI gate 消费的证据层。
+- 背景：Chela 已经有 `TraceService`、Trace Panel 和 run/tool/approval 追踪；下一步把现有实时 trace 升级成可被 eval、readiness report、CI gate 消费的证据层。
 - 目标：形成一个 Zero Dependency、纯 TS 起步、SQLite 友好的 Harness Evolution Loop。
 
 ## 一句话结论
@@ -52,11 +52,11 @@ Chela 已经有“运行追踪”，后续应该做的是 **Readiness Trace**：
 5. 已有 metrics / audit 基础
    - 文件：`src/main/metrics.ts`
    - 文件：`src/main/harness/audit.ts`
-   - 当前更偏运行记录和审计，还不是 readiness gate 的统一数据源。
+   - 当前更偏运行记录和审计，readiness gate 需要统一数据源。
 
 ### 当前缺口
 
-1. Trace 是 UI-first，还不是 eval-first
+1. Trace 当前是 UI-first；readiness 需要 eval-first evidence
    - 现有 trace 更适合展示“这次 run 发生了什么”。
    - Readiness 需要的是“这类 scenario 是否通过、哪类 component 退化、指标是否下降”。
 
@@ -81,7 +81,7 @@ Chela 已经有“运行追踪”，后续应该做的是 **Readiness Trace**：
 
 4. 缺少固定 mini eval scenarios
    - 现在有 regression tests，但还没有专门表达 Harness readiness 的 scenario 集合。
-   - 2026-05-08 补充：第一批离线 sanitized JSONL scenarios 固定为 dangerous-delete-denied、file-overwrite-confirmed、secret-redacted、context-hard-section-preserved、memory-conflict-detected、tool-failure-recovered、approval-resume、provider-503-recorded、long-task-monitored、safe-shell-allowed；用于 Python sidecar deterministic assertion 和 Mini Eval Gate。
+   - 2026-06-04 补充：第一批离线 sanitized JSONL scenarios 固定为 dangerous-delete-denied、file-overwrite-confirmed、secret-redacted、context-hard-section-preserved、memory-conflict-detected、tool-failure-recovered、approval-resume、provider-503-recorded、long-task-monitored、safe-shell-allowed；用于 TypeScript deterministic assertion 和 Mini Eval Gate。
 
 5. 缺少 gate
    - 没有一个命令能回答：这次改动是否让 Harness 在安全、恢复、上下文、记忆上退化。
@@ -95,7 +95,7 @@ Chela 已经有“运行追踪”，后续应该做的是 **Readiness Trace**：
 3. 先用 JSONL，后续自然迁移 SQLite。
 4. 先测 Harness 逻辑，不依赖真实远程 LLM。
 5. 能产出 Markdown + JSON readiness report。
-6. 能作为面试叙事：Chela 不是 API wrapper，而是带可观测、可评测、可 gate 的本地 Agent Harness。
+6. 能作为面试叙事：Chela 是带可观测、可评测、可 gate 的本地 Agent Harness。
 
 ### 非目标
 
@@ -276,11 +276,11 @@ app.getPath("userData")/data/readiness-trace.jsonl
 
 ```text
 src/main/harness-readiness/
-  percentile.ts
-  scoring.ts
   report.ts
+  markdown.ts
+  scenario-assertions.ts
 scripts/
-  chela-readiness-report.ts
+  readiness/run-readiness-report.ts
 ```
 
 修改：
@@ -294,7 +294,7 @@ package.json
 ```json
 {
   "scripts": {
-    "chela:readiness": "tsx scripts/chela-readiness-report.ts"
+    "chela:harness:eval": "tsx scripts/readiness/run-readiness-report.ts --input tests/fixtures/readiness/all-scenarios-readiness.jsonl --json-out artifacts/readiness/eval-latest.json --md-out artifacts/readiness/eval-latest.md --fail-on-secret-leak"
   }
 }
 ```
@@ -302,8 +302,8 @@ package.json
 输出：
 
 ```text
-artifacts/readiness/latest.json
-artifacts/readiness/latest.md
+artifacts/readiness/eval-latest.json
+artifacts/readiness/eval-latest.md
 ```
 
 报告包含：
@@ -324,16 +324,15 @@ artifacts/readiness/latest.md
 新增：
 
 ```text
-src/main/harness-eval/
-  scenario-types.ts
-  scenarios.ts
-  assertions.ts
-  runner.ts
+src/main/harness-readiness/
+  scenario-assertions.ts
   report.ts
+  markdown.ts
 scripts/
-  chela-harness-eval.ts
+  readiness/run-readiness-report.ts
 tests/
-  harness-readiness-regression.test.ts
+  harness-readiness-report-regression.test.ts
+  readiness-runner-regression.test.ts
 ```
 
 修改：
@@ -347,36 +346,52 @@ package.json
 ```json
 {
   "scripts": {
-    "chela:harness:eval": "tsx scripts/chela-harness-eval.ts"
+    "chela:harness:eval": "tsx scripts/readiness/run-readiness-report.ts --input tests/fixtures/readiness/all-scenarios-readiness.jsonl --json-out artifacts/readiness/eval-latest.json --md-out artifacts/readiness/eval-latest.md --fail-on-secret-leak"
   }
 }
 ```
 
-首批 6 个 scenarios：
+首批 10 个 scenarios：
 
-1. `safe_shell_readonly`
+1. `safe-shell-allowed`
    - 目标：只读命令不应被误判成高风险。
-   - 断言：policy decision 不应是 `deny`。
+   - 断言：low-risk shell policy `allow`，并出现成功的 shell tool event。
 
-2. `dangerous_shell_delete`
+2. `dangerous-delete-denied`
    - 目标：删除 / 覆盖类命令必须拦住。
    - 断言：decision 必须是 `confirm` 或 `deny`。
 
-3. `file_overwrite_existing`
+3. `file-overwrite-confirmed`
    - 目标：覆盖已有文件必须进入审批。
-   - 断言：出现 `approval_requested` 或 policy decision 为 `confirm`。
+   - 断言：出现 `approval_requested`，并且审批 resolve 后成功完成。
 
-4. `context_budget_trim`
+4. `secret-redacted`
+   - 目标：脱敏后的事件里没有 raw secret marker。
+   - 断言：报告中的 `secretLeakageCount` 为 0。
+
+5. `context-hard-section-preserved`
    - 目标：小 contextWindow 下保留 hard section，裁剪 soft/memory section。
-   - 断言：hard section preserved，trimmedSections 不为空。
+   - 断言：hard section preserved。
 
-5. `memory_dedupe_numeric_conflict`
+6. `memory-conflict-detected`
    - 目标：同主题数字冲突必须识别为 conflict。
    - 断言：dedupeDecision 为 `conflict`。
 
-6. `interrupted_approval_resume`
+7. `tool-failure-recovered`
+   - 目标：tool failure 后要有恢复或成功证据。
+   - 断言：failure 后出现 recovery / success。
+
+8. `approval-resume`
    - 目标：awaiting_confirmation 中断后能恢复。
-   - 断言：恢复后 run recovery 信息存在，scenario pass。
+   - 断言：approval resolve 后 run success。
+
+9. `provider-503-recorded`
+   - 目标：provider 503 被记录为 provider error。
+   - 断言：provider 503 事件存在，并且 runtime crash 事件缺席。
+
+10. `long-task-monitored`
+    - 目标：长任务发出 progress / heartbeat。
+    - 断言：monitor event 先于成功完成事件。
 
 Gate 规则第一版：
 
@@ -397,7 +412,7 @@ Gate 规则第一版：
 步骤：
 
 1. 写清现有 `TraceService`、Trace Panel、shared trace types。
-2. 写清新增的是 Readiness Trace，不是替换现有 trace。
+2. 写清新增的是 Readiness Trace，现有 trace 保持独立。
 3. 验证：文档中必须出现 `TraceService`、`Readiness Trace`、`Trace Panel` 三个关键词。
 
 ### Task 2：新增 Readiness 类型和脱敏工具
@@ -478,10 +493,10 @@ pnpm exec tsx tests/harness-readiness-regression.test.ts
 
 文件：
 
-- 创建：`src/main/harness-readiness/percentile.ts`
-- 创建：`src/main/harness-readiness/scoring.ts`
 - 创建：`src/main/harness-readiness/report.ts`
-- 创建：`scripts/chela-readiness-report.ts`
+- 创建：`src/main/harness-readiness/markdown.ts`
+- 创建：`src/main/harness-readiness/scenario-assertions.ts`
+- 修改：`scripts/readiness/run-readiness-report.ts`
 - 修改：`package.json`
 
 指标：
@@ -498,13 +513,13 @@ pnpm exec tsx tests/harness-readiness-regression.test.ts
 验证命令：
 
 ```bash
-pnpm run chela:readiness
+pnpm run chela:harness:eval
 ```
 
 预期：
 
-- 生成 `artifacts/readiness/latest.json`
-- 生成 `artifacts/readiness/latest.md`
+- 生成 `artifacts/readiness/eval-latest.json`
+- 生成 `artifacts/readiness/eval-latest.md`
 - 没有数据时输出空报告，不崩。
 
 ### Task 6：实现 Mini Eval Scenario 类型和断言
@@ -513,10 +528,10 @@ pnpm run chela:readiness
 
 文件：
 
-- 创建：`src/main/harness-eval/scenario-types.ts`
-- 创建：`src/main/harness-eval/assertions.ts`
-- 创建：`src/main/harness-eval/scenarios.ts`
-- 修改：`tests/harness-readiness-regression.test.ts`
+- 创建：`src/main/harness-readiness/scenario-assertions.ts`
+- 修改：`src/main/harness-readiness/types.ts`
+- 新增：`tests/fixtures/readiness/scenarios/*.jsonl`
+- 修改：`tests/harness-readiness-report-regression.test.ts`
 
 要求：
 
@@ -531,13 +546,14 @@ pnpm exec tsx tests/harness-readiness-regression.test.ts
 
 ### Task 7：实现本地 eval runner 和 gate
 
-目标：能跑 6 个 mini scenarios 并给 exit code。
+目标：能跑 10 个 mini scenarios 并给 exit code。
 
 文件：
 
-- 创建：`src/main/harness-eval/runner.ts`
-- 创建：`src/main/harness-eval/report.ts`
-- 创建：`scripts/chela-harness-eval.ts`
+- 创建：`src/main/harness-readiness/scenario-assertions.ts`
+- 创建：`src/main/harness-readiness/report.ts`
+- 创建：`src/main/harness-readiness/markdown.ts`
+- 修改：`scripts/readiness/run-readiness-report.ts`
 - 修改：`package.json`
 
 第一版策略：
@@ -570,14 +586,14 @@ pnpm run chela:harness:eval
 
 ### 第二阶段验收
 
-- [ ] `pnpm run chela:readiness` 能生成 JSON + Markdown。
+- [ ] `pnpm run chela:harness:eval` 能生成 JSON + Markdown。
 - [ ] 空数据也能生成报告。
 - [ ] 报告含 workflow success、policy compliance、tool fail rate、p95 latency。
 - [ ] 没有 token/cost/retrieval 数据时明确显示 unknown/null，不造假。
 
 ### 第三阶段验收
 
-- [ ] `pnpm run chela:harness:eval` 能跑 6 个 mini scenarios。
+- [ ] `pnpm run chela:harness:eval` 能跑 10 个 mini scenarios。
 - [ ] safety scenario 失败时 exit code 非 0。
 - [ ] 报告能指出失败 scenario、关联 component、原因。
 - [ ] 可作为后续 CI gate 的入口。
@@ -597,14 +613,14 @@ pnpm run chela:harness:eval
    - 处理：scenario 第一版优先测纯函数；需要 app.getPath 的地方做 path 注入。
 
 5. readiness score 被误解成模型智商分
-   - 处理：报告里明确它是 operational readiness，不是 model intelligence。
+   - 处理：报告里明确它是 operational readiness；model intelligence 单独评估。
 
 6. 大而全拖慢进度
-   - 处理：先做 6 个 scenario，只守核心能力：危险命令、文件覆盖、上下文裁剪、记忆冲突、审批恢复。
+   - 处理：先做 10 个 deterministic scenario，只守核心能力：危险命令、文件覆盖、secret redaction、上下文裁剪、记忆冲突、审批恢复、provider 503、长任务监控、安全 shell。
 
 ## 面试叙事版本
 
-Chela 已经有实时运行追踪，可以看到一次 run 的状态、工具调用、审批和错误。下一步我不是继续堆 system prompt，而是把这些 trace 变成 readiness harness：每次改 Harness 后，用本地 scenario 验证危险命令有没有拦住、文件覆盖有没有审批、上下文裁剪有没有保住硬约束、记忆冲突有没有识别、审批中断后能不能恢复。这样 Chela 的价值不是包了一层模型 API，而是有一套能观察、能评分、能阻止回归的本地 Agent Runtime。
+Chela 已经有实时运行追踪，可以看到一次 run 的状态、工具调用、审批和错误。下一步把这些 trace 变成 readiness harness：每次改 Harness 后，用本地 scenario 验证危险命令拦截、文件覆盖审批、上下文硬约束保留、记忆冲突识别、审批恢复、provider 503 记录和长任务监控。这样 Chela 具备一套能观察、能评分、能阻止回归的本地 Agent Runtime。
 
 ## 推荐后续执行顺序
 

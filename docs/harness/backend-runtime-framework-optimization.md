@@ -4,7 +4,7 @@
 
 ## 1. 目的
 
-这份 spec 不是为了“重构好看”，而是为了让 Chela 后台从一组散落的 Electron main services，演进成一个可治理的本地 Agent Runtime。
+这份 spec 的目标是让 Chela 后台从一组散落的 Electron main services，演进成一个可治理的本地 Agent Runtime。
 
 当前 Chela 已经有：
 
@@ -12,10 +12,10 @@
 - event-bus
 - TraceService / Trace Panel
 - Readiness Trace Recorder
-- Python readiness_report sidecar
+- JS-only readiness report
 - scheduler / webhook / metrics / self-diagnosis / learning 等后台服务
 
-问题是：这些能力已经开始像一个 runtime，但启动、依赖、观测、路径注入、Python sidecar 生命周期还没有统一框架承载。
+问题是：这些能力已经开始像一个 runtime，但启动、依赖、观测和路径注入还需要统一框架承载。
 
 目标是把后台框架整理成：
 
@@ -29,14 +29,14 @@ Electron main
       -> experimental services
   -> Observability Dispatcher
       -> trace / readiness / metrics / audit
-  -> Analysis Sidecar Runner
-      -> one-shot Python report now
-      -> long-lived Python worker later
+  -> JS-only Readiness Gate
+      -> sanitized JSONL report
+      -> Mini Eval scenario assertions
 ```
 
 面试叙事对应一句话：
 
-> Chela 不是把功能塞进 Electron main，而是把本地 Agent 运行时拆成可启动、可回滚、可观测、可评估的 runtime services。
+> Chela 把本地 Agent 运行时拆成可启动、可回滚、可观测、可评估的 runtime services。
 
 ---
 
@@ -100,24 +100,25 @@ const BACKGROUND_SERVICES: BackgroundServiceDefinition[] = [
 
 问题：
 
-- 产品态路径应该由 Electron service 层注入，而不是 core 用 `process.cwd()`
+- 产品态路径由 Electron service 层注入；core 接收注入后的 filePath
 - recorder 写入失败目前只在 Promise 内部 pending，不会进入统一后台服务健康状态
 - 多个 observability consumer 未来都 onAny，容易分散
 
-### 2.3 Python Sidecar Runner
+### 2.3 JS Readiness Report Runner
 
 当前文件：
 
-- `scripts/readiness/readiness_report.py`
 - `scripts/readiness/run-readiness-report.ts`
+- `src/main/harness-readiness/report.ts`
+- `src/main/harness-readiness/scenario-assertions.ts`
+- `src/main/harness-readiness/markdown.ts`
 
 当前行为：
 
-- one-shot `spawn(python, args)`
-- 参数数组，不 shell 拼接
-- 环境白名单
-- timeout
-- stdout/stderr 分离
+- 直接读取 sanitized readiness JSONL
+- 计算 deterministic metrics 和 scenario verdict
+- 写 JSON / Markdown report
+- 根据 verdict 返回进程退出码
 
 优点：
 
@@ -127,9 +128,7 @@ const BACKGROUND_SERVICES: BackgroundServiceDefinition[] = [
 
 问题：
 
-- 目前只是 script runner，还不是 Chela main 的通用 Analysis Sidecar Runner
-- 如果未来 Python 做高频 memory maintenance / transcript analytics / repo intelligence，每次 spawn 会有额外开销
-- 还没有统一 artifact path / report lifecycle / latest pointer
+- 目前只是 script runner，还没有统一 artifact path / report lifecycle / latest pointer
 
 ---
 
@@ -178,7 +177,7 @@ export type RuntimeServiceHealth = {
 };
 ```
 
-启动顺序不再靠数组位置，而是：
+启动顺序由显式依赖决定：
 
 1. 过滤 disabled services
 2. 校验 `dependsOn` 是否存在
@@ -313,55 +312,45 @@ event-bus.onAny
 - dispatcher 可以只覆盖 readiness + metrics 的新路径
 - TraceService 保持现状，避免动 UI 相关链路
 
-### 3.5 Analysis Sidecar Runner
+### 3.5 Readiness Report Runner
 
-保留当前 one-shot runner，但把概念从 `scripts/readiness/run-readiness-report.ts` 提升为主进程可复用能力。
+保留当前 JS-only runner，并把 report/assertion/markdown 能力收口在 `src/main/harness-readiness/`。
 
 新增建议：
 
 ```text
-src/main/analysis-sidecar/
-  runner.ts
-  env.ts
-  artifacts.ts
+src/main/harness-readiness/
+  report.ts
+  scenario-assertions.ts
+  markdown.ts
 ```
 
-第一版仍然 one-shot：
+第一版仍然离线：
 
 ```ts
-runAnalysisSidecar({
-  command: python,
-  args,
-  timeoutMs,
-  envAllowlist,
-  cwd,
-  stdoutLimitBytes,
-  stderrLimitBytes,
-});
+runReadinessReport({ input, jsonOut, mdOut, failOnSecretLeak: true });
 ```
 
 必须保留：
 
-- `spawn(file, args)`，不用 shell
-- env allowlist
-- timeout
-- stdout/stderr 分离
-- output size limit
-- non-zero exit 保留 stderr 摘要
+- sanitized JSONL 输入
+- JSON / Markdown 输出
+- scenario fail 和 secret leak 退出码可诊断
+- Markdown 不写 raw event data
 
-未来再升级 long-lived Python worker：
+未来再考虑独立 analysis worker：
 
 ```text
-Node -> Python worker over stdio JSON-RPC
+Node -> analysis worker over stdio JSON-RPC
 ```
 
 升级条件：
 
-- sidecar 调用频率高
+- analysis 调用频率高
 - report 之外还做 memory maintenance / transcript analytics
 - spawn overhead 明显影响体验
 
-现在不要直接上 long-lived worker，复杂度不值得。
+当前阶段保留 JS-only runner，RAG、memory maintenance、transcript analytics 进入后续独立规划。
 
 ---
 
@@ -463,36 +452,34 @@ src/main/observability/sinks/readiness-sink.ts
 pnpm exec tsx tests/observability-dispatcher-regression.test.ts
 ```
 
-### Phase 4：Analysis Sidecar Runner 收口
+### Phase 4：Readiness Report Runner 收口
 
-目标：把 Python sidecar runner 从 scripts 概念收口为 backend framework 能力。
+目标：把 readiness report runner 从 scripts 概念收口为 JS-only backend framework 能力。
 
 新增：
 
 ```text
-src/main/analysis-sidecar/runner.ts
-src/main/analysis-sidecar/env.ts
-src/main/analysis-sidecar/artifacts.ts
+src/main/harness-readiness/report.ts
+src/main/harness-readiness/scenario-assertions.ts
+src/main/harness-readiness/markdown.ts
 ```
 
 迁移：
 
-- `scripts/readiness/run-readiness-report.ts` 可继续保留 CLI 包装
-- 核心 spawn 逻辑迁到 `src/main/analysis-sidecar/runner.ts`
+- `scripts/readiness/run-readiness-report.ts` 继续保留 CLI 包装
+- 核心 report 逻辑迁到 `src/main/harness-readiness/report.ts`
 
 验收：
 
-- 参数数组
-- env whitelist
-- timeout
-- stdout/stderr size limit
-- non-zero exit 可诊断
+- sanitized JSONL 输入
+- JSON / Markdown 输出
+- scenario fail 和 secret leak 退出码可诊断
 - 不改 `package.json`
 
 测试：
 
 ```bash
-pnpm exec tsx tests/analysis-sidecar-runner-regression.test.ts
+pnpm exec tsx tests/harness-readiness-report-regression.test.ts
 pnpm exec tsx tests/readiness-runner-regression.test.ts
 ```
 
@@ -514,7 +501,7 @@ docs/harness/backend-module-boundaries.md
 - `context` 只负责 context assembly，不直接执行 side effect
 - `harness` 负责 run lifecycle / policy / approval / tool execution
 - `observability` 负责看见发生了什么，不参与决策
-- `analysis-sidecar` 负责离线分析，不参与在线安全
+- `harness-readiness` 负责离线 readiness analysis，不参与在线安全
 
 ---
 
@@ -526,8 +513,8 @@ docs/harness/backend-module-boundaries.md
 - 不改 `package.json` / `pnpm-lock.yaml`
 - 不改 provider/model 逻辑
 - 不重写 TraceService
-- 不把 Python 接进在线 run lifecycle
-- 不做 long-lived Python worker
+- 保持 JS-only readiness gate
+- 延后独立 analysis worker
 - 不做全仓格式化
 - 不修无关 TS check 历史错误
 
@@ -578,6 +565,6 @@ pnpm exec tsx tests/harness-readiness-regression.test.ts
 
 如果这套做完，可以这样讲：
 
-> Chela 的后台不是普通 Electron main 里堆几个 service。我把它抽成 Runtime Service Registry：每个后台能力都有 group、criticality、dependencies、health 和 rollback。在线安全链路由 TS runtime 控制，离线分析由 Python sidecar 做，observability 通过 dispatcher 统一隔离。这样 Agent 出错时，不只是最终答案失败，而是能看到哪个 runtime service、哪个 tool policy、哪个 approval 或哪个 readiness scenario 退化。
+> Chela 的后台已经抽成 Runtime Service Registry：每个后台能力都有 group、criticality、dependencies、health 和 rollback。在线安全链路、离线 readiness analysis 和 observability 都由 TS runtime 统一承载。Agent 出错时，用户能看到哪个 runtime service、哪个 tool policy、哪个 approval 或哪个 readiness scenario 退化。
 
 这句话比“我做了一个 AI 助手”强很多。

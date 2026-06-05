@@ -4,18 +4,18 @@
 
 ## 1. 目的
 
-底层 Python / Readiness / Analysis Sidecar 的 MVP 已经闭环：
+底层 Readiness / Observability / JS Gate 的 MVP 已经闭环：
 
 - Readiness JSONL 有 recorder；
 - Observability Dispatcher 已经把 readiness sink 收口；
-- Analysis Sidecar Runner 已经从脚本能力升级成 backend 可复用 runner；
-- Python 仍保持离线 report，不进入在线 run lifecycle。
+- JS-only readiness runner 已经从脚本能力升级成 backend 可复用 runner；
+- readiness report 保持离线 deterministic gate。
 
-下一步不应该继续往 Python 深处钻，也不应该马上做大 UI。最划算的一刀是把已经存在的 backend runtime 状态暴露成一个最小诊断面，让 Chela 从“后台有能力”变成“用户/面试官能看见后台运行时健康”。
+下一步应该把已经存在的 backend runtime 状态暴露成一个最小诊断面，让 Chela 从“后台有能力”变成“用户/面试官能看见后台运行时健康”。
 
 一句话目标：
 
-> Chela 可以在 System/Diagnostics 里看到 Runtime Service Registry、Readiness Recorder、Observability Dispatcher、Analysis Sidecar 的健康状态，而不是只能从日志里猜。
+> Chela 可以在 System/Diagnostics 里看到 Runtime Service Registry、Readiness Recorder、Observability Dispatcher、Readiness Gate 的健康状态。
 
 ## 2. 当前状态
 
@@ -31,8 +31,6 @@
   - 已有 `getReadinessTraceRecorderHealth()`。
 - `src/main/observability/dispatcher.ts`
   - dispatcher/sink 已有 health 概念。
-- `src/main/analysis-sidecar/*`
-  - 已有 runner/env/artifacts，但还没有可供 UI 查询的“能力状态”。
 
 缺口：
 
@@ -59,8 +57,8 @@
 
 ### 本轮不做
 
-- 不做新的 Python worker。
-- 不把 Python 接进在线 run lifecycle。
+- 保持 JS-only readiness gate。
+- 延后独立 analysis worker。
 - 不改 provider/model/keys 逻辑。
 - 不改 Agent Harness Core。
 - 不重写 TraceService UI。
@@ -200,6 +198,6 @@ pnpm exec tsx tests/runtime-diagnostics-regression.test.ts
 
 ## 7. 面试讲法
 
-这一步的价值不是“加了个设置页”，而是：
+这一步的价值：
 
-> 我把本地 Agent 的后台服务抽成 Runtime Service Registry 后，又补了 Runtime Diagnostics Surface。这样服务不是黑盒启动，scheduler、trace、readiness、sidecar 这些能力的健康状态可以被 UI 查询。Agent 产品出问题时，用户看到的是哪个 runtime capability degraded，而不是一句泛泛的 failed。
+> 我把本地 Agent 的后台服务抽成 Runtime Service Registry 后，又补了 Runtime Diagnostics Surface。scheduler、trace、readiness、gate 这些能力的健康状态可以被 UI 查询。Agent 产品出问题时，用户看到的是哪个 runtime capability degraded。
