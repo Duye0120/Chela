@@ -27,7 +27,7 @@ export function SettingsCard({
   return (
     <section
       className={cn(
-        "chela-panel-surface overflow-hidden rounded-[calc(var(--radius-shell)+4px)]",
+        "chela-panel-surface overflow-hidden rounded-[var(--radius-panel)]",
         className,
       )}
     >
@@ -116,7 +116,7 @@ export function FieldInput(
   return (
     <input
       {...rest}
-      className={`h-9 w-full rounded-[var(--radius-shell)] border-none bg-[color:var(--color-control-bg)] px-3 text-[13px] text-foreground shadow-[var(--color-control-shadow)] ring-1 ring-[color:var(--color-control-border)] transition-[background-color,color,box-shadow] outline-none placeholder:text-[color:var(--color-text-tertiary)] hover:bg-[color:var(--color-control-bg-hover)] focus-visible:bg-[color:var(--color-control-bg-active)] focus-visible:ring-2 focus-visible:ring-[color:var(--color-control-focus-ring)] ${mono ? "font-mono text-[12px]" : ""} ${className}`}
+      className={`h-9 w-full rounded-[var(--radius-control)] border-none bg-[color:var(--color-control-bg)] px-3 text-[13px] text-foreground shadow-[var(--color-control-shadow)] ring-1 ring-[color:var(--color-control-border)] transition-[background-color,color,box-shadow] outline-none placeholder:text-[color:var(--color-text-tertiary)] hover:bg-[color:var(--color-control-bg-hover)] focus-visible:bg-[color:var(--color-control-bg-active)] focus-visible:ring-2 focus-visible:ring-[color:var(--color-control-focus-ring)] ${mono ? "font-mono text-[12px]" : ""} ${className}`}
     />
   );
 }

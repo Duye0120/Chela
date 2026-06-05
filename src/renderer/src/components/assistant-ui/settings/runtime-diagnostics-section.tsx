@@ -2,36 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   RuntimeDiagnosticsReport,
   RuntimeDiagnosticsServiceStatus,
-  RuntimeDiagnosticsServiceStatusValue,
 } from "@shared/contracts";
 import { formatDateTimeInTimeZone } from "@shared/timezone";
 import { Button } from "@renderer/components/assistant-ui/button";
+import {
+  buildRuntimeDiagnosticsSummaryItems,
+  getRuntimeDiagnosticsServiceDetail,
+  getRuntimeDiagnosticsStatusLabel,
+  getRuntimeDiagnosticsStatusTone,
+  sortRuntimeDiagnosticsServices,
+} from "@renderer/lib/runtime-diagnostics-display";
 import { cn } from "@renderer/lib/utils";
-
-const STATUS_LABELS: Record<RuntimeDiagnosticsServiceStatusValue, string> = {
-  unknown: "未知",
-  starting: "启动中",
-  healthy: "健康",
-  degraded: "降级",
-  failed: "失败",
-  stopped: "已停止",
-  disabled: "已禁用",
-};
-
-const GROUP_ORDER = ["core", "observability", "agent", "integration", "experimental"];
-
-function statusTone(status: RuntimeDiagnosticsServiceStatusValue): string {
-  if (status === "healthy") {
-    return "bg-[color:var(--chela-status-success-bg)] text-[color:var(--chela-status-success-text)]";
-  }
-  if (status === "degraded" || status === "starting") {
-    return "bg-[color:var(--chela-status-warning-bg)] text-[color:var(--chela-status-warning-text)]";
-  }
-  if (status === "failed") {
-    return "bg-[color:var(--chela-status-error-bg)] text-[color:var(--chela-status-error-text)]";
-  }
-  return "bg-[color:var(--color-control-bg)] text-muted-foreground";
-}
 
 function formatTimestamp(value: number, timeZone: string): string {
   try {
@@ -39,25 +20,6 @@ function formatTimestamp(value: number, timeZone: string): string {
   } catch {
     return "—";
   }
-}
-
-function truncateMessage(value?: string): string {
-  if (!value) {
-    return "—";
-  }
-  return value.length > 96 ? `${value.slice(0, 96)}…` : value;
-}
-
-function sortServices(
-  services: RuntimeDiagnosticsServiceStatus[],
-): RuntimeDiagnosticsServiceStatus[] {
-  return [...services].sort((a, b) => {
-    const groupDiff = GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group);
-    if (groupDiff !== 0) {
-      return groupDiff;
-    }
-    return a.name.localeCompare(b.name);
-  });
 }
 
 function RuntimeDiagnosticsSummary({
@@ -68,13 +30,7 @@ function RuntimeDiagnosticsSummary({
   timeZone: string;
 }) {
   const totals = report.totals;
-  const items = [
-    ["健康", totals.healthy],
-    ["降级", totals.degraded],
-    ["失败", totals.failed],
-    ["启动中", totals.starting],
-    ["停止/未知", totals.stopped + totals.unknown],
-  ];
+  const items = buildRuntimeDiagnosticsSummaryItems(totals);
 
   return (
     <div className="grid gap-3 md:grid-cols-[1.2fr_2fr]">
@@ -84,10 +40,10 @@ function RuntimeDiagnosticsSummary({
           <span
             className={cn(
               "rounded-[var(--radius-shell)] px-2.5 py-1 text-[12px] font-medium",
-              statusTone(report.status),
+              getRuntimeDiagnosticsStatusTone(report.status),
             )}
           >
-            {STATUS_LABELS[report.status] ?? report.status}
+            {getRuntimeDiagnosticsStatusLabel(report.status)}
           </span>
           <span className="text-[12px] text-muted-foreground">
             {totals.total} 个后台服务
@@ -99,14 +55,14 @@ function RuntimeDiagnosticsSummary({
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-        {items.map(([label, value]) => (
+        {items.map((item) => (
           <div
-            key={label}
+            key={item.label}
             className="rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-3 shadow-[var(--color-control-shadow)]"
           >
-            <p className="text-[11px] text-muted-foreground">{label}</p>
+            <p className="text-[11px] text-muted-foreground">{item.label}</p>
             <p className="mt-1 text-[18px] font-semibold tracking-[-0.02em] text-foreground">
-              {value}
+              {item.value}
             </p>
           </div>
         ))}
@@ -116,7 +72,7 @@ function RuntimeDiagnosticsSummary({
 }
 
 function RuntimeServiceRow({ service }: { service: RuntimeDiagnosticsServiceStatus }) {
-  const detail = service.errorMessage ?? service.message;
+  const detail = getRuntimeDiagnosticsServiceDetail(service);
   return (
     <div className="grid gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-control-bg)] px-3 py-3 text-[12px] shadow-[var(--color-control-shadow)] md:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_2fr] md:items-center">
       <div className="min-w-0">
@@ -127,18 +83,18 @@ function RuntimeServiceRow({ service }: { service: RuntimeDiagnosticsServiceStat
       <span
         className={cn(
           "w-fit rounded-[var(--radius-shell)] px-2 py-1 text-[11px] font-medium",
-          statusTone(service.status),
+          getRuntimeDiagnosticsStatusTone(service.status),
         )}
       >
-        {STATUS_LABELS[service.status] ?? service.status}
+        {getRuntimeDiagnosticsStatusLabel(service.status)}
       </span>
       <span className="text-muted-foreground">
         {typeof service.startDurationMs === "number"
           ? `${service.startDurationMs}ms`
           : "—"}
       </span>
-      <span className="min-w-0 truncate text-muted-foreground" title={detail ?? undefined}>
-        {truncateMessage(detail)}
+      <span className="min-w-0 truncate text-muted-foreground" title={detail.full}>
+        {detail.preview}
       </span>
     </div>
   );
@@ -171,7 +127,7 @@ export function RuntimeDiagnosticsSection({ timeZone }: { timeZone: string }) {
   }, [loadDiagnostics]);
 
   const services = useMemo(
-    () => sortServices(report?.services ?? []),
+    () => sortRuntimeDiagnosticsServices(report?.services ?? []),
     [report?.services],
   );
 

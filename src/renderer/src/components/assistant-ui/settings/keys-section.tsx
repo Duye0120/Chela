@@ -47,6 +47,7 @@ import {
   getDetectedMetadata,
   getEntryDisplayName,
   getEntryNameHint,
+  hasIncompleteModelDraft,
   normalizeCapabilitiesOverride,
   parseProviderOptions,
   serializeEditableEntry,
@@ -60,6 +61,8 @@ import { ModelEntryDialog } from "./keys-section-entry-dialog";
 type MeasuredSourceTestResult = SourceTestResult & {
   durationMs: number;
 };
+
+const AUTO_SAVE_DELAY_MS = 3_000;
 
 export function KeysSection({
   settings,
@@ -112,7 +115,7 @@ export function KeysSection({
 
   const reload = useCallback(
     async (preferredSourceId?: string | null) => {
-      if (!desktopApi) return;
+      if (!desktopApi) return null;
 
       setLoading(!hasWorkspacesRef.current);
       setError(null);
@@ -151,8 +154,10 @@ export function KeysSection({
         });
         setTestResult(null);
         onDirectoryChanged();
+        return nextWorkspaces;
       } catch (nextError) {
         setError(nextError instanceof Error ? nextError.message : "加载失败");
+        return null;
       } finally {
         setLoading(false);
       }
@@ -241,6 +246,9 @@ export function KeysSection({
       : false;
   const dirty = currentWorkspace
     ? serializeWorkspace(currentWorkspace) !== currentWorkspace.baseline
+    : false;
+  const autoSaveBlocked = currentWorkspace
+    ? hasIncompleteModelDraft(currentWorkspace)
     : false;
 
   const createSourceDraftPayload = useCallback((workspace: SourceWorkspace) => {
@@ -368,8 +376,8 @@ export function KeysSection({
     }
   }, [currentModelId, currentWorkspace, desktopApi, onModelChange, reload, workspaces]);
 
-  const handleSave = useCallback(async () => {
-    if (!desktopApi || !currentWorkspace) return;
+  const persistWorkspace = useCallback(async (workspace: SourceWorkspace) => {
+    if (!desktopApi) return null;
 
     setSaving(true);
     setError(null);
@@ -377,21 +385,21 @@ export function KeysSection({
 
     try {
       const savedSource = await desktopApi.providers.saveSource(
-        createSourceDraftPayload(currentWorkspace),
+        createSourceDraftPayload(workspace),
       );
 
-      if (currentWorkspace.apiKeyInput.trim()) {
+      if (workspace.apiKeyInput.trim()) {
         await desktopApi.providers.setCredentials(
           savedSource.id,
-          currentWorkspace.apiKeyInput.trim(),
+          workspace.apiKeyInput.trim(),
         );
       }
 
-      for (const entryId of currentWorkspace.deletedEntryIds) {
+      for (const entryId of workspace.deletedEntryIds) {
         await desktopApi.models.deleteEntry(entryId);
       }
 
-      for (const entry of currentWorkspace.entries) {
+      for (const entry of workspace.entries) {
         const providerOptions = parseProviderOptions(entry.providerOptionsText);
         await desktopApi.models.saveEntry({
           id: entry.persistedId,
@@ -405,25 +413,73 @@ export function KeysSection({
         });
       }
 
-      await reload(savedSource.id);
+      const nextWorkspaces = await reload(savedSource.id);
       notifyProviderDirectoryChanged();
+      return nextWorkspaces?.[savedSource.id] ?? null;
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "保存失败");
+      throw nextError;
     } finally {
       setSaving(false);
     }
-  }, [createSourceDraftPayload, currentWorkspace, desktopApi, reload]);
+  }, [createSourceDraftPayload, desktopApi, reload]);
+
+  const handleSave = useCallback(async () => {
+    if (!currentWorkspace || autoSaveBlocked) return;
+
+    try {
+      await persistWorkspace(currentWorkspace);
+    } catch {
+      // Error state is already set by persistWorkspace.
+    }
+  }, [autoSaveBlocked, currentWorkspace, persistWorkspace]);
+
+  useEffect(() => {
+    if (
+      !currentWorkspace ||
+      !dirty ||
+      autoSaveBlocked ||
+      editingEntryId ||
+      saving ||
+      testing ||
+      fetchingModels
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void persistWorkspace(currentWorkspace).catch(() => {
+        // Error state is already set by persistWorkspace.
+      });
+    }, AUTO_SAVE_DELAY_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    autoSaveBlocked,
+    currentWorkspace,
+    dirty,
+    editingEntryId,
+    fetchingModels,
+    persistWorkspace,
+    saving,
+    testing,
+  ]);
 
   const handleTest = useCallback(async () => {
     if (!desktopApi || !currentWorkspace) return;
+    if (autoSaveBlocked) return;
 
     const startedAt = performance.now();
     setTesting(true);
     setError(null);
 
     try {
+      const workspaceForRequest = dirty
+        && !autoSaveBlocked
+        ? (await persistWorkspace(currentWorkspace)) ?? currentWorkspace
+        : currentWorkspace;
       const result = await desktopApi.providers.testSource(
-        createSourceDraftPayload(currentWorkspace),
+        createSourceDraftPayload(workspaceForRequest),
       );
 
       setTestResult({
@@ -439,18 +495,30 @@ export function KeysSection({
     } finally {
       setTesting(false);
     }
-  }, [createSourceDraftPayload, currentWorkspace, desktopApi]);
+  }, [
+    createSourceDraftPayload,
+    autoSaveBlocked,
+    currentWorkspace,
+    desktopApi,
+    dirty,
+    persistWorkspace,
+  ]);
 
   const handleFetchModels = useCallback(async () => {
     if (!desktopApi || !currentWorkspace) return;
+    if (autoSaveBlocked) return;
 
     setFetchingModels(true);
     setFetchModelsResult(null);
     setError(null);
 
     try {
+      const workspaceForRequest = dirty
+        && !autoSaveBlocked
+        ? (await persistWorkspace(currentWorkspace)) ?? currentWorkspace
+        : currentWorkspace;
       const result = await desktopApi.providers.fetchModels(
-        createSourceDraftPayload(currentWorkspace),
+        createSourceDraftPayload(workspaceForRequest),
       );
 
       if (!result.success) {
@@ -467,7 +535,7 @@ export function KeysSection({
       }
 
       let appended = 0;
-      updateWorkspace(currentWorkspace.sourceId, (workspace) => {
+      updateWorkspace(workspaceForRequest.sourceId, (workspace) => {
         const existingIds = new Set(
           workspace.entries.map((entry) => entry.modelId.trim().toLowerCase()),
         );
@@ -523,7 +591,15 @@ export function KeysSection({
     } finally {
       setFetchingModels(false);
     }
-  }, [createSourceDraftPayload, currentWorkspace, desktopApi, updateWorkspace]);
+  }, [
+    createSourceDraftPayload,
+    autoSaveBlocked,
+    currentWorkspace,
+    desktopApi,
+    dirty,
+    persistWorkspace,
+    updateWorkspace,
+  ]);
 
   if (loading) {
     return (
@@ -938,6 +1014,7 @@ export function KeysSection({
                       disabled={
                         fetchingModels ||
                         saving ||
+                        autoSaveBlocked ||
                         !currentWorkspace.sourceDraft.enabled
                       }
                       className="h-8 gap-1.5 rounded-[var(--radius-shell)] px-3 text-[12px]"
@@ -962,7 +1039,7 @@ export function KeysSection({
                     >
                       {fetchModelsResult.kind === "success"
                         ? fetchModelsResult.appended > 0
-                          ? `已新增 ${fetchModelsResult.appended} 个模型条目（共拉取 ${fetchModelsResult.total} 个），保存后生效。`
+                          ? `已新增 ${fetchModelsResult.appended} 个模型条目（共拉取 ${fetchModelsResult.total} 个），稍后自动保存。`
                           : `远端返回 ${fetchModelsResult.total} 个模型，全部已存在，未新增条目。`
                         : fetchModelsResult.message}
                     </div>
@@ -981,7 +1058,7 @@ export function KeysSection({
                             {getEntryDisplayName(entry)}
                           </span>
                           {!entry.builtin && (
-                            <span className="rounded bg-[color:var(--color-control-bg)] px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-[var(--color-control-shadow)]">
+                            <span className="rounded-[var(--radius-control)] bg-[color:var(--color-control-bg)] px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                               Manual
                             </span>
                           )}
@@ -1136,8 +1213,10 @@ export function KeysSection({
                         "连接测试失败",
                       )) + ` · ${testResult.durationMs} ms`}
                   </span>
+                ) : dirty && autoSaveBlocked ? (
+                  "请先填写模型 ID，完成后会自动保存。"
                 ) : dirty ? (
-                  "当前提供商有未保存修改。"
+                  "当前修改将在 3 秒后自动保存。"
                 ) : (
                   "当前配置已保存。"
                 )}
@@ -1148,7 +1227,7 @@ export function KeysSection({
                   type="button"
                   variant="outline"
                   onClick={() => void handleTest()}
-                  disabled={testing || saving}
+                  disabled={testing || saving || autoSaveBlocked}
                   className="h-9 rounded-[var(--radius-shell)] px-4 text-[12px]"
                 >
                   {testing ? "测试中…" : "测试连接"}
@@ -1156,13 +1235,13 @@ export function KeysSection({
                 <Button
                   type="button"
                   onClick={() => void handleSave()}
-                  disabled={saving || !dirty}
+                  disabled={saving || !dirty || autoSaveBlocked}
                   className={`h-9 rounded-[var(--radius-shell)] px-4 text-[12px] ${dirty && !saving
                       ? "animate-pulse bg-[color:var(--color-accent)] text-[color:var(--chela-text-inverse)] hover:bg-[color:var(--color-accent-hover)] shadow-[var(--color-control-shadow)]"
                       : "bg-foreground text-background hover:bg-foreground/90"
                     }`}
                 >
-                  {saving ? "保存中…" : "保存修改"}
+                  {saving ? "保存中…" : "立即保存"}
                 </Button>
               </div>
             </div>

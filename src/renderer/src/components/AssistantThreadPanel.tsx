@@ -50,6 +50,7 @@ import {
   getBrowserContextItems,
   type BrowserContextItem,
 } from "@renderer/lib/browser-interview";
+import { formatChatRuntimeErrorMessage } from "@shared/chat-runtime-errors";
 
 type AssistantThreadPanelProps = {
   session: ChatSession;
@@ -1523,7 +1524,10 @@ function SessionRuntime({
           }
 
           case "agent_error":
-            response.errorMessage = "执行遇到问题，请稍后重试。";
+            response.errorMessage = formatChatRuntimeErrorMessage(event.message);
+            if (!response.finalText.trim()) {
+              response.finalText = response.errorMessage;
+            }
             finalize("error");
             setRunCompletionSerial((current) => current + 1);
             void refreshPendingApprovalGroups(currentSession.id);

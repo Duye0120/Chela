@@ -238,6 +238,14 @@ export function getEntryNameHint(entry: EditableEntry): string {
     : "当前使用自定义显示名称";
 }
 
+export function hasIncompleteModelDraft(workspace: SourceWorkspace): boolean {
+  return workspace.entries.some(
+    (entry) =>
+      !entry.builtin &&
+      (!entry.modelId.trim() || entry.modelId.trim() === "new-model-id"),
+  );
+}
+
 function resolveEditableCustomName(entry: ModelEntry): string {
   if (entry.builtin) {
     return entry.name;
