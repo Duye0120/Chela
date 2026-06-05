@@ -60,9 +60,11 @@ const RULES: {
     id: "radius-drift",
     description: "Generic radius utility should use var(--radius-shell) or a named Chela radius token",
     pattern:
-      /\brounded-(?:none|xs|sm|md|lg|xl|2xl|3xl|full|\[(?!var\(--radius-shell\)|var\(--radius-pill\)|calc\(var\(--radius-shell\))[^"'\s]*)/gu,
+      /\brounded-(?:none|xs|sm|md|lg|xl|2xl|3xl|full|\[(?!var\(--radius-(?:shell|control|panel|popover|pill)\)|var\(--chela-radius-[a-z]+\)|calc\(var\(--radius-(?:shell|control)\))[^"'\s]*)/gu,
     skip: (relativeFile, line) =>
       SPECIAL_BOUNDARY_FILES.has(relativeFile) ||
+      (relativeFile === "src/renderer/src/components/ui/switch.tsx" &&
+        line.includes("rounded-full")) ||
       line.includes("avatar") ||
       line.includes("Avatar") ||
       line.includes("progress") ||

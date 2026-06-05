@@ -1,6 +1,6 @@
-# Chela Readiness Python Sidecar
+# Chela Readiness JS Gate
 
-`readiness_report.py` is an offline analysis script for sanitized Chela readiness JSONL. `run-readiness-report.ts` is a thin Node runner that invokes the Python sidecar with argument arrays, separated stdout/stderr, a default 30s timeout, and an allowlisted environment.
+`run-readiness-report.ts` is the JS-only offline gate for sanitized Chela readiness JSONL. It reads `ReadinessTraceEvent` JSONL, computes deterministic metrics and scenario assertions in TypeScript, and writes JSON + Markdown reports.
 
 ## Boundary
 
@@ -8,33 +8,45 @@ It does:
 
 - read sanitized `ReadinessTraceEvent` JSONL
 - compute deterministic readiness metrics
+- run Mini Eval scenario assertions
 - write JSON and Markdown reports
 - detect suspicious secret markers without printing raw values
 
-It does not:
+Runtime control stays in the existing harness:
 
-- participate in tool allow / confirm / deny
-- control approval or run state
-- read raw prompt/code/file content/API keys
-- call network or AI models by default
-- require pandas/numpy or any third-party package
+- tool allow / confirm / deny
+- approval and run state
+- raw prompt / code / file content / API keys
+- network and AI model calls
 
 ## Usage
 
+Run the full offline gate:
+
 ```bash
-python3 scripts/readiness/readiness_report.py \
-  --input tests/fixtures/readiness/sample-readiness.jsonl \
-  --json-out /tmp/chela-readiness-report.json \
-  --md-out /tmp/chela-readiness-report.md
+pnpm run chela:harness:eval
 ```
 
-Fail when suspicious secrets are detected:
+Run a custom fixture:
 
 ```bash
-python3 scripts/readiness/readiness_report.py \
+pnpm exec tsx scripts/readiness/run-readiness-report.ts \
   --input tests/fixtures/readiness/sample-readiness.jsonl \
+  --json-out artifacts/readiness/sample-report.json \
+  --md-out artifacts/readiness/sample-report.md \
   --fail-on-secret-leak
 ```
+
+Default output:
+
+- `artifacts/readiness/eval-latest.json`
+- `artifacts/readiness/eval-latest.md`
+
+Exit code:
+
+- `0`: report verdict is `pass` or `warn`
+- `1`: report verdict is `fail`
+- `2`: suspicious secret markers were found with `--fail-on-secret-leak`
 
 ## Metrics
 
@@ -64,16 +76,11 @@ python3 scripts/readiness/readiness_report.py \
 - `long-task-monitored`
 - `safe-shell-allowed`
 
-Each event must keep the basic trace envelope: `scenarioId`, `schemaVersion: 1`, `traceId`, `runId`, `sessionId`, `eventId`, `eventType`, `component`, `ts`, and `status`. Fixtures must stay sanitized: no raw prompt/code/file content, API key, token, cookie, password, or authorization value.
+Each event keeps the basic trace envelope: `scenarioId`, `schemaVersion: 1`, `traceId`, `runId`, `sessionId`, `eventId`, `eventType`, `component`, `ts`, and `status`. Fixtures stay sanitized and avoid raw prompt, code, file content, API key, token, cookie, password, or authorization values.
 
-Run all Python-side regressions:
-
-```bash
-python3 tests/readiness_report_regression.py
-```
-
-Run the TS wrapper regression without adding package scripts:
+Run focused regressions:
 
 ```bash
+pnpm exec tsx tests/harness-readiness-report-regression.test.ts
 pnpm exec tsx tests/readiness-runner-regression.test.ts
 ```
