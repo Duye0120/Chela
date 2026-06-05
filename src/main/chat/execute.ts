@@ -10,6 +10,7 @@ import {
 import { resolveModelEntry } from "../providers.js";
 import { loadSession } from "../session/facade.js";
 import type { ChatRunContext } from "./types.js";
+import { throwIfPendingTerminalError } from "./terminal-error.js";
 
 function isPromptTooLongError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
@@ -181,6 +182,7 @@ export async function executeChatRun(context: ChatRunContext): Promise<void> {
   }
 
   await executePromptWithFailover(context);
+  throwIfPendingTerminalError(context.adapter);
 
   const stopReason = context.adapter.getLastStopReason();
   if (

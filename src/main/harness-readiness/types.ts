@@ -4,7 +4,9 @@ export type ReadinessComponent =
   | "tool_execution"
   | "approval"
   | "context"
+  | "context_engine"
   | "memory"
+  | "monitor"
   | "adapter"
   | "provider"
   | "unknown";
@@ -14,6 +16,7 @@ export type ReadinessTraceStatus = "pending" | "success" | "error" | "cancelled"
 export type ReadinessContextBudget = {
   maxTokens?: number;
   usedTokens?: number;
+  hardSectionIds?: string[];
   trimmedSections?: string[];
 };
 
@@ -59,4 +62,45 @@ export type ReadinessTraceEvent = {
   retrieval?: ReadinessRetrieval;
 
   data?: Record<string, unknown>;
+};
+
+export type ReadinessReportVerdict = "pass" | "warn" | "fail";
+
+export type ReadinessScenarioStatus = "pass" | "warn" | "fail";
+
+export type ReadinessScenarioResult = {
+  scenarioId: string;
+  status: ReadinessScenarioStatus;
+  reason: string;
+  eventCount: number;
+};
+
+export type ReadinessReportDataQuality = {
+  invalidJsonLines: number;
+  invalidSchemaEvents: number;
+};
+
+export type ReadinessReportMetrics = {
+  totalEvents: number;
+  runCount: number;
+  scenarioCount: number;
+  workflowSuccessRate: number | null;
+  toolFailRate: number | null;
+  policyViolationCount: number;
+  approvalRecoveryRate: number | null;
+  p95LatencyMs: number | null;
+  secretLeakageCount: number;
+  hardSectionPreservedRate: number | null;
+};
+
+export type ReadinessReport = {
+  schemaVersion: 1;
+  generatedAt: string;
+  input: string;
+  verdict: ReadinessReportVerdict;
+  metrics: ReadinessReportMetrics;
+  warnings: string[];
+  dataQuality: ReadinessReportDataQuality;
+  scenarioResults: ReadinessScenarioResult[];
+  secretLeakageEventIds: string[];
 };

@@ -571,6 +571,12 @@ export class ElectronAdapter {
     }
   }
 
+  getPendingTerminalErrorMessage(): string | null {
+    return this.pendingTerminalEvent?.type === "agent_error"
+      ? this.pendingTerminalEvent.message
+      : null;
+  }
+
   buildAssistantMessage(
     status: "completed" | "error" | "cancelled",
     fallbackText?: string,

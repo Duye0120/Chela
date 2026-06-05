@@ -360,8 +360,12 @@ function readProviderState(): ProviderState {
     const persisted = persistedSources.find((source) => source.id === builtin.id);
     const legacyBaseUrl = legacyBaseUrls.get(builtin.id);
     const persistedBaseUrl = normalizeBaseUrl(persisted?.baseUrl);
-    const baseUrl = persistedBaseUrl ?? legacyBaseUrl ?? null;
-    const mode = baseUrl ? "custom" : persisted?.mode === "custom" ? "custom" : "native";
+    const baseUrl = persistedBaseUrl ?? legacyBaseUrl ?? builtin.baseUrl;
+    const mode = baseUrl
+      ? "custom"
+      : persisted?.mode === "custom"
+        ? "custom"
+        : builtin.mode;
 
     return {
       ...builtin,

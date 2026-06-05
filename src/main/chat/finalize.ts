@@ -21,6 +21,7 @@ import {
 } from "./run-change-summary.js";
 import type { ChatRunContext } from "./types.js";
 import type { ChatMessage, RunChangeSummary } from "../../shared/contracts.js";
+import { formatChatRuntimeErrorMessage } from "../../shared/chat-runtime-errors.js";
 
 async function maybeAutoRenameSessionTitle(
   sessionId: string,
@@ -252,8 +253,9 @@ export async function finalizeFailedChatRun(
     return;
   }
 
-  const errorMessage =
+  const rawErrorMessage =
     err instanceof Error ? err.message : "Agent 执行失败";
+  const errorMessage = formatChatRuntimeErrorMessage(err);
   const failedMessage = context.adapter.buildAssistantMessage(
     "error",
     errorMessage,
@@ -274,7 +276,7 @@ export async function finalizeFailedChatRun(
       runId: context.input.runId,
       ownerId: PRIMARY_AGENT_OWNER,
       finalState: "failed",
-      reason: errorMessage,
+      reason: rawErrorMessage,
       metadata: {
         requestedModelEntryId: context.requestedModelEntryId,
         resolvedModelEntryId:
@@ -282,13 +284,14 @@ export async function finalizeFailedChatRun(
         prepareFailedEntries: context.failover.prepare.failedEntries,
         executeAttemptedEntryIds: context.failover.execute.attemptedEntryIds,
         lastExecuteFailoverError: context.failover.execute.lastError,
+        userVisibleErrorMessage: errorMessage,
         ...(runChangeSummary ? { runChangeSummary } : {}),
       },
     });
   }
   if (context.runCreated) {
     harnessRuntime.finishRun(context.runScope, "failed", {
-      reason: errorMessage,
+      reason: rawErrorMessage,
     });
   }
   appLogger.error({
