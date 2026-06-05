@@ -12,13 +12,14 @@ export const BUILTIN_PROVIDER_SOURCE_IDS = {
   anthropic: "builtin:anthropic",
   openai: "builtin:openai",
   google: "builtin:google",
+  openrouter: "builtin:openrouter",
 } as const;
 
 export const DEFAULT_MODEL_ENTRY_ID =
   "builtin:anthropic:claude-sonnet-4-20250514";
 
 export function createBuiltinEntryId(
-  providerType: Extract<ProviderType, "anthropic" | "openai" | "google">,
+  providerType: Extract<ProviderType, "anthropic" | "openai" | "google"> | "openrouter",
   modelId: string,
 ): string {
   return `builtin:${providerType}:${modelId}`;
@@ -636,7 +637,7 @@ export function findKnownModelMetadata(modelId: string): KnownModelMetadata | nu
 export type CuratedModelCatalogItem = {
   id: string;
   sourceId: string;
-  providerType: Extract<ProviderType, "anthropic" | "openai" | "google">;
+  providerType: Extract<ProviderType, "anthropic" | "openai" | "google" | "openai-compatible">;
   name: string;
   modelId: string;
   detectedCapabilities: ModelCapabilities;
@@ -670,6 +671,15 @@ export const BUILTIN_SOURCES: ProviderSource[] = [
     mode: "native",
     enabled: true,
     baseUrl: null,
+  },
+  {
+    id: BUILTIN_PROVIDER_SOURCE_IDS.openrouter,
+    name: "OpenRouter",
+    kind: "builtin",
+    providerType: "openai-compatible",
+    mode: "custom",
+    enabled: true,
+    baseUrl: "https://openrouter.ai/api/v1",
   },
 ];
 
@@ -740,6 +750,37 @@ export const CURATED_MODEL_CATALOG: CuratedModelCatalogItem[] = [
     providerType: "google",
     name: "Gemini 2.0 Flash",
     modelId: "gemini-2.0-flash",
+    detectedCapabilities: requireKnownModelMetadata("gemini-2.0-flash")
+      .detectedCapabilities,
+    detectedLimits: requireKnownModelMetadata("gemini-2.0-flash")
+      .detectedLimits,
+  },
+  {
+    id: createBuiltinEntryId("openrouter", "anthropic/claude-sonnet-4"),
+    sourceId: BUILTIN_PROVIDER_SOURCE_IDS.openrouter,
+    providerType: "openai-compatible",
+    name: "Claude Sonnet 4 (OpenRouter)",
+    modelId: "anthropic/claude-sonnet-4",
+    detectedCapabilities: requireKnownModelMetadata("claude-sonnet-4-20250514")
+      .detectedCapabilities,
+    detectedLimits: requireKnownModelMetadata("claude-sonnet-4-20250514")
+      .detectedLimits,
+  },
+  {
+    id: createBuiltinEntryId("openrouter", "openai/gpt-4o"),
+    sourceId: BUILTIN_PROVIDER_SOURCE_IDS.openrouter,
+    providerType: "openai-compatible",
+    name: "GPT-4o (OpenRouter)",
+    modelId: "openai/gpt-4o",
+    detectedCapabilities: requireKnownModelMetadata("gpt-4o").detectedCapabilities,
+    detectedLimits: requireKnownModelMetadata("gpt-4o").detectedLimits,
+  },
+  {
+    id: createBuiltinEntryId("openrouter", "google/gemini-2.0-flash-001"),
+    sourceId: BUILTIN_PROVIDER_SOURCE_IDS.openrouter,
+    providerType: "openai-compatible",
+    name: "Gemini 2.0 Flash (OpenRouter)",
+    modelId: "google/gemini-2.0-flash-001",
     detectedCapabilities: requireKnownModelMetadata("gemini-2.0-flash")
       .detectedCapabilities,
     detectedLimits: requireKnownModelMetadata("gemini-2.0-flash")
