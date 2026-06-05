@@ -22,6 +22,7 @@ import { readFileSync } from "node:fs";
   assert.match(promptControlPlane, /不要猜测“底层模型”/);
   assert.match(promptControlPlane, /mimo-v2\.5-pro/);
   assert.match(assistantPanel, /modelEntryId: currentModelId/);
+  assert.match(assistantPanel, /formatChatRuntimeErrorMessage\(event\.message\)/);
   assert.match(prepareChat, /input\.modelEntryId\?\.trim\(\) \|\| settings\.modelRouting\.chat\.modelId/);
   assert.match(prepareChat, /isHandlePromptRuntimeCurrent/);
   assert.match(prepareChat, /handle\.promptRuntime\.modelId === resolvedModel\.entry\.modelId/);

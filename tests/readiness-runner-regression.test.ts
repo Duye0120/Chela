@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 
 import {
   buildReadinessReportArgs,
-  buildReadinessReportEnv,
+  DEFAULT_READINESS_FIXTURE_PATH,
+  DEFAULT_READINESS_JSON_OUT_PATH,
+  DEFAULT_READINESS_MARKDOWN_OUT_PATH,
   runReadinessReport,
 } from "../scripts/readiness/run-readiness-report";
 
@@ -49,40 +51,54 @@ async function main(): Promise<void> {
     );
 
     const args = buildReadinessReportArgs({ input, jsonOut, mdOut, failOnSecretLeak: true });
-    assert.equal(args[0].endsWith("scripts/readiness/readiness_report.py"), true);
-    assert.deepEqual(args.slice(1), ["--input", input, "--json-out", jsonOut, "--md-out", mdOut, "--fail-on-secret-leak"]);
+    assert.deepEqual(args, ["--input", input, "--json-out", jsonOut, "--md-out", mdOut, "--fail-on-secret-leak"]);
 
-    const env = buildReadinessReportEnv({
-      PATH: "/usr/bin",
-      HOME: "/home/test",
-      USERPROFILE: "C:\\Users\\test",
-      SystemRoot: "C:\\Windows",
-      TEMP: "/tmp",
-      TMP: "/tmp",
-      CHELA_PYTHON: "python3",
-      API_KEY: "must-not-pass",
-      Authorization: "must-not-pass",
-    });
-    assert.deepEqual(Object.keys(env).sort(), ["CHELA_PYTHON", "HOME", "PATH", "SystemRoot", "TEMP", "TMP", "USERPROFILE"].sort());
-    assert.equal(env.API_KEY, undefined);
-    assert.equal(env.Authorization, undefined);
+    const defaultArgs = buildReadinessReportArgs({});
+    assert.deepEqual(defaultArgs, [
+      "--input",
+      DEFAULT_READINESS_FIXTURE_PATH,
+      "--json-out",
+      DEFAULT_READINESS_JSON_OUT_PATH,
+      "--md-out",
+      DEFAULT_READINESS_MARKDOWN_OUT_PATH,
+      "--fail-on-secret-leak",
+    ]);
 
     const result = await runReadinessReport({
       input,
       jsonOut,
       mdOut,
-      timeoutMs: 30_000,
-      env: { PATH: process.env.PATH ?? "", CHELA_PYTHON: "python3" },
+      failOnSecretLeak: true,
     });
-    assert.equal(result.python, "python3");
     assert.equal(result.code, 0, result.stderr);
-    assert.equal(result.timedOut, false);
     assert.equal(result.stderr, "");
     const report = JSON.parse(await readFile(jsonOut, "utf8"));
     assert.equal(report.scenarioResults[0].scenarioId, "safe-shell-allowed");
     assert.equal(report.scenarioResults[0].status, "pass");
     const markdown = await readFile(mdOut, "utf8");
     assert.equal(markdown.includes("## Scenario Summary"), true);
+
+    const leakInput = join(tempDir, "leak.jsonl");
+    await writeFile(
+      leakInput,
+      JSON.stringify({
+        schemaVersion: 1,
+        traceId: "trace-leak",
+        runId: "run-leak",
+        sessionId: "session-leak",
+        scenarioId: "secret-redacted",
+        eventId: "leak-1",
+        eventType: "tool_completed",
+        component: "tool_execution",
+        ts: 1,
+        status: "success",
+        data: { credential: "sk-test-raw-secret" },
+      }) + "\n",
+      "utf8",
+    );
+    const leakResult = await runReadinessReport({ input: leakInput, failOnSecretLeak: true });
+    assert.equal(leakResult.code, 2);
+    assert.equal(leakResult.stdout.includes("sk-test-raw-secret"), false);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

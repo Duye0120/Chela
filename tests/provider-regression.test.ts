@@ -5,6 +5,12 @@ import {
   createProviderModelsResult,
   getProviderErrorLabel,
 } from "../src/shared/provider-errors.ts";
+import { formatChatRuntimeErrorMessage } from "../src/shared/chat-runtime-errors.ts";
+import {
+  BUILTIN_PROVIDER_SOURCE_IDS,
+  BUILTIN_SOURCES,
+  CURATED_MODEL_CATALOG,
+} from "../src/shared/provider-directory.ts";
 import { fetchProviderModelIds } from "../src/main/provider-model-fetch.ts";
 import {
   isProviderChatSmokeCliEntry,
@@ -22,6 +28,27 @@ const openAiCompatibleSource: ProviderSource = {
   enabled: true,
   baseUrl: "http://127.0.0.1:11434/v1",
 };
+
+assert.equal(BUILTIN_PROVIDER_SOURCE_IDS.openrouter, "builtin:openrouter");
+assert.deepEqual(
+  BUILTIN_SOURCES.find((source) => source.id === BUILTIN_PROVIDER_SOURCE_IDS.openrouter),
+  {
+    id: "builtin:openrouter",
+    name: "OpenRouter",
+    kind: "builtin",
+    providerType: "openai-compatible",
+    mode: "custom",
+    enabled: true,
+    baseUrl: "https://openrouter.ai/api/v1",
+  },
+);
+assert.ok(
+  CURATED_MODEL_CATALOG.some(
+    (entry) =>
+      entry.sourceId === BUILTIN_PROVIDER_SOURCE_IDS.openrouter &&
+      entry.modelId === "anthropic/claude-sonnet-4",
+  ),
+);
 
 assert.deepEqual(classifyProviderError(new Error("请求失败 401: invalid api key")), {
   errorCode: "authentication",
@@ -63,6 +90,18 @@ assert.deepEqual(createProviderModelsResult(["gpt-4o-mini"]), {
 
 assert.equal(getProviderErrorLabel("authentication"), "认证失败");
 assert.equal(getProviderErrorLabel("empty_models"), "模型为空");
+assert.equal(
+  formatChatRuntimeErrorMessage("401 invalid access token or token expired"),
+  "模型认证失败：401 invalid access token or token expired",
+);
+assert.equal(
+  formatChatRuntimeErrorMessage("404 model 'qwen2.5:7b' not found"),
+  "模型不可用：404 model 'qwen2.5:7b' not found",
+);
+assert.equal(
+  formatChatRuntimeErrorMessage("your plan has expired"),
+  "账号计划不可用：your plan has expired",
+);
 
 {
   const ids = await fetchProviderModelIds(openAiCompatibleSource, "local", {
