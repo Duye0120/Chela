@@ -1,8 +1,13 @@
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import { createTwoFilesPatch, parsePatch } from "./diff-shim.js";
+import { createTwoFilesPatch, parsePatch } from "./diff-shim.ts";
+import {
+  getExtension,
+  IMAGE_EXTENSIONS,
+  TEXT_EXTENSIONS,
+} from "../shared/file-extensions.ts";
 import type {
   GitBranchEntry,
   GitBranchSummary,
@@ -10,39 +15,12 @@ import type {
   GitDiffOverview,
   GitDiffSource,
   GitDiffSourceSnapshot,
-} from "../shared/contracts.js";
+} from "../shared/contracts.ts";
 
 const execFileAsync = promisify(execFile);
 const EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const GIT_MAX_BUFFER = 10 * 1024 * 1024;
-const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico"]);
-const TEXT_EXTENSIONS = new Set([
-  "ts",
-  "tsx",
-  "js",
-  "jsx",
-  "mjs",
-  "cjs",
-  "json",
-  "md",
-  "txt",
-  "yml",
-  "yaml",
-  "toml",
-  "html",
-  "css",
-  "scss",
-  "less",
-  "py",
-  "java",
-  "go",
-  "rs",
-  "sh",
-  "ps1",
-  "xml",
-  "csv",
-  "env",
-]);
+const MAX_UNTRACKED_PATCH_BYTES = 1024 * 1024;
 const DIFF_SOURCES = ["unstaged", "staged", "all"] as const satisfies readonly GitDiffSource[];
 
 type GitCommandResult = {
@@ -70,6 +48,22 @@ function normalizeGitPaths(paths: string[]): string[] {
         .filter((filePath) => filePath.length > 0),
     ),
   );
+}
+
+function stripGitWarnings(stderr: string): string {
+  return stderr
+    .split(/\r?\n/)
+    .filter((line) => {
+      const trimmed = line.trim();
+      return (
+        trimmed.length > 0 &&
+        !trimmed.startsWith("warning: in the working copy of") &&
+        !trimmed.startsWith("hint: Use -f") &&
+        !trimmed.startsWith("hint: Disable this message")
+      );
+    })
+    .join("\n")
+    .trim();
 }
 
 async function runGit(args: string[], cwd: string): Promise<GitCommandResult> {
@@ -147,6 +141,38 @@ function getGitErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function createGitUserError(code: string, message: string): Error & { code: string } {
+  const error = new Error(message) as Error & { code: string };
+  error.code = code;
+  return error;
+}
+
+function isIpcPayloadLike(error: unknown): error is { code: string; message: string } {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    typeof (error as { code?: unknown }).code === "string" &&
+    typeof (error as { message?: unknown }).message === "string"
+  );
+}
+
+function isEmptyCommitOutput(output: string): boolean {
+  return /nothing to commit|no changes added to commit/i.test(output);
+}
+
+async function hasStagedChanges(
+  workspacePath: string,
+  paths: string[],
+): Promise<boolean> {
+  const args = ["diff", "--cached", "--name-only"];
+  if (paths.length > 0) {
+    args.push("--", ...paths);
+  }
+
+  const result = await runGit(args, workspacePath);
+  return result.stdout.trim().length > 0;
 }
 
 async function ensureGitRepository(workspacePath: string) {
@@ -384,10 +410,6 @@ function resolveSourceStatus(entry: GitStatusEntry, source: GitDiffSource): GitD
   return entry.status;
 }
 
-function getExtension(filePath: string) {
-  return path.extname(filePath).replace(/^\./, "").toLowerCase();
-}
-
 function resolveFileKind(filePath: string, patch: string): GitDiffFile["kind"] {
   const extension = getExtension(filePath);
 
@@ -420,6 +442,18 @@ function createUntrackedPatch(workspacePath: string, filePath: string) {
 
   if (!existsSync(absolutePath)) {
     return `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\n`;
+  }
+
+  const fileStats = statSync(absolutePath);
+  if (fileStats.size > MAX_UNTRACKED_PATCH_BYTES) {
+    return [
+      `diff --git a/${filePath} b/${filePath}`,
+      "new file mode 100644",
+      "--- /dev/null",
+      `+++ b/${filePath}`,
+      `@@ -0,0 +1 @@`,
+      `+File is too large to display (${fileStats.size} bytes).`,
+    ].join("\n");
   }
 
   const buffer = readFileSync(absolutePath);
@@ -682,6 +716,73 @@ export async function unstageGitFiles(workspacePath: string, paths: string[]): P
   }
 }
 
+async function stageFiles(
+  workspacePath: string,
+  paths: string[],
+): Promise<void> {
+  if (paths.length === 0) return;
+
+  try {
+    await runGit(["add", "--", ...paths], workspacePath);
+  } catch (addError) {
+    const errorMessage = getGitErrorMessage(addError, "");
+
+    // 如果报错包含 ignored 路径，用 git check-ignore 快速筛出后重试。
+    // check-ignore 只检查模式匹配，不扫描文件内容，开销极小。
+    const ignoredPaths = /ignored/i.test(errorMessage)
+      ? await getIgnoredPaths(workspacePath, paths)
+      : new Set<string>();
+
+    const safePaths = paths.filter((p) => !ignoredPaths.has(p));
+
+    if (safePaths.length > 0) {
+      try {
+        await runGit(["add", "--", ...safePaths], workspacePath);
+      } catch {
+        // 某些路径可能已从索引中删除（D 状态）或不存在，逐个重试。
+        for (const path of safePaths) {
+          try {
+            await runGit(["add", "--", path], workspacePath);
+          } catch {
+            // 无法暂存的路径跳过（已 staged 或不存在）。
+          }
+        }
+      }
+    }
+
+    // 对 ignored 路径尝试 git rm --cached，暂存可能的删除操作。
+    // 仅修改索引不触碰磁盘；对已从索引删除或不存在的路径静默跳过。
+    for (const path of ignoredPaths) {
+      try {
+        await runGit(["rm", "--cached", "--", path], workspacePath);
+      } catch {
+        // 文件不在索引中或未被删除，跳过。
+      }
+    }
+  }
+}
+
+async function getIgnoredPaths(
+  workspacePath: string,
+  paths: string[],
+): Promise<Set<string>> {
+  try {
+    const result = await runGit(
+      ["check-ignore", "--", ...paths],
+      workspacePath,
+    );
+
+    return new Set(
+      result.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 export async function commitGitChanges(
   workspacePath: string,
   message: string,
@@ -698,7 +799,17 @@ export async function commitGitChanges(
 
   try {
     if (normalizedPaths.length > 0) {
-      await runGit(["add", "--", ...normalizedPaths], workspacePath);
+      await stageFiles(workspacePath, normalizedPaths);
+    }
+
+    const hasCommitContent = await hasStagedChanges(workspacePath, normalizedPaths);
+    if (!hasCommitContent) {
+      throw createGitUserError(
+        "GIT_COMMIT_EMPTY",
+        normalizedPaths.length > 0
+          ? "选中的文件没有可提交内容。请刷新 Diff 面板后重新选择有改动的文件。"
+          : "没有已暂存的改动。请先在 Diff 面板选择文件或暂存改动。",
+      );
     }
 
     const commitArgs = ["commit", "-m", normalizedMessage];
@@ -708,11 +819,31 @@ export async function commitGitChanges(
 
     await runGit(commitArgs, workspacePath);
   } catch (error) {
+    if (isIpcPayloadLike(error)) {
+      throw error;
+    }
+
+    if (error && typeof error === "object" && "stderr" in error) {
+      (error as { stderr: string }).stderr = stripGitWarnings(
+        (error as { stderr: string }).stderr ?? "",
+      );
+    }
+
+    const gitMessage = getGitErrorMessage(
+      error,
+      normalizedPaths.length > 0 ? "提交选中文件失败。" : "提交改动失败。",
+    );
+    if (isEmptyCommitOutput(gitMessage)) {
+      throw createGitUserError(
+        "GIT_COMMIT_EMPTY",
+        normalizedPaths.length > 0
+          ? "选中的文件没有可提交内容。请刷新 Diff 面板后重新选择有改动的文件。"
+          : "没有已暂存的改动。请先在 Diff 面板选择文件或暂存改动。",
+      );
+    }
+
     throw new Error(
-      getGitErrorMessage(
-        error,
-        normalizedPaths.length > 0 ? "提交选中文件失败。" : "提交改动失败。",
-      ),
+      gitMessage,
     );
   }
 }
