@@ -1,7 +1,7 @@
-import { IPC_CHANNELS } from "../../shared/ipc.js";
-import { getChelaMemoryService } from "../memory/rag-service.js";
-import { getMemorySyncStats } from "../memory/service.js";
-import { handleIpc } from "./handle.js";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
+import { getChelaMemoryService } from "../memory/rag-service.ts";
+import { getMemorySyncStats } from "../memory/service.ts";
+import { handleIpc } from "./handle.ts";
 import {
   validateMemoryAddPayload,
   validateMemoryFeedbackDeltaPayload,
@@ -9,7 +9,7 @@ import {
   validateMemoryListPayload,
   validateMemorySearchLimitPayload,
   validateMemorySearchQueryPayload,
-} from "./schema.js";
+} from "./schema.ts";
 
 export function registerMemoryIpc(): void {
   const memoryService = getChelaMemoryService();

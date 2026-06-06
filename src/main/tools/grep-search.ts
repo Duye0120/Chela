@@ -3,12 +3,12 @@ import path from "node:path";
 import readline from "node:readline";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { isPathAllowed } from "../security.js";
+import { isPathAllowed } from "../security.ts";
 import {
   resolveWorkspaceBasePath,
   toRelativeWorkspacePath,
-} from "./fs-utils.js";
-import { resolveRipgrepCommand } from "./ripgrep.js";
+} from "./fs-utils.ts";
+import { resolveRipgrepCommand } from "./ripgrep.ts";
 
 const parameters = Type.Object({
   pattern: Type.Optional(Type.String({ description: "要搜索的模式；默认按正则解释" })),

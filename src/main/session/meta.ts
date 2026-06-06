@@ -6,14 +6,14 @@ import type {
   ChatSessionSummary,
   QueuedMessage,
   SelectedFile,
-} from "../../shared/contracts.js";
-import { getBrowserContextItems } from "../../shared/browser-context.js";
-import { atomicWrite, readJsonFile } from "./io.js";
-import { getIndexPath, getSessionMetaPath } from "./paths.js";
+} from "../../shared/contracts.ts";
+import { getBrowserContextItems } from "../../shared/browser-context.ts";
+import { atomicWrite, readJsonFile } from "./io.ts";
+import { getIndexPath, getSessionMetaPath } from "./paths.ts";
 import {
   countMaterializedMessages,
   loadTranscript,
-} from "./transcript.js";
+} from "./transcript.ts";
 
 type SessionIndex = {
   summaries: ChatSessionSummary[];

@@ -18,7 +18,7 @@ import {
 } from "../lib/browser-interview";
 import { EMPTY_CONTEXT_USAGE_SUMMARY } from "../lib/context-usage";
 
-type SessionStoreState = {
+export type SessionStoreState = {
   summaries: ChatSessionSummary[];
   archivedSummaries: ChatSessionSummary[];
   groups: SessionGroup[];
@@ -53,6 +53,21 @@ type SessionStoreState = {
   ) => void;
   resetSessionStoreForTests: () => void;
 };
+
+export type SessionStoreActions = Pick<
+  SessionStoreState,
+  | "setSummaries"
+  | "setArchivedSummaries"
+  | "setGroups"
+  | "cacheSession"
+  | "removeCachedSession"
+  | "hydrateSession"
+  | "clearActiveSession"
+  | "persistSessionLocally"
+  | "removeSessionState"
+  | "setContextSummary"
+  | "setInterruptedApprovalGroups"
+>;
 
 const initialSessionState = {
   summaries: [] as ChatSessionSummary[],

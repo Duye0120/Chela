@@ -1,12 +1,12 @@
-import { IPC_CHANNELS } from "../../shared/ipc.js";
-import { handleIpc } from "./handle.js";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
+import { handleIpc } from "./handle.ts";
 import {
   installSkill,
   listInstalledSkills,
   openSkillDirectory,
   openSkillFile,
   searchSkillCatalog,
-} from "../skills.js";
+} from "../skills.ts";
 
 export function registerSkillsIpc(): void {
   handleIpc(IPC_CHANNELS.skillsListInstalled, async () => listInstalledSkills());

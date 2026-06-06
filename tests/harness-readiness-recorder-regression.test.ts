@@ -3,10 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import type { BusEventName } from "../src/main/event-bus.js";
-import { ReadinessTraceRecorder } from "../src/main/harness-readiness/trace-recorder.js";
-import { ReadinessTraceStore } from "../src/main/harness-readiness/trace-store.js";
-import type { ReadinessTraceEvent } from "../src/main/harness-readiness/types.js";
+import type { BusEventName } from "../src/main/event-bus.ts";
+import { ReadinessTraceRecorder } from "../src/main/harness-readiness/trace-recorder.ts";
+import { ReadinessTraceStore } from "../src/main/harness-readiness/trace-store.ts";
+import type { ReadinessTraceEvent } from "../src/main/harness-readiness/types.ts";
 
 const TEST_EVENTS = {
   MESSAGE_USER: "message:user",

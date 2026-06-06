@@ -1,6 +1,6 @@
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
-import { IPC_ERROR_MESSAGE_PREFIX, type IpcErrorPayload } from "../../shared/ipc.js";
-import { appLogger, summarizeIpcArgs } from "../logger.js";
+import { IPC_ERROR_MESSAGE_PREFIX, type IpcErrorPayload } from "../../shared/ipc.ts";
+import { appLogger, summarizeIpcArgs } from "../logger.ts";
 
 function isIpcErrorPayload(value: unknown): value is IpcErrorPayload {
   return (
@@ -17,6 +17,11 @@ function normalizeIpcError(error: unknown): IpcErrorPayload {
   }
 
   if (error instanceof Error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && code.trim()) {
+      return { code: code.trim(), message: error.message };
+    }
+
     return { code: "INTERNAL_ERROR", message: error.message };
   }
 

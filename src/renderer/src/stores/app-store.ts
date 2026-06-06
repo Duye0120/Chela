@@ -6,7 +6,7 @@ import type {
   WindowFrameState,
 } from "@shared/contracts";
 
-type AppStoreState = {
+export type AppStoreState = {
   booting: boolean;
   bootError: string | null;
   terminalOpen: boolean;
@@ -39,6 +39,11 @@ type AppStoreState = {
   setSettings: (settings: Settings | null) => void;
   resetAppStoreForTests: () => void;
 };
+
+export type AppStoreActions = Pick<
+  AppStoreState,
+  "bumpBrowserInteractionResetSignal"
+>;
 
 const DEFAULT_MODEL_ID = "builtin:anthropic:claude-sonnet-4-20250514";
 const DEFAULT_SIDEBAR_SIZE = 18;

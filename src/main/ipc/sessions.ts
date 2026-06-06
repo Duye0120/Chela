@@ -1,6 +1,6 @@
-import { IPC_CHANNELS } from "../../shared/ipc.js";
-import type { ChatSession, SessionGroupCreateInput } from "../../shared/contracts.js";
-import { compactSession, getContextSummary } from "../context/service.js";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
+import type { ChatSession, SessionGroupCreateInput } from "../../shared/contracts.ts";
+import { compactSession, getContextSummary } from "../context/service.ts";
 import {
   archiveSession,
   rebuildSessionSearchIndex,
@@ -15,14 +15,14 @@ import {
   setSessionGroup,
   setSessionPinned,
   unarchiveSession,
-} from "../session/facade.js";
+} from "../session/facade.ts";
 import {
   createGroup,
   deleteGroup,
   listGroups,
   renameGroup,
-} from "../ui-state.js";
-import { handleIpc } from "./handle.js";
+} from "../ui-state.ts";
+import { handleIpc } from "./handle.ts";
 
 export function registerSessionsIpc(): void {
   handleIpc(IPC_CHANNELS.sessionsList, async () => listSessions());

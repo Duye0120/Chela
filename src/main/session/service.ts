@@ -15,15 +15,15 @@ import type {
   QueuedMessage,
   SessionMemorySnapshot,
   SessionTranscriptEvent,
-} from "../../shared/contracts.js";
-import { createEmptySession } from "../../shared/contracts.js";
-import { getBrowserContextItems } from "../../shared/browser-context.js";
-import type { HarnessRunSnapshot } from "../harness/types.js";
+} from "../../shared/contracts.ts";
+import { createEmptySession } from "../../shared/contracts.ts";
+import { getBrowserContextItems } from "../../shared/browser-context.ts";
+import type { HarnessRunSnapshot } from "../harness/types.ts";
 import {
   atomicWrite,
   ensureDir,
   readJsonFile,
-} from "./io.js";
+} from "./io.ts";
 import {
   INDEX_FILE,
   getIndexPath,
@@ -33,7 +33,7 @@ import {
   getSessionsDir,
   getSnapshotPath,
   getTranscriptPath,
-} from "./paths.js";
+} from "./paths.ts";
 import {
   createMetaFromSession,
   normalizeTodoItem,
@@ -47,26 +47,26 @@ import {
   writeMeta,
   type PersistedSessionMeta,
   type SessionTodoItem,
-} from "./meta.js";
+} from "./meta.ts";
 import {
   loadTranscript,
   materializeMessages,
-} from "./transcript.js";
+} from "./transcript.ts";
 import {
   appendRunFinishedEvent as appendRunFinishedTranscriptEvent,
   appendUserMessageEvent as appendUserMessageTranscriptEvent,
-} from "./transcript-writer.js";
-import { withSessionWriteLock } from "./write-lock.js";
+} from "./transcript-writer.ts";
+import { withSessionWriteLock } from "./write-lock.ts";
 import {
   indexSessionSearchDocument,
   removeSessionSearchDocument,
-} from "./search.js";
+} from "./search.ts";
 
 export type {
   PersistedSessionMeta,
   SessionTodoItem,
   SessionTodoStatus,
-} from "./meta.js";
+} from "./meta.ts";
 
 export {
   appendAssistantMessageEvent,
@@ -80,7 +80,7 @@ export {
   appendRunStateChangedEvent,
   appendToolFinishedEvent,
   appendToolStartedEvent,
-} from "./transcript-writer.js";
+} from "./transcript-writer.ts";
 
 function toIsoTimestamp(value: number | string): string {
   if (typeof value === "string") {

@@ -1,12 +1,12 @@
-import type { Settings } from "../../shared/contracts.js";
-import { appLogger } from "../logger.js";
-import { getSettings } from "../settings.js";
+import type { Settings } from "../../shared/contracts.ts";
+import { appLogger } from "../logger.ts";
+import { getSettings } from "../settings.ts";
 import {
   Agent,
   EnvHttpProxyAgent,
   type Dispatcher,
   setGlobalDispatcher,
-} from "./undici.js";
+} from "./undici.ts";
 
 let currentDispatcher: Dispatcher | null = null;
 

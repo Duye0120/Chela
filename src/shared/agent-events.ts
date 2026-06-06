@@ -1,4 +1,4 @@
-import type { RunChangeSummary } from "./contracts.js";
+import type { RunChangeSummary } from "./contracts.ts";
 
 // ── Agent Event Types ──────────────────────────────────────────
 // Discriminated union of all events emitted by the agent engine

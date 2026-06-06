@@ -1,6 +1,6 @@
-import { getActiveServers, loadMcpConfig } from "../mcp/config.js";
-import { getMemdirStore } from "./memory/service.js";
-import type { ProviderType } from "../shared/contracts.js";
+import { getActiveServers, loadMcpConfig } from "../mcp/config.ts";
+import { getMemdirStore } from "./memory/service.ts";
+import type { ProviderType } from "../shared/contracts.ts";
 
 export type PromptLayer =
   | "constitution"

@@ -1,16 +1,16 @@
 import { shell } from "electron";
 import fs from "node:fs";
-import { IPC_CHANNELS } from "../../shared/ipc.js";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
 import {
   disconnectMcpServerForActiveHandles,
   listMcpServerStatuses,
   reloadMcpConfigForActiveHandles,
   restartMcpServerForActiveHandles,
-} from "../agent.js";
-import { getSettings } from "../settings.js";
-import { deleteMcpServerConfig, getMcpConfigPath, saveMcpServerConfig } from "../../mcp/config.js";
-import { handleIpc } from "./handle.js";
-import { validateMcpServerConfigDraftPayload, validateServerNamePayload } from "./schema.js";
+} from "../agent.ts";
+import { getSettings } from "../settings.ts";
+import { deleteMcpServerConfig, getMcpConfigPath, saveMcpServerConfig } from "../../mcp/config.ts";
+import { handleIpc } from "./handle.ts";
+import { validateMcpServerConfigDraftPayload, validateServerNamePayload } from "./schema.ts";
 
 async function openMcpConfig(): Promise<void> {
   const configPath = getMcpConfigPath(getSettings().workspace);

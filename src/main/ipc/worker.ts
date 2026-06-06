@@ -1,16 +1,16 @@
 import type {
   GenerateCommitMessageRequest,
   GenerateCommitPlanRequest,
-} from "../../shared/contracts.js";
-import { IPC_CHANNELS } from "../../shared/ipc.js";
-import { handleIpc } from "./handle.js";
-import { WorkerService } from "../worker-service.js";
+} from "../../shared/contracts.ts";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
+import { handleIpc } from "./handle.ts";
+import { WorkerService } from "../worker-service.ts";
 import {
   getDiffForFiles,
   getGitBranchSummary,
   getLatestCommitSubject,
-} from "../git.js";
-import { getSettings } from "../settings.js";
+} from "../git.ts";
+import { getSettings } from "../settings.ts";
 
 export function registerWorkerIpc(): void {
   handleIpc(

@@ -1,16 +1,16 @@
-import { bindHandleToRun, initAgent, promptAgent } from "../agent.js";
-import { harnessRuntime } from "../harness/singleton.js";
-import { appLogger } from "../logger.js";
-import { reactiveCompact } from "../context/service.js";
+import { bindHandleToRun, initAgent, promptAgent } from "../agent.ts";
+import { harnessRuntime } from "../harness/singleton.ts";
+import { appLogger } from "../logger.ts";
+import { reactiveCompact } from "../context/service.ts";
 import {
   isProviderTransientError,
   listFailoverCandidateEntryIds,
   withRetry,
-} from "../failover.js";
-import { resolveModelEntry } from "../providers.js";
-import { loadSession } from "../session/facade.js";
-import type { ChatRunContext } from "./types.js";
-import { throwIfPendingTerminalError } from "./terminal-error.js";
+} from "../failover.ts";
+import { resolveModelEntry } from "../providers.ts";
+import { loadSession } from "../session/facade.ts";
+import type { ChatRunContext } from "./types.ts";
+import { throwIfPendingTerminalError } from "./terminal-error.ts";
 
 function isPromptTooLongError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;

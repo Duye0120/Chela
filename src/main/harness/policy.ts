@@ -6,8 +6,8 @@ import {
   isPathAllowed,
   isPathForbiddenRead,
   isWritePathForbidden,
-} from "../security.js";
-import type { HarnessPolicyEvaluation, HarnessRiskLevel } from "./types.js";
+} from "../security.ts";
+import type { HarnessPolicyEvaluation, HarnessRiskLevel } from "./types.ts";
 
 type ToolPolicyContext = {
   workspacePath: string;

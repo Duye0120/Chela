@@ -1,4 +1,4 @@
-import type { InterruptedApprovalNotice } from "./contracts.js";
+import type { InterruptedApprovalNotice } from "./contracts.ts";
 
 export type InterruptedApprovalRecoveryPromptInput = Omit<
   InterruptedApprovalNotice,

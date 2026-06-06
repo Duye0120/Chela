@@ -1,4 +1,4 @@
-import type { RuntimeServiceHealth } from "../runtime-services/types.js";
+import type { RuntimeServiceHealth } from "../runtime-services/types.ts";
 
 export type ObservabilityBus = {
   onAny(handler: (event: string, data: unknown) => void): () => void;

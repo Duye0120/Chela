@@ -1,7 +1,7 @@
 import type {
   MemoryMetadata,
   MemoryMetadataValue,
-} from "../../shared/contracts.js";
+} from "../../shared/contracts.ts";
 
 const MAX_METADATA_ENTRIES = 16;
 const MAX_METADATA_KEY_LENGTH = 48;

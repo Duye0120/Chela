@@ -7,8 +7,8 @@ import type {
   Usage,
   UserMessage,
 } from "@earendil-works/pi-ai";
-import type { ChatMessage, SelectedFile } from "../shared/contracts.js";
-import { readFilePreview, readImageContent } from "./files.js";
+import type { ChatMessage, SelectedFile } from "../shared/contracts.ts";
+import { readFilePreview, readImageContent } from "./files.ts";
 
 type AttachmentLike = Pick<
   SelectedFile,

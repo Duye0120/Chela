@@ -1,8 +1,8 @@
 import { app } from "electron";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { PRIMARY_AGENT_OWNER } from "../agent-owners.js";
-import type { InterruptedApprovalRecord } from "./types.js";
+import { PRIMARY_AGENT_OWNER } from "../agent-owners.ts";
+import type { InterruptedApprovalRecord } from "./types.ts";
 
 type PersistedInterruptedApprovals = {
   approvals: InterruptedApprovalRecord[];

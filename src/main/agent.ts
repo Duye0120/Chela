@@ -4,27 +4,34 @@ import type {
   AgentTool,
   AgentToolCall,
 } from "@earendil-works/pi-agent-core";
-import type { ElectronAdapter } from "./adapter.js";
-import { PRIMARY_AGENT_OWNER } from "./agent-owners.js";
+import type { ElectronAdapter } from "./adapter.ts";
+import { PRIMARY_AGENT_OWNER } from "./agent-owners.ts";
 import {
   buildContextSystemPrompt,
   createTransformContext,
-} from "./context/service.js";
-import { createToolLoopGuardedTransform } from "./agent-loop-guard.js";
-import { getSettings } from "./settings.js";
-import { buildToolPool } from "./tools/index.js";
-import { loadMcpConfig, getActiveServers } from "../mcp/config.js";
-import { McpConnectionManager } from "../mcp/client.js";
-import { wrapToolsWithHarness } from "./harness/tool-execution.js";
-import { harnessRuntime } from "./harness/singleton.js";
-import { parallelManager, SIDE_EFFECT_FREE_TOOLS } from "./parallel-tools.js";
+} from "./context/service.ts";
+import { createToolLoopGuardedTransform } from "./agent-loop-guard.ts";
+import { getSettings } from "./settings.ts";
+import { buildToolPool } from "./tools/index.ts";
+import { loadMcpConfig, getActiveServers } from "../mcp/config.ts";
+import { McpConnectionManager } from "../mcp/client.ts";
+import { wrapToolsWithHarness } from "./harness/tool-execution.ts";
+import { harnessRuntime } from "./harness/singleton.ts";
+import {
+  parallelManager,
+  setParallelToolsDebugLogger,
+  SIDE_EFFECT_FREE_TOOLS,
+} from "./parallel-tools.ts";
+import { appLogger } from "./logger.ts";
 import {
   buildUserPromptMessage,
   normalizePersistedSessionMessages,
-} from "./chat-message-adapter.js";
-import type { ChatMessage, SelectedFile } from "../shared/contracts.js";
-import type { McpServerStatus } from "../shared/contracts.js";
-import type { ResolvedRuntimeModel } from "./model-resolution.js";
+} from "./chat-message-adapter.ts";
+import type { ChatMessage, SelectedFile } from "../shared/contracts.ts";
+import type { McpServerStatus } from "../shared/contracts.ts";
+import type { ResolvedRuntimeModel } from "./model-resolution.ts";
+
+setParallelToolsDebugLogger((entry) => appLogger.debug(entry));
 
 export interface AgentHandle {
   agent: Agent;
@@ -38,6 +45,7 @@ export interface AgentHandle {
   mcpManager: McpConnectionManager;
   workspacePath: string;
   activeRunId: string | null;
+  initGeneration: number;
   promptRuntime: {
     sourceName: string;
     providerType: "anthropic" | "openai" | "google" | "openai-compatible";
@@ -79,6 +87,7 @@ function getHandleOwnerKey(sessionId: string, ownerId = PRIMARY_AGENT_OWNER): st
 function subscribeToAgent(
   agent: Agent,
   adapter: ElectronAdapter,
+  ownerKey: string,
   runId?: string | null,
 ): () => void {
   return agent.subscribe((event: CoreAgentEvent) => {
@@ -102,7 +111,7 @@ function subscribeToAgent(
         }));
         // 使用 agent 的内部 abort signal（通过一个长期 controller）
         const controller = new AbortController();
-        parallelManager.registerBatch(runId, entries, controller.signal);
+        parallelManager.registerBatch(runId, ownerKey, entries, controller.signal);
       }
     }
 
@@ -110,14 +119,20 @@ function subscribeToAgent(
   });
 }
 
-function registerParallelExecutors(tools: AgentTool<any, any>[]): void {
-  for (const tool of tools) {
-    if (SIDE_EFFECT_FREE_TOOLS.has(tool.name)) {
-      parallelManager.registerExecutor(tool.name, (toolCallId, args, signal) =>
-        tool.execute(toolCallId, args, signal, () => {}),
-      );
-    }
-  }
+function registerParallelExecutors(
+  ownerKey: string,
+  tools: AgentTool<any, any>[],
+): void {
+  parallelManager.registerExecutors(
+    ownerKey,
+    tools
+      .filter((tool) => SIDE_EFFECT_FREE_TOOLS.has(tool.name))
+      .map((tool) => ({
+        toolName: tool.name,
+        executor: (toolCallId, args, signal) =>
+          tool.execute(toolCallId, args, signal, () => {}),
+      })),
+  );
 }
 
 async function buildHarnessedTools(
@@ -135,9 +150,7 @@ async function buildHarnessedTools(
     mcpManager: input.mcpManager,
   });
 
-  registerParallelExecutors(rawTools);
-
-  return wrapToolsWithHarness(rawTools, {
+  const tools = wrapToolsWithHarness(rawTools, {
     workspacePath: input.workspacePath,
     runtime: harnessRuntime,
     getAdapter: () => input.getHandle()?.adapter ?? input.adapter,
@@ -148,9 +161,11 @@ async function buildHarnessedTools(
             sessionId: input.sessionId,
             runId: activeRunId,
           }
-        : null;
+      : null;
     },
   });
+
+  return { rawTools, tools };
 }
 
 async function reconnectMcpServers(
@@ -173,8 +188,13 @@ async function reconnectMcpServers(
   for (const [name, cfg] of filteredServers) {
     try {
       await mcpManager.connectServer(name, cfg);
-    } catch {
-      /* skip failing servers */
+    } catch (error) {
+      appLogger.warn({
+        scope: "mcp",
+        message: "MCP server 连接失败，已跳过。",
+        data: { serverName: name, workspacePath },
+        error,
+      });
     }
   }
 }
@@ -214,15 +234,25 @@ export async function initAgent(
     for (const [name, cfg] of servers) {
       try {
         await mcpManager.connectServer(name, cfg);
-      } catch {
-        /* skip failing servers */
+      } catch (error) {
+        appLogger.warn({
+          scope: "mcp",
+          message: "MCP server 连接失败，已跳过。",
+          data: { serverName: name, workspacePath: adapter.workspacePath },
+          error,
+        });
       }
     }
-  } catch {
-    /* MCP init failure is non-fatal */
+  } catch (error) {
+    appLogger.warn({
+      scope: "mcp",
+      message: "MCP 初始化失败，已跳过。",
+      data: { workspacePath: adapter.workspacePath },
+      error,
+    });
   }
 
-  const tools = await buildHarnessedTools({
+  const { rawTools, tools } = await buildHarnessedTools({
     workspacePath: adapter.workspacePath,
     sessionId,
     mcpManager,
@@ -267,7 +297,7 @@ export async function initAgent(
     sessionId,
   });
 
-  const unsubscribe = subscribeToAgent(agent, adapter);
+  const unsubscribe = subscribeToAgent(agent, adapter, ownerKey);
 
   const handle: AgentHandle = {
     agent,
@@ -281,6 +311,7 @@ export async function initAgent(
     mcpManager,
     workspacePath: adapter.workspacePath,
     activeRunId: null,
+    initGeneration: generation,
     promptRuntime,
   };
   handleRef.current = handle;
@@ -292,6 +323,7 @@ export async function initAgent(
     throw new Error("Agent initialization superseded.");
   }
 
+  registerParallelExecutors(ownerKey, rawTools);
   handlesByOwner.set(ownerKey, handle);
   return handle;
 }
@@ -302,7 +334,12 @@ export function bindHandleToRun(
   runId: string,
 ): void {
   handle.unsubscribe();
-  handle.unsubscribe = subscribeToAgent(handle.agent, adapter, runId);
+  handle.unsubscribe = subscribeToAgent(
+    handle.agent,
+    adapter,
+    getHandleOwnerKey(handle.sessionId, handle.ownerId),
+    runId,
+  );
   handle.adapter = adapter;
   handle.activeRunId = runId;
 }
@@ -357,6 +394,10 @@ export async function destroyAgent(handle: AgentHandle): Promise<void> {
   if (handlesByOwner.get(ownerKey) === handle) {
     handlesByOwner.delete(ownerKey);
   }
+  if (initGenerations.get(ownerKey) === handle.initGeneration) {
+    initGenerations.delete(ownerKey);
+  }
+  parallelManager.clearOwner(ownerKey);
   await handle.mcpManager.disconnectAll();
 }
 
@@ -403,13 +444,17 @@ export function listMcpServerStatuses(): McpServerStatus[] {
 
 async function refreshHandleTools(handle: AgentHandle): Promise<void> {
   const handleRef = { current: handle };
-  const tools = await buildHarnessedTools({
+  const { rawTools, tools } = await buildHarnessedTools({
     workspacePath: handle.workspacePath,
     sessionId: handle.sessionId,
     mcpManager: handle.mcpManager,
     adapter: handle.adapter,
     getHandle: () => handleRef.current,
   });
+  registerParallelExecutors(
+    getHandleOwnerKey(handle.sessionId, handle.ownerId),
+    rawTools,
+  );
   handle.agent.state.tools = tools;
   handle.agent.state.systemPrompt = await buildSystemPrompt({
     workspacePath: handle.workspacePath,

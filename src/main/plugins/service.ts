@@ -1,8 +1,8 @@
 import type {
   PluginStatus,
   PluginStatusBundle,
-} from "../../shared/contracts.js";
-import { PluginStateStore, scanPluginDirectory } from "./registry.js";
+} from "../../shared/contracts.ts";
+import { PluginStateStore, scanPluginDirectory } from "./registry.ts";
 
 export type PluginStatusInput = {
   rootDir: string;

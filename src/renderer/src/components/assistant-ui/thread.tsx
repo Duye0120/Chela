@@ -3,6 +3,7 @@ import {
   useContext,
   useCallback,
   useEffect,
+  memo,
   useMemo,
   useRef,
   useState,
@@ -254,7 +255,7 @@ function useThreadRunStatus() {
   return useContext(ThreadRunStatusContext);
 }
 
-export const Thread: FC<ThreadProps> = ({
+const ThreadImpl: FC<ThreadProps> = ({
   sessionId,
   draft = "",
   attachments = [],
@@ -522,6 +523,8 @@ export const Thread: FC<ThreadProps> = ({
     </ThreadRunStatusContext.Provider>
   );
 };
+
+export const Thread = memo(ThreadImpl);
 
 const ThreadMessage: FC = () => {
   const role = useAuiState((s) => s.message.role);

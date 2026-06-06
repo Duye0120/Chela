@@ -1,4 +1,4 @@
-import { classifyProviderError, type ProviderErrorCode } from "../shared/provider-errors.js";
+import { classifyProviderError, type ProviderErrorCode } from "../shared/provider-errors.ts";
 import { pathToFileURL } from "node:url";
 
 type FetchLike = typeof fetch;

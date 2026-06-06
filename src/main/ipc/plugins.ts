@@ -1,15 +1,15 @@
 import { app, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
-import { IPC_CHANNELS } from "../../shared/ipc.js";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
 import {
   findPluginStatus,
   listPluginStatuses,
   setPluginEnabled,
-} from "../plugins/service.js";
-import { getSettings } from "../settings.js";
-import { handleIpc } from "./handle.js";
-import { validatePluginEnabledPayload, validatePluginIdPayload } from "./schema.js";
+} from "../plugins/service.ts";
+import { getSettings } from "../settings.ts";
+import { handleIpc } from "./handle.ts";
+import { validatePluginEnabledPayload, validatePluginIdPayload } from "./schema.ts";
 
 function resolvePluginStatusPaths() {
   const settings = getSettings();

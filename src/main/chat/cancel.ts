@@ -1,6 +1,6 @@
-import { cancelAgent, getHandle } from "../agent.js";
-import { harnessRuntime } from "../harness/singleton.js";
-import type { HarnessRunScope } from "../harness/types.js";
+import { cancelAgent, getHandle } from "../agent.ts";
+import { harnessRuntime } from "../harness/singleton.ts";
+import type { HarnessRunScope } from "../harness/types.ts";
 
 const cancellingRunIds = new Set<string>();
 

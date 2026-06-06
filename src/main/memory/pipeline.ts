@@ -3,9 +3,9 @@ import type {
   MemoryMetadata,
   MemoryRecord,
   MemorySearchResult,
-} from "../../shared/contracts.js";
-import type { MemorySaveStatus } from "./dedupe.js";
-import type { MemdirEntry, MemdirSaveInput, MemdirSearchResult } from "./service.js";
+} from "../../shared/contracts.ts";
+import type { MemorySaveStatus } from "./dedupe.ts";
+import type { MemdirEntry, MemdirSaveInput, MemdirSearchResult } from "./service.ts";
 
 export type MemoryPipelineSource = "memory_save" | "auto_refresh" | "manual";
 

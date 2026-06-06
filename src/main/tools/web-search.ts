@@ -1,7 +1,7 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { checkFetchUrl } from "../security.js";
-import { resolveNetworkTimeoutMs } from "../network/proxy.js";
+import { checkFetchUrl } from "../security.ts";
+import { resolveNetworkTimeoutMs } from "../network/proxy.ts";
 
 const parameters = Type.Object({
   query: Type.String({ description: "搜索关键词" }),

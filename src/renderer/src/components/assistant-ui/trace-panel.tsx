@@ -330,7 +330,7 @@ const RunCard = memo(function RunCard({
 
 // ── TracePanel ────────────────────────────────────────────────
 
-export function TracePanel({ sessionId, onClose, className }: TracePanelProps) {
+const TracePanelImpl = ({ sessionId, onClose, className }: TracePanelProps) => {
   const [runs, setRuns] = useState<Map<string, TraceRun>>(new Map());
   const [collapsed, setCollapsed] = useState(false);
   const runsRef = useRef(runs);
@@ -663,6 +663,8 @@ export function TracePanel({ sessionId, onClose, className }: TracePanelProps) {
       )}
     </div>
   );
-}
+};
+
+export const TracePanel = memo(TracePanelImpl);
 
 export default TracePanel;

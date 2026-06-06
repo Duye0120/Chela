@@ -12,14 +12,14 @@
 import { app } from "electron";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BUS_EVENTS, bus } from "./event-bus.js";
-import { appLogger } from "./logger.js";
-import { getSettings } from "./settings.js";
+import { BUS_EVENTS, bus } from "./event-bus.ts";
+import { appLogger } from "./logger.ts";
+import { getSettings } from "./settings.ts";
 import {
   getClockTimeInTimeZone,
   getDateKeyInTimeZone,
   resolveConfiguredTimeZone,
-} from "../shared/timezone.js";
+} from "../shared/timezone.ts";
 
 // ---------------------------------------------------------------------------
 // Types

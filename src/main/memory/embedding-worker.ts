@@ -1,6 +1,6 @@
 import { parentPort, workerData } from "node:worker_threads";
-import type { MemoryEmbeddingModelId } from "../../shared/memory.js";
-import { QueryVectorCache, rankMemories } from "./retrieval.js";
+import type { MemoryEmbeddingModelId } from "../../shared/memory.ts";
+import { QueryVectorCache, rankMemories } from "./retrieval.ts";
 import type {
   EmbeddingProviderInfo,
   ErrorResponse,
@@ -8,7 +8,7 @@ import type {
   MemoryWorkerRequest,
   MemoryWorkerResultResponse,
   ReadyMessage,
-} from "./embedding-types.js";
+} from "./embedding-types.ts";
 
 // Surface any uncaught crash back to the main thread, otherwise the worker
 // just exits with code 1 and the parent has no clue what happened.
@@ -208,7 +208,7 @@ async function startMemoryWorker(data: MemoryWorkerInitData): Promise<void> {
   // Dynamic import so that any failure to load `better-sqlite3` (e.g. native
   // binding mismatch) surfaces as a Promise rejection we can forward to the
   // main thread instead of a silent worker exit.
-  const { MemoryStore } = await import("./store.js");
+  const { MemoryStore } = await import("./store.ts");
   const store = new MemoryStore(data.dbPath);
   const embeddingRuntime = await createEmbeddingRuntime(data.cacheDir);
   const queryCache = new QueryVectorCache();

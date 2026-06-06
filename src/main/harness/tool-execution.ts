@@ -1,15 +1,15 @@
 import { createHash } from "node:crypto";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import type { ElectronAdapter } from "../adapter.js";
-import { BUS_EVENTS, bus } from "../event-bus.js";
-import { parallelManager, SIDE_EFFECT_FREE_TOOLS } from "../parallel-tools.js";
-import { evaluateToolPolicy } from "./policy.js";
-import { HarnessRunCancelledError, type HarnessRuntime } from "./runtime.js";
+import type { ElectronAdapter } from "../adapter.ts";
+import { BUS_EVENTS, bus } from "../event-bus.ts";
+import { parallelManager, SIDE_EFFECT_FREE_TOOLS } from "../parallel-tools.ts";
+import { evaluateToolPolicy } from "./policy.ts";
+import { HarnessRunCancelledError, type HarnessRuntime } from "./runtime.ts";
 import type {
   HarnessApprovalKind,
   HarnessPolicyEvaluation,
   HarnessRunScope,
-} from "./types.js";
+} from "./types.ts";
 
 type HarnessToolExecutionContext = {
   workspacePath: string;

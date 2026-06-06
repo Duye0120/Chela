@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   CommandLineIcon,
 } from "@heroicons/react/24/outline";
@@ -7,7 +7,6 @@ import { useShallow } from "zustand/shallow";
 import type {
   ChatSession,
   ChatSessionSummary,
-  InterruptedApprovalGroup,
   ModelRoutingRole,
   RightPanelState,
   SelectedFile,
@@ -15,25 +14,18 @@ import type {
   SessionGroup,
   ThinkingLevel,
 } from "@shared/contracts";
-import { AssistantThreadPanel } from "@renderer/components/assistant-ui/assistant-thread-panel";
 import {
   AppBootErrorScreen,
   AppBootingScreen,
-  ThreadEmptyState,
-  ThreadUnavailableState,
 } from "@renderer/components/assistant-ui/app-shell-states";
 import { Button } from "@renderer/components/assistant-ui/button";
-import {
-  DiffWorkbenchContent,
-} from "@renderer/components/assistant-ui/diff-panel";
-import { BrowserPreviewPanel } from "@renderer/components/browser-preview/BrowserPreviewPanel";
-import { TracePanel } from "@renderer/components/assistant-ui/trace-panel";
 import {
   SettingsView,
   type SettingsSection,
 } from "@renderer/components/assistant-ui/settings-view";
 import { Sidebar } from "@renderer/components/assistant-ui/sidebar";
 import { TerminalDrawer } from "@renderer/components/assistant-ui/terminal-drawer";
+import { ThreadRuntimeLayer } from "@renderer/components/assistant-ui/thread-runtime-layer";
 import { TitleBar } from "@renderer/components/assistant-ui/title-bar";
 import {
   ResizablePanel,
@@ -45,16 +37,10 @@ import {
   TooltipTrigger,
 } from "@renderer/components/ui/tooltip";
 import {
-  EMPTY_CONTEXT_USAGE_SUMMARY,
-} from "@renderer/lib/context-usage";
-import {
-  ACTIVE_SESSION_STORAGE_KEY,
   DEFAULT_SIDEBAR_SIZE,
   FALLBACK_RIGHT_PANEL_WIDTH,
-  LEGACY_ACTIVE_SESSION_STORAGE_KEY,
   LEGACY_SIDEBAR_WIDTH_STORAGE_KEY,
   MAX_SIDEBAR_WIDTH,
-  MIN_RIGHT_PANEL_WIDTH,
   MIN_SIDEBAR_WIDTH,
   RIGHT_PANEL_GAP_PX,
   ROOT_UI_THEME_DATASET,
@@ -64,34 +50,38 @@ import {
   applyCustomThemeVariables,
   clampRightPanelWidth,
   clampSidebarSize,
-  clearStoredStrings,
   getDefaultRightPanelWidth,
-  getProjectNameFromPath,
   mergeSettingsState,
   migrateLegacySidebarWidth,
   readStoredNumber,
-  readStoredString,
   resolveSettingsSectionFromPath,
   toSidebarPercentageSize,
   type DeepPartialSettings,
 } from "@renderer/lib/app-shell";
-import { loadProviderDirectory } from "@renderer/lib/provider-directory";
-import { upsertSummary } from "@renderer/lib/session";
-import {
-  applySessionToArchivedSummaries,
-  applySessionToLiveSummaries,
-  findGroupByPath,
-  resolveGroupName,
-  resolveGroupPath,
-  resolveSessionProjectPath,
-} from "@renderer/lib/app-session-state";
+import { useAppBoot } from "@renderer/hooks/use-app-boot";
 import { useAppGitState } from "@renderer/hooks/use-app-git-state";
+import { useAppKeyboardShortcuts } from "@renderer/hooks/use-app-keyboard-shortcuts";
+import { useRightPanelResize } from "@renderer/hooks/use-right-panel-resize";
 import { useSessionAttachments } from "@renderer/hooks/use-session-attachments";
+import { useSessionOperations } from "@renderer/hooks/use-session-operations";
 import { useAppStore } from "@renderer/stores/app-store";
 import { useSessionStore } from "@renderer/stores/session-store";
 import type { PanelImperativeHandle, PanelSize } from "react-resizable-panels";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { BrowserContextItem } from "@renderer/lib/browser-interview";
+
+const DiffWorkbenchContent = lazy(() => import("@renderer/components/assistant-ui/diff-panel").then((module) => ({
+    default: module.DiffWorkbenchContent,
+  })),
+);
+const BrowserPreviewPanel = lazy(() => import("@renderer/components/browser-preview/BrowserPreviewPanel").then((module) => ({
+    default: module.BrowserPreviewPanel,
+  })),
+);
+const TracePanel = lazy(() => import("@renderer/components/assistant-ui/trace-panel").then((module) => ({
+    default: module.TracePanel,
+  })),
+);
 
 export default function App() {
   const desktopApi = window.desktopApi;
@@ -236,15 +226,6 @@ export default function App() {
   const activeSessionIdRef = useRef<string | null>(null);
   const sessionCacheRef = useRef<Record<string, ChatSession>>({});
   const appliedCustomThemeKeysRef = useRef<string[]>([]);
-  const rightPanelDragCleanupRef = useRef<(() => void) | null>(null);
-  const rightPanelDragStateRef = useRef<{
-    startX: number;
-    startWidth: number;
-    currentWidth: number;
-    containerWidth: number;
-    pointerId: number;
-    handle: HTMLDivElement;
-  } | null>(null);
   const rightPanelAnimatingTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -317,21 +298,6 @@ export default function App() {
   }, [sidebarCollapsed, sidebarSize]);
 
   useEffect(() => () => clearTimeout(rightPanelAnimatingTimerRef.current), []);
-
-  useEffect(() => {
-    if (rightPanelVisibleOrAnimating) {
-      return;
-    }
-
-    rightPanelDragCleanupRef.current?.();
-  }, [rightPanelVisibleOrAnimating]);
-
-  useEffect(
-    () => () => {
-      rightPanelDragCleanupRef.current?.();
-    },
-    [],
-  );
 
   const armRightPanelAnimation = useCallback(() => {
     appActions.setRightPanelAnimating(true);
@@ -413,104 +379,79 @@ export default function App() {
     diffPanelOpen,
   });
 
-  const cacheSession = useCallback((session: ChatSession) => {
-    sessionActions.cacheSession(session);
-  }, [sessionActions]);
-
-  const refreshContextSummary = useCallback(
-    async (sessionId: string) => {
-      if (!desktopApi?.context) {
-        return EMPTY_CONTEXT_USAGE_SUMMARY;
-      }
-
-      try {
-        const nextSummary = await desktopApi.context.getSummary(sessionId);
-        sessionActions.setContextSummary(sessionId, nextSummary);
-        return nextSummary;
-      } catch {
-        sessionActions.setContextSummary(sessionId, EMPTY_CONTEXT_USAGE_SUMMARY);
-        return EMPTY_CONTEXT_USAGE_SUMMARY;
-      }
-    },
-    [desktopApi, sessionActions],
-  );
-
-  const refreshInterruptedApprovalGroups = useCallback(
-    async (sessionId: string) => {
-      if (!desktopApi?.agent?.listInterruptedApprovalGroups) {
-        sessionActions.setInterruptedApprovalGroups(sessionId, []);
-        return [] as InterruptedApprovalGroup[];
-      }
-
-      try {
-        const groups = await desktopApi.agent.listInterruptedApprovalGroups(sessionId);
-        sessionActions.setInterruptedApprovalGroups(sessionId, groups);
-        return groups;
-      } catch {
-        sessionActions.setInterruptedApprovalGroups(sessionId, []);
-        return [] as InterruptedApprovalGroup[];
-      }
-    },
-    [desktopApi, sessionActions],
-  );
-
-  const removeCachedSession = useCallback((sessionId: string) => {
-    sessionActions.removeCachedSession(sessionId);
-  }, [sessionActions]);
-
-  const hydrateSession = useCallback((session: ChatSession) => {
-    cacheSession(session);
-    // R2: 同步更新 ref，避免下面这种 race —
-    // hydrateSession(sessB) → 等 useEffect 同步 ref → 期间 persistSession(sessA) 看到 ref 仍是 sessA → 把 active 回退到 sessA。
-    activeSessionIdRef.current = session.id;
-    sessionActions.hydrateSession(session);
-    localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, session.id);
-  }, [cacheSession, sessionActions]);
-
-  const clearActiveSession = useCallback(() => {
-    activeSessionIdRef.current = null;
-    sessionActions.clearActiveSession();
-    clearStoredStrings([
-      ACTIVE_SESSION_STORAGE_KEY,
-      LEGACY_ACTIVE_SESSION_STORAGE_KEY,
-    ]);
-  }, [sessionActions]);
-
-  const reloadSession = useCallback(
-    async (sessionId: string) => {
-      if (!desktopApi) {
+  const switchWorkspacePath = useCallback(
+    async (nextWorkspace: string) => {
+      const normalizedWorkspace = nextWorkspace.trim();
+      if (!desktopApi || !normalizedWorkspace) {
         return;
       }
 
-      const session = await desktopApi.sessions.load(sessionId);
-      if (!session) {
+      if (settingsRef.current?.workspace === normalizedWorkspace) {
         return;
       }
 
-      cacheSession(session);
-      if (activeSessionIdRef.current === sessionId) {
-        sessionActions.hydrateSession(session);
+      const nextSettings = settingsRef.current
+        ? mergeSettingsState(settingsRef.current, { workspace: normalizedWorkspace })
+        : null;
+
+      if (nextSettings) {
+        settingsRef.current = nextSettings;
+        appActions.setSettings(nextSettings);
       }
-      sessionActions.persistSessionLocally(session);
-      await refreshContextSummary(sessionId);
-      await refreshInterruptedApprovalGroups(sessionId);
+
+      await desktopApi.settings.update({ workspace: normalizedWorkspace });
+      await refreshGitOverview();
+      await refreshGitBranchSummary();
     },
-    [
-      cacheSession,
-      desktopApi,
-      refreshContextSummary,
-      refreshInterruptedApprovalGroups,
-      sessionActions,
-    ],
+    [appActions, desktopApi, refreshGitBranchSummary, refreshGitOverview],
   );
 
-  const persistSession = useCallback(
-    (session: ChatSession) => {
-      sessionActions.persistSessionLocally(session);
-      void desktopApi?.sessions.save(session);
-    },
-    [desktopApi, sessionActions],
-  );
+  const {
+    archiveSession,
+    clearActiveSession,
+    createNewSession,
+    createSessionInGroup,
+    deleteProject,
+    deleteSessionPermanently,
+    dismissInterruptedApproval,
+    handleCreateProject,
+    handleSelectProject,
+    hydrateSession,
+    persistSession,
+    refreshContextSummary,
+    refreshInterruptedApprovalGroups,
+    reloadSession,
+    renameProject,
+    renameSession,
+    resumeInterruptedApproval,
+    selectSession,
+    setSessionPinned,
+    unarchiveSession,
+  } = useSessionOperations({
+    desktopApi,
+    appActions,
+    sessionActions,
+    activeSessionIdRef,
+    sessionSelectionSerialRef,
+    summariesRef,
+    archivedSummariesRef,
+    groupsRef,
+    sessionCacheRef,
+    switchWorkspacePath,
+  });
+
+  useAppBoot({
+    desktopApi,
+    appActions,
+    sessionActions,
+    settingsRef,
+    hydrateSession,
+    clearActiveSession,
+    refreshContextSummary,
+    refreshInterruptedApprovalGroups,
+    refreshGitBranchSummary,
+    refreshGitOverview,
+  });
 
   const {
     isPickingFiles,
@@ -552,507 +493,40 @@ export default function App() {
     [sessionActions],
   );
 
-  const refreshSessionLists = useCallback(async () => {
-    if (!desktopApi) {
-      return { sessionSummaries: [], archivedList: [] };
-    }
-
-    const [sessionSummaries, archivedList] = await Promise.all([
-      desktopApi.sessions.list(),
-      desktopApi.sessions.listArchived(),
-    ]);
-
-    sessionActions.setSummaries(sessionSummaries);
-    sessionActions.setArchivedSummaries(archivedList);
-
-    return { sessionSummaries, archivedList };
-  }, [desktopApi, sessionActions]);
-
-  const refreshGroups = useCallback(async () => {
-    if (!desktopApi) {
-      return [] as SessionGroup[];
-    }
-
-    const nextGroups = await desktopApi.groups.list();
-    sessionActions.setGroups(nextGroups);
-    return nextGroups;
-  }, [desktopApi, sessionActions]);
-
-  const switchWorkspacePath = useCallback(
-    async (nextWorkspace: string) => {
-      const normalizedWorkspace = nextWorkspace.trim();
-      if (!desktopApi || !normalizedWorkspace) {
-        return;
-      }
-
-      if (settingsRef.current?.workspace === normalizedWorkspace) {
-        return;
-      }
-
-      const nextSettings = settingsRef.current
-        ? mergeSettingsState(settingsRef.current, { workspace: normalizedWorkspace })
-        : null;
-
-      if (nextSettings) {
-        settingsRef.current = nextSettings;
-        appActions.setSettings(nextSettings);
-      }
-
-      await desktopApi.settings.update({ workspace: normalizedWorkspace });
-      await refreshGitOverview();
-      await refreshGitBranchSummary();
-    },
-    [appActions, desktopApi, refreshGitBranchSummary, refreshGitOverview],
-  );
-
-  const bootApp = useCallback(async () => {
-    if (!desktopApi) {
-      appActions.setBootError(
-        "桌面桥接没有注入成功，renderer 无法访问 Electron API。现在不会再整窗黑掉，而是直接把问题暴露出来。",
-      );
-      appActions.setBooting(false);
-      return;
-    }
-
-    try {
-      const [
-        uiState,
-        frame,
-        sessionSummaries,
-        archivedList,
-        groupList,
-        settings,
-      ] = await Promise.all([
-        desktopApi.ui.getState(),
-        desktopApi.window.getState(),
-        desktopApi.sessions.list(),
-        desktopApi.sessions.listArchived(),
-        desktopApi.groups.list(),
-        desktopApi.settings.get(),
-        // Warm the provider directory cache so SettingsView renders instantly
-        loadProviderDirectory(desktopApi).catch(() => null),
-      ]);
-
-      appActions.setRightPanelState(uiState.rightPanel);
-      appActions.setFrameState(frame);
-      sessionActions.setSummaries(sessionSummaries);
-      sessionActions.setArchivedSummaries(archivedList);
-      sessionActions.setGroups(groupList);
-      if (settings) {
-        settingsRef.current = settings;
-        appActions.setSettings(settings);
-        appActions.setCurrentModelId(settings.modelRouting.chat.modelId);
-        appActions.setThinkingLevel(settings.thinkingLevel);
-        void refreshGitBranchSummary();
-        void refreshGitOverview();
-      }
-
-      const storedSessionId = readStoredString([
-        ACTIVE_SESSION_STORAGE_KEY,
-        LEGACY_ACTIVE_SESSION_STORAGE_KEY,
-      ]);
-      let nextSession = storedSessionId
-        ? await desktopApi.sessions.load(storedSessionId)
-        : null;
-
-      if (!nextSession && sessionSummaries[0]) {
-        nextSession = await desktopApi.sessions.load(sessionSummaries[0].id);
-      }
-
-      if (!nextSession) {
-        clearActiveSession();
-        return;
-      }
-
-      hydrateSession(nextSession);
-      void refreshContextSummary(nextSession.id);
-      void refreshInterruptedApprovalGroups(nextSession.id);
-    } catch (error) {
-      appActions.setBootError(
-        error instanceof Error ? error.message : "桌面壳初始化失败。",
-      );
-    } finally {
-      appActions.setBooting(false);
-    }
-  }, [
-    appActions,
-    clearActiveSession,
-    desktopApi,
-    hydrateSession,
-    refreshContextSummary,
-    refreshGitBranchSummary,
-    refreshGitOverview,
-    refreshInterruptedApprovalGroups,
-    sessionActions,
-  ]);
-
-  // 用 ref 持有键盘快捷键需要的动态值，避免 effect 因这些值变化而重新执行 bootApp
-  const kbStateRef = useRef({
-    mainView, terminalOpen,
-    createNewSession: (() => { }) as () => unknown,
-    closeSettingsView: (() => { }) as () => void,
-    openSettingsView: (() => { }) as (section?: SettingsSection) => void,
-    toggleSidebarCollapsed: (() => { }) as () => void,
-  });
-
-  // Boot 只执行一次
-  useEffect(() => {
-    void bootApp();
-  }, [bootApp]);
-
-  // 窗口状态 + 键盘快捷键（不依赖 mainView / terminalOpen）
-  useEffect(() => {
-    if (!desktopApi) {
-      return;
-    }
-
-    const cleanup = desktopApi.window.onStateChange((state) => {
-      appActions.setFrameState(state);
-    });
-
-    // Global keyboard shortcuts
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      const kb = kbStateRef.current;
-      if (mod && e.key === "j") {
-        if (!kb.terminalOpen) {
-          e.preventDefault();
-          appActions.setTerminalOpen(true);
-        }
-      } else if (mod && e.key === "b") {
-        e.preventDefault();
-        kb.toggleSidebarCollapsed();
-      } else if (mod && e.key === "n") {
-        e.preventDefault();
-        void kb.createNewSession();
-      } else if (mod && e.key === ",") {
-        e.preventDefault();
-        if (kb.mainView === "settings") {
-          kb.closeSettingsView();
-        } else {
-          kb.openSettingsView();
-        }
-      } else if (e.key === "Escape") {
-        if (kb.mainView === "settings") {
-          kb.closeSettingsView();
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      cleanup();
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [appActions, desktopApi]);
-
-  const createNewSession = useCallback(async () => {
-    if (!desktopApi) {
-      return;
-    }
-
-    const nextSession = await desktopApi.sessions.create();
-    sessionActions.setSummaries(upsertSummary(summariesRef.current, nextSession));
-    hydrateSession(nextSession);
-    void refreshContextSummary(nextSession.id);
-    void refreshInterruptedApprovalGroups(nextSession.id);
-  }, [
-    desktopApi,
-    hydrateSession,
-    refreshContextSummary,
-    refreshInterruptedApprovalGroups,
-    sessionActions,
-  ]);
-
-  const createSessionInGroup = useCallback(
-    async (groupId: string) => {
-      if (!desktopApi) {
-        return;
-      }
-
-      const targetGroupPath = resolveGroupPath(groupsRef.current, groupId);
-      if (targetGroupPath) {
-        await switchWorkspacePath(targetGroupPath);
-      }
-
-      const nextSession = await desktopApi.sessions.create();
-      await desktopApi.sessions.setGroup(nextSession.id, groupId);
-      const groupedSession =
-        (await desktopApi.sessions.load(nextSession.id)) ?? {
-          ...nextSession,
-          groupId,
-        };
-
-      await refreshSessionLists();
-      hydrateSession(groupedSession);
-      void refreshContextSummary(groupedSession.id);
-      void refreshInterruptedApprovalGroups(groupedSession.id);
-    },
-    [
-      desktopApi,
-      hydrateSession,
-      refreshContextSummary,
-      refreshInterruptedApprovalGroups,
-      refreshSessionLists,
-      switchWorkspacePath,
-    ],
-  );
-
-  const selectSession = useCallback(
-    async (sessionId: string) => {
-      if (!desktopApi) {
-        return;
-      }
-
-      const selectionSerial = ++sessionSelectionSerialRef.current;
-
-      const projectPath = resolveSessionProjectPath(
-        sessionId,
-        summariesRef.current,
-        archivedSummariesRef.current,
-        groupsRef.current,
-      );
-      if (projectPath) {
-        await switchWorkspacePath(projectPath);
-        if (sessionSelectionSerialRef.current !== selectionSerial) {
-          return;
-        }
-      }
-
-      const cachedSession = sessionCacheRef.current[sessionId];
-      if (cachedSession) {
-        if (sessionSelectionSerialRef.current !== selectionSerial) {
-          return;
-        }
-        hydrateSession(cachedSession);
-        void refreshContextSummary(sessionId);
-        return;
-      }
-
-      const session = await desktopApi.sessions.load(sessionId);
-      if (session && sessionSelectionSerialRef.current === selectionSerial) {
-        hydrateSession(session);
-        void refreshContextSummary(sessionId);
-      }
-    },
-    [desktopApi, hydrateSession, refreshContextSummary, switchWorkspacePath],
-  );
-
-  const archiveSession = useCallback(
-    async (sessionId: string) => {
-      if (!desktopApi) {
-        return;
-      }
-
-      const remaining = summariesRef.current.filter(
-        (summary) => summary.id !== sessionId,
-      );
-
-      await desktopApi.sessions.archive(sessionId);
-      removeCachedSession(sessionId);
-      await refreshSessionLists();
-
-      if (activeSessionIdRef.current !== sessionId) {
-        return;
-      }
-
-      if (remaining.length > 0) {
-        void selectSession(remaining[0].id);
-        return;
-      }
-
-      clearActiveSession();
-    },
-    [
-      clearActiveSession,
-      desktopApi,
-      refreshSessionLists,
-      removeCachedSession,
-      selectSession,
-    ],
-  );
-
-  const unarchiveSession = useCallback(
-    async (sessionId: string) => {
-      if (!desktopApi) {
-        return;
-      }
-
-      await desktopApi.sessions.unarchive(sessionId);
-      removeCachedSession(sessionId);
-      await refreshSessionLists();
-
-      if (activeSessionIdRef.current !== sessionId) {
-        return;
-      }
-
-      const session = await desktopApi.sessions.load(sessionId);
-      if (session) {
-        hydrateSession(session);
-        void refreshContextSummary(sessionId);
-      }
-    },
-    [
-      desktopApi,
-      hydrateSession,
-      refreshContextSummary,
-      refreshSessionLists,
-      removeCachedSession,
-    ],
-  );
-
-  const deleteSessionPermanently = useCallback(
-    async (sessionId: string) => {
-      if (!desktopApi) {
-        return;
-      }
-
-      const wasActive = activeSessionIdRef.current === sessionId;
-      await desktopApi.sessions.delete(sessionId);
-      sessionActions.removeSessionState(sessionId);
-      const { sessionSummaries } = await refreshSessionLists();
-
-      if (!wasActive) {
-        return;
-      }
-
-      clearActiveSession();
-
-      if (sessionSummaries[0]) {
-        void selectSession(sessionSummaries[0].id);
-        return;
-      }
-    },
-    [
-      clearActiveSession,
-      desktopApi,
-      refreshSessionLists,
-      selectSession,
-      sessionActions,
-    ],
-  );
-
-  const setSessionPinned = useCallback(
-    async (sessionId: string, pinned: boolean) => {
-      if (!desktopApi) {
-        return;
-      }
-
-      await desktopApi.sessions.setPinned(sessionId, pinned);
-      await refreshSessionLists();
-    },
-    [desktopApi, refreshSessionLists],
-  );
-
-  const renameSession = useCallback(
-    async (sessionId: string) => {
-      if (!desktopApi) {
-        return;
-      }
-
-      const currentTitle =
-        summariesRef.current.find((summary) => summary.id === sessionId)?.title ??
-        archivedSummariesRef.current.find((summary) => summary.id === sessionId)?.title ??
-        sessionCacheRef.current[sessionId]?.title ??
-        "";
-      const nextTitle = window.prompt("重命名聊天", currentTitle);
-      if (nextTitle === null) {
-        return;
-      }
-
-      const trimmedTitle = nextTitle.trim();
-      if (!trimmedTitle || trimmedTitle === currentTitle.trim()) {
-        return;
-      }
-
-      await desktopApi.sessions.rename(sessionId, trimmedTitle);
-      await refreshSessionLists();
-
-      if (activeSessionIdRef.current === sessionId) {
-        await reloadSession(sessionId);
-      }
-    },
-    [desktopApi, refreshSessionLists, reloadSession],
-  );
-
-  const renameProject = useCallback(
-    async (groupId: string) => {
-      if (!desktopApi) {
-        return;
-      }
-
-      const currentName = resolveGroupName(groupsRef.current, groupId);
-      const nextName = window.prompt("重命名项目", currentName);
-      if (nextName === null) {
-        return;
-      }
-
-      const trimmedName = nextName.trim();
-      if (!trimmedName || trimmedName === currentName.trim()) {
-        return;
-      }
-
-      await desktopApi.groups.rename(groupId, trimmedName);
-      await refreshGroups();
-    },
-    [desktopApi, refreshGroups],
-  );
-
-  const deleteProject = useCallback(
-    async (groupId: string) => {
-      if (!desktopApi) {
-        return;
-      }
-
-      const projectName = resolveGroupName(groupsRef.current, groupId) || "当前项目";
-      const confirmed = window.confirm(
-        `删除项目“${projectName}”？项目下聊天会保留，并移动到“聊天”区。`,
-      );
-      if (!confirmed) {
-        return;
-      }
-
-      await desktopApi.groups.delete(groupId);
-      await refreshGroups();
-      await refreshSessionLists();
-
-      const activeId = activeSessionIdRef.current;
-      if (activeId) {
-        await reloadSession(activeId);
-      }
-    },
-    [desktopApi, refreshGroups, refreshSessionLists, reloadSession],
-  );
-
-  const dismissInterruptedApproval = useCallback(
-    async (sessionId: string, runId: string) => {
-      if (!desktopApi?.agent?.dismissInterruptedApproval) {
-        return;
-      }
-
-      await desktopApi.agent.dismissInterruptedApproval(runId);
-      await refreshInterruptedApprovalGroups(sessionId);
-    },
-    [desktopApi, refreshInterruptedApprovalGroups],
-  );
-
-  const resumeInterruptedApproval = useCallback(
-    async (runId: string) => {
-      if (!desktopApi?.agent?.resumeInterruptedApproval) {
-        throw new Error("恢复执行当前不可用。");
-      }
-
-      return desktopApi.agent.resumeInterruptedApproval(runId);
-    },
-    [desktopApi],
-  );
-
   const updateRightPanelState = useCallback(
     (partial: Partial<RightPanelState>) => {
       appActions.setRightPanelState(partial);
       void desktopApi?.ui.setRightPanelState(partial);
     },
     [appActions, desktopApi],
+  );
+
+  const {
+    cleanupRightPanelResize,
+    handleRightPanelResizePointerDown,
+  } = useRightPanelResize({
+    active: diffPanelOpen || tracePanelOpen || browserPanelOpen,
+    threadWorkspaceRef,
+    rightPanelShellRef,
+    threadWorkspaceWidth,
+    resolvedRightPanelWidth,
+    setRightPanelDragging: appActions.setRightPanelDragging,
+    updateRightPanelState,
+  });
+
+  useEffect(() => {
+    if (rightPanelVisibleOrAnimating) {
+      return;
+    }
+
+    cleanupRightPanelResize();
+  }, [cleanupRightPanelResize, rightPanelVisibleOrAnimating]);
+
+  useEffect(
+    () => () => {
+      cleanupRightPanelResize();
+    },
+    [cleanupRightPanelResize],
   );
 
   const closeRightPanel = useCallback(() => {
@@ -1207,143 +681,6 @@ export default function App() {
     updateRightPanelState,
   ]);
 
-  const handleRightPanelResizePointerDown = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!diffPanelOpen && !tracePanelOpen && !browserPanelOpen) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      const element = threadWorkspaceRef.current;
-      const shellElement = rightPanelShellRef.current;
-      const containerWidth = Math.round(
-        element?.getBoundingClientRect().width ?? threadWorkspaceWidth,
-      );
-      const startWidth = resolvedRightPanelWidth;
-
-      rightPanelDragCleanupRef.current?.();
-
-      rightPanelDragStateRef.current = {
-        startX: event.clientX,
-        startWidth,
-        currentWidth: startWidth,
-        containerWidth,
-        pointerId: event.pointerId,
-        handle: event.currentTarget,
-      };
-      try {
-        event.currentTarget.setPointerCapture(event.pointerId);
-      } catch {
-        // Pointer capture can fail if the pointer was cancelled before React handled it.
-      }
-      appActions.setRightPanelDragging(true);
-      const previousBodyCursor = document.body.style.cursor;
-      const previousBodyUserSelect = document.body.style.userSelect;
-      const previousRootCursor = document.documentElement.style.cursor;
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      document.documentElement.style.cursor = "col-resize";
-
-      const applyWidth = (nextWidth: number) => {
-        if (!shellElement) {
-          return;
-        }
-
-        shellElement.style.width = `${nextWidth}px`;
-        shellElement.style.marginLeft = `${RIGHT_PANEL_GAP_PX}px`;
-      };
-
-      const cleanupDrag = (commit: boolean) => {
-        const dragState = rightPanelDragStateRef.current;
-        rightPanelDragStateRef.current = null;
-        appActions.setRightPanelDragging(false);
-        document.body.style.cursor = previousBodyCursor;
-        document.body.style.userSelect = previousBodyUserSelect;
-        document.documentElement.style.cursor = previousRootCursor;
-
-        if (dragState) {
-          dragState.handle.removeEventListener("lostpointercapture", handleLostPointerCapture);
-          try {
-            if (dragState.handle.hasPointerCapture(dragState.pointerId)) {
-              dragState.handle.releasePointerCapture(dragState.pointerId);
-            }
-          } catch {
-            // The handle may already have lost capture during window blur or webview handoff.
-          }
-        }
-
-        window.removeEventListener("pointermove", handlePointerMove);
-        window.removeEventListener("pointerup", handlePointerUp);
-        window.removeEventListener("pointercancel", handlePointerCancel);
-        window.removeEventListener("mouseup", handleMouseUpFallback);
-        window.removeEventListener("blur", handleWindowBlur);
-        window.removeEventListener("keydown", handleKeyDown);
-        rightPanelDragCleanupRef.current = null;
-
-        if (!commit || !dragState) {
-          return;
-        }
-
-        const finalWidth = clampRightPanelWidth(
-          dragState.currentWidth,
-          dragState.containerWidth,
-        );
-        applyWidth(finalWidth);
-        updateRightPanelState({ width: finalWidth });
-      };
-
-      const handlePointerMove = (moveEvent: PointerEvent) => {
-        const dragState = rightPanelDragStateRef.current;
-        if (!dragState || moveEvent.pointerId !== dragState.pointerId) return;
-
-        const delta = dragState.startX - moveEvent.clientX;
-        const nextWidth = clampRightPanelWidth(
-          dragState.startWidth + delta,
-          dragState.containerWidth,
-        );
-
-        dragState.currentWidth = nextWidth;
-        applyWidth(nextWidth);
-      };
-
-      const handlePointerUp = (upEvent: PointerEvent) => {
-        const dragState = rightPanelDragStateRef.current;
-        if (!dragState || upEvent.pointerId !== dragState.pointerId) return;
-        cleanupDrag(true);
-      };
-
-      const handlePointerCancel = () => cleanupDrag(false);
-      const handleMouseUpFallback = () => cleanupDrag(true);
-      const handleWindowBlur = () => cleanupDrag(true);
-      const handleLostPointerCapture = () => cleanupDrag(true);
-      const handleKeyDown = (keyEvent: KeyboardEvent) => {
-        if (keyEvent.key === "Escape") {
-          cleanupDrag(false);
-        }
-      };
-
-      event.currentTarget.addEventListener("lostpointercapture", handleLostPointerCapture);
-      window.addEventListener("pointermove", handlePointerMove);
-      window.addEventListener("pointerup", handlePointerUp);
-      window.addEventListener("pointercancel", handlePointerCancel);
-      window.addEventListener("mouseup", handleMouseUpFallback);
-      window.addEventListener("blur", handleWindowBlur);
-      window.addEventListener("keydown", handleKeyDown);
-      rightPanelDragCleanupRef.current = () => cleanupDrag(true);
-    },
-    [
-      browserPanelOpen,
-      diffPanelOpen,
-      appActions,
-      resolvedRightPanelWidth,
-      threadWorkspaceWidth,
-      tracePanelOpen,
-      updateRightPanelState,
-    ],
-  );
-
   const handleSidebarResize = useCallback((panelSize: PanelSize) => {
     const isCollapsedByPanel =
       panelSize.inPixels <= 1 || panelSize.asPercentage <= 0.1;
@@ -1407,19 +744,46 @@ export default function App() {
     });
   }, [appActions, desktopApi]);
 
+  const handleMinimizeWindow = useCallback(() => {
+    desktopApi?.window.minimize();
+  }, [desktopApi]);
+
+  const handleCloseWindow = useCallback(() => {
+    desktopApi?.window.close();
+  }, [desktopApi]);
+
   const openSettingsView = useCallback((section: SettingsSection = "general") => {
     navigate(`${SETTINGS_ROUTE_PREFIX}/${section}`);
   }, [navigate]);
+
+  const openGeneralSettings = useCallback(() => {
+    openSettingsView("general");
+  }, [openSettingsView]);
 
   const closeSettingsView = useCallback(() => {
     navigate("/");
   }, [navigate]);
 
-  // 每次渲染同步更新键盘快捷键需要的动态值
-  kbStateRef.current = {
-    mainView, terminalOpen, createNewSession,
-    closeSettingsView, openSettingsView, toggleSidebarCollapsed,
-  };
+  const openArchivedSettings = useCallback(() => {
+    openSettingsView("archived");
+  }, [openSettingsView]);
+
+  const handleComposerFocus = useCallback(() => {
+    appActions.bumpBrowserInteractionResetSignal();
+  }, [appActions]);
+
+  useAppKeyboardShortcuts({
+    desktopApi,
+    appActions,
+    shortcutState: {
+      mainView,
+      terminalOpen,
+      createNewSession,
+      closeSettingsView,
+      openSettingsView,
+      toggleSidebarCollapsed,
+    },
+  });
 
   const openArchivedSessionFromSettings = useCallback(
     async (sessionId: string) => {
@@ -1518,168 +882,62 @@ export default function App() {
     await refreshGitOverview();
   }, [refreshGitOverview]);
 
-  const handleCreateProject = useCallback(async () => {
-    if (!desktopApi) {
-      return;
-    }
+  const handleCreateProjectClick = useCallback(() => {
+    void handleCreateProject();
+  }, [handleCreateProject]);
 
-    const nextWorkspace = await desktopApi.workspace.pickFolder();
-    if (!nextWorkspace) {
-      return;
-    }
-
-    const existingGroup = findGroupByPath(groupsRef.current, nextWorkspace);
-    if (existingGroup) {
-      await createSessionInGroup(existingGroup.id);
-      return;
-    }
-
-    const group = await desktopApi.groups.create({
-      name: getProjectNameFromPath(nextWorkspace),
-      path: nextWorkspace,
-    });
-    sessionActions.setGroups([...groupsRef.current, group]);
-    await switchWorkspacePath(nextWorkspace);
-    await createSessionInGroup(group.id);
-  }, [createSessionInGroup, desktopApi, sessionActions, switchWorkspacePath]);
-
-  const handleSelectProject = useCallback(
-    async (groupId: string) => {
-      const targetGroupPath = resolveGroupPath(groupsRef.current, groupId);
-      if (!targetGroupPath) {
-        return;
-      }
-
-      await switchWorkspacePath(targetGroupPath);
+  const handleCreateProjectSession = useCallback(
+    (groupId: string) => {
+      void createSessionInGroup(groupId);
     },
-    [switchWorkspacePath],
+    [createSessionInGroup],
   );
 
-  const hasAnyRunningSessions = runningSessionIds.length > 0;
-  const mountedSessionIds = useMemo(() => {
-    const ids = new Set<string>();
-    if (activeSessionId) {
-      ids.add(activeSessionId);
-    }
-    runningSessionIds.forEach((sessionId) => ids.add(sessionId));
-    return [...ids].filter((sessionId) => Boolean(sessionCache[sessionId]));
-  }, [activeSessionId, runningSessionIds, sessionCache]);
+  const handleSelectProjectClick = useCallback(
+    (groupId: string) => {
+      void handleSelectProject(groupId);
+    },
+    [handleSelectProject],
+  );
 
-  const threadRuntimeLayer = useMemo(() => {
-    if (!desktopApi) {
-      return <ThreadUnavailableState />;
-    }
+  const handleRenameSession = useCallback(
+    (sessionId: string) => {
+      void renameSession(sessionId);
+    },
+    [renameSession],
+  );
 
-    if (mountedSessionIds.length === 0) {
-      const hasArchivedSessions = archivedSummaries.length > 0;
-      const hasLiveSessions = summaries.length > 0;
+  const handleRenameProject = useCallback(
+    (groupId: string) => {
+      void renameProject(groupId);
+    },
+    [renameProject],
+  );
 
-      return (
-        <ThreadEmptyState
-          hasArchivedSessions={hasArchivedSessions}
-          hasLiveSessions={hasLiveSessions}
-          onCreateNewSession={() => {
-            void createNewSession();
-          }}
-          onOpenArchived={() => openSettingsView("archived")}
-        />
-      );
-    }
+  const handleUnarchiveSession = useCallback(
+    (sessionId: string) => {
+      void unarchiveSession(sessionId);
+    },
+    [unarchiveSession],
+  );
 
-    return (
-      <div className="flex h-full min-h-0 flex-col bg-[color:var(--chela-bg-surface)]">
-        {mountedSessionIds.map((sessionId) => {
-          const session = sessionCache[sessionId];
-          if (!session) {
-            return null;
-          }
+  const handleDeleteSessionPermanently = useCallback(
+    (sessionId: string) => {
+      void deleteSessionPermanently(sessionId);
+    },
+    [deleteSessionPermanently],
+  );
 
-          const visible = sessionId === activeSessionId;
+  const handleDeleteProject = useCallback(
+    (groupId: string) => {
+      void deleteProject(groupId);
+    },
+    [deleteProject],
+  );
 
-          return (
-            <div
-              key={sessionId}
-              className={visible ? "flex h-full min-h-0 flex-1 flex-col" : "hidden"}
-              aria-hidden={!visible}
-            >
-              <AssistantThreadPanel
-                session={session}
-                desktopApi={desktopApi}
-                onPersistSession={persistSession}
-                onReloadSession={reloadSession}
-                currentModelId={currentModelId}
-                thinkingLevel={thinkingLevel}
-                terminalOpen={threadTerminalOpen}
-                isPickingFiles={isPickingFiles}
-                onAttachFiles={attachFiles}
-                onPasteFiles={pasteFiles}
-                onRemoveAttachment={removeAttachmentAndLinkedBrowserContext}
-                onModelChange={handleModelChange}
-                onThinkingLevelChange={handleThinkingLevelChange}
-                onBranchChanged={handleGitStateChanged}
-                onRunStateChange={handleSessionRunStateChange}
-                branchSummary={gitBranchSummary}
-                contextSummary={
-                  contextSummaryBySessionId[session.id] ??
-                  EMPTY_CONTEXT_USAGE_SUMMARY
-                }
-                interruptedApprovalGroups={
-                  interruptedApprovalGroupsBySessionId[session.id] ?? []
-                }
-                onDismissInterruptedApproval={(runId) => {
-                  void dismissInterruptedApproval(session.id, runId);
-                }}
-                onResumeInterruptedApproval={resumeInterruptedApproval}
-                browserContextItems={browserContextBySessionId[session.id] ?? []}
-                onRemoveBrowserContextItem={(itemId) =>
-                  handleRemoveBrowserContextItem(session.id, itemId)
-                }
-                onClearBrowserContextItems={() =>
-                  handleClearBrowserContextItems(session.id)
-                }
-                onComposerFocus={() => {
-                  appActions.bumpBrowserInteractionResetSignal();
-                }}
-                visible={visible}
-                disableGlobalSideEffects={hasAnyRunningSessions}
-              />
-            </div>
-          );
-        })}
-      </div>
-    );
-  }, [
-    activeSessionId,
-    attachFiles,
-    browserContextBySessionId,
-    contextSummaryBySessionId,
-    currentModelId,
-    createNewSession,
-    desktopApi,
-    dismissInterruptedApproval,
-    resumeInterruptedApproval,
-    handleModelChange,
-    handleSessionRunStateChange,
-    handleThinkingLevelChange,
-    hasAnyRunningSessions,
-    isPickingFiles,
-    interruptedApprovalGroupsBySessionId,
-    mountedSessionIds,
-    openSettingsView,
-    removeAttachmentAndLinkedBrowserContext,
-    pasteFiles,
-    persistSession,
-    gitBranchSummary,
-    handleClearBrowserContextItems,
-    handleGitStateChanged,
-    handleRemoveBrowserContextItem,
-    reloadSession,
-    sessionCache,
-    summaries,
-    archivedSummaries,
-    threadTerminalOpen,
-    thinkingLevel,
-  ]);
+  const toggleThreadTerminal = useCallback(() => {
+    appActions.setTerminalOpen(!useAppStore.getState().terminalOpen);
+  }, [appActions]);
 
   const settingsContent = useMemo(
     () => (
@@ -1695,44 +953,29 @@ export default function App() {
         groups={groups}
         liveSummaries={summaries}
         archivedSummaries={archivedSummaries}
-        onCreateProject={() => {
-          void handleCreateProject();
-        }}
+        onCreateProject={handleCreateProjectClick}
         onOpenArchivedSession={openArchivedSessionFromSettings}
-        onUnarchiveSession={(sessionId) => {
-          void unarchiveSession(sessionId);
-        }}
-        onDeleteSession={(sessionId) => {
-          void deleteSessionPermanently(sessionId);
-        }}
+        onUnarchiveSession={handleUnarchiveSession}
+        onDeleteSession={handleDeleteSessionPermanently}
       />
     ),
     [
       archivedSummaries,
       currentModelId,
-      deleteSessionPermanently,
       groups,
+      handleCreateProjectClick,
+      handleDeleteSessionPermanently,
       handleModelChange,
-      handleCreateProject,
       handleRoleModelChange,
       handleSettingsChange,
       handleThinkingLevelChange,
+      handleUnarchiveSession,
       openArchivedSessionFromSettings,
       summaries,
       settings,
       settingsSection,
       thinkingLevel,
-      unarchiveSession,
     ],
-  );
-
-  const threadPanels = useMemo(
-    () => (
-      <section className="flex h-full min-h-0 flex-col bg-[color:var(--chela-bg-surface)]">
-        {threadRuntimeLayer}
-      </section>
-    ),
-    [threadRuntimeLayer],
   );
 
   if (booting) {
@@ -1747,9 +990,9 @@ export default function App() {
     <main className="flex h-screen flex-col overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-primary)] text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
       <TitleBar
         isMaximized={frameState.isMaximized}
-        onMinimize={() => desktopApi?.window.minimize()}
+        onMinimize={handleMinimizeWindow}
         onToggleMaximize={handleToggleMaximize}
-        onClose={() => desktopApi?.window.close()}
+        onClose={handleCloseWindow}
         sidebarCollapsed={sidebarCollapsed}
         onToggleSidebar={toggleSidebarCollapsed}
       />
@@ -1782,33 +1025,19 @@ export default function App() {
                 summaries={summaries}
                 activeSessionId={activeSessionId}
                 runningSessionIds={runningSessionIds}
-                onCreateProject={() => {
-                  void handleCreateProject();
-                }}
-                onCreateProjectSession={(groupId) => {
-                  void createSessionInGroup(groupId);
-                }}
-                onSelectProject={(groupId) => {
-                  void handleSelectProject(groupId);
-                }}
+                onCreateProject={handleCreateProjectClick}
+                onCreateProjectSession={handleCreateProjectSession}
+                onSelectProject={handleSelectProjectClick}
                 onSelectSession={selectSession}
                 onNewSession={createNewSession}
-                onOpenSettings={() => openSettingsView("general")}
-                onRenameSession={(sessionId) => {
-                  void renameSession(sessionId);
-                }}
-                onRenameProject={(groupId) => {
-                  void renameProject(groupId);
-                }}
+                onOpenSettings={openGeneralSettings}
+                onRenameSession={handleRenameSession}
+                onRenameProject={handleRenameProject}
                 onArchiveSession={archiveSession}
                 onDeleteSession={deleteSessionPermanently}
-                onUnarchiveSession={(sessionId) => {
-                  void unarchiveSession(sessionId);
-                }}
+                onUnarchiveSession={handleUnarchiveSession}
                 archivedSummaries={archivedSummaries}
-                onDeleteProject={(groupId) => {
-                  void deleteProject(groupId);
-                }}
+                onDeleteProject={handleDeleteProject}
                 onToggleSessionPinned={setSessionPinned}
                 viewMode={mainView === "settings" ? "settings" : "threads"}
                 activeSettingsSection={settingsSection}
@@ -1841,9 +1070,7 @@ export default function App() {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        onClick={() => {
-                          appActions.setTerminalOpen(!useAppStore.getState().terminalOpen);
-                        }}
+                        onClick={toggleThreadTerminal}
                         className={`h-9 w-9 cursor-pointer rounded-[var(--radius-shell)] border-none bg-transparent shadow-none ring-0 hover:bg-shell-toolbar-hover ${terminalOpen ? "bg-shell-toolbar-hover text-foreground" : "text-muted-foreground"}`}
                         aria-label={terminalOpen ? "收起终端" : "展开终端"}
                       >
@@ -1914,7 +1141,38 @@ export default function App() {
                         className={mainView === "thread" ? "h-full min-h-0" : "hidden"}
                         aria-hidden={mainView !== "thread"}
                       >
-                        {threadPanels}
+                        <ThreadRuntimeLayer
+                          desktopApi={desktopApi}
+                          activeSessionId={activeSessionId}
+                          archivedSummaries={archivedSummaries}
+                          browserContextBySessionId={browserContextBySessionId}
+                          contextSummaryBySessionId={contextSummaryBySessionId}
+                          currentModelId={currentModelId}
+                          gitBranchSummary={gitBranchSummary}
+                          interruptedApprovalGroupsBySessionId={interruptedApprovalGroupsBySessionId}
+                          isPickingFiles={isPickingFiles}
+                          runningSessionIds={runningSessionIds}
+                          sessionCache={sessionCache}
+                          summaries={summaries}
+                          thinkingLevel={thinkingLevel}
+                          threadTerminalOpen={threadTerminalOpen}
+                          onAttachFiles={attachFiles}
+                          onBranchChanged={handleGitStateChanged}
+                          onClearBrowserContextItems={handleClearBrowserContextItems}
+                          onComposerFocus={handleComposerFocus}
+                          onCreateNewSession={createNewSession}
+                          onDismissInterruptedApproval={dismissInterruptedApproval}
+                          onModelChange={handleModelChange}
+                          onOpenArchived={openArchivedSettings}
+                          onPasteFiles={pasteFiles}
+                          onPersistSession={persistSession}
+                          onReloadSession={reloadSession}
+                          onRemoveAttachment={removeAttachmentAndLinkedBrowserContext}
+                          onRemoveBrowserContextItem={handleRemoveBrowserContextItem}
+                          onResumeInterruptedApproval={resumeInterruptedApproval}
+                          onRunStateChange={handleSessionRunStateChange}
+                          onThinkingLevelChange={handleThinkingLevelChange}
+                        />
                       </div>
                       <div
                         className={mainView === "settings" ? "h-full min-h-0" : "hidden"}
@@ -1927,9 +1185,7 @@ export default function App() {
                     <div className={mainView === "thread" && !rightPanelVisibleOrAnimating ? "" : "hidden"}>
                       <TerminalDrawer
                         open={threadTerminalOpen}
-                        onToggle={() => {
-                          appActions.setTerminalOpen(!useAppStore.getState().terminalOpen);
-                        }}
+                        onToggle={toggleThreadTerminal}
                         settings={settings}
                       />
                     </div>
@@ -1954,7 +1210,7 @@ export default function App() {
                     </div>
 
                     {rightPanelVisibleOrAnimating ? (
-                      <>
+                      <Suspense fallback={null}>
                         {diffPanelOpen && (
                           <div className={`chela-right-panel-content min-h-0 flex-1 overflow-hidden ${diffPanelOpen ? "translate-x-0 opacity-100" : "translate-x-3 opacity-0"}`}>
                             <DiffWorkbenchContent
@@ -1994,12 +1250,10 @@ export default function App() {
 
                         <TerminalDrawer
                           open={terminalOpen}
-                          onToggle={() => {
-                            appActions.setTerminalOpen(!useAppStore.getState().terminalOpen);
-                          }}
+                          onToggle={toggleThreadTerminal}
                           settings={settings}
                         />
-                      </>
+                      </Suspense>
                     ) : null}
                   </div>
                 ) : null}

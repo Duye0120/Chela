@@ -1,26 +1,26 @@
-import { scheduler } from "../scheduler.js";
-import { initBusAuditLog, stopBusAuditLog } from "../bus-audit.js";
-import { initSelfDiagnosis, stopSelfDiagnosis } from "../self-diagnosis/service.js";
-import { initMetrics, stopMetrics } from "../metrics.js";
-import { initActiveLearning, stopActiveLearning } from "../learning/engine.js";
+import { scheduler } from "../scheduler.ts";
+import { initBusAuditLog, stopBusAuditLog } from "../bus-audit.ts";
+import { initSelfDiagnosis, stopSelfDiagnosis } from "../self-diagnosis/service.ts";
+import { initMetrics, stopMetrics } from "../metrics.ts";
+import { initActiveLearning, stopActiveLearning } from "../learning/engine.ts";
 import {
   initEmotionalStateMachine,
   stopEmotionalStateMachine,
-} from "../emotional/state-machine.js";
-import { initReflectionService, stopReflectionService } from "../reflection/service.js";
-import { initPersonalityDrift } from "../reflection/personality-drift.js";
-import { startWebhookServer, stopWebhookServer } from "../webhook.js";
-import { initTraceService, stopTraceService } from "../trace/service.js";
+} from "../emotional/state-machine.ts";
+import { initReflectionService, stopReflectionService } from "../reflection/service.ts";
+import { initPersonalityDrift } from "../reflection/personality-drift.ts";
+import { startWebhookServer, stopWebhookServer } from "../webhook.ts";
+import { initTraceService, stopTraceService } from "../trace/service.ts";
 import {
   getReadinessTraceRecorderHealth,
   initReadinessTraceRecorder,
   stopReadinessTraceRecorder,
-} from "../harness-readiness/service.js";
-import { appLogger } from "../logger.js";
-import { RuntimeServiceLifecycle } from "../runtime-services/lifecycle.js";
-import type { RuntimeDiagnosticsReport } from "../../shared/contracts.js";
-import type { RuntimeServiceDefinition } from "../runtime-services/types.js";
-import { mapRuntimeDiagnosticsReport } from "../runtime-services/diagnostics.js";
+} from "../harness-readiness/service.ts";
+import { appLogger } from "../logger.ts";
+import { RuntimeServiceLifecycle } from "../runtime-services/lifecycle.ts";
+import type { RuntimeDiagnosticsReport } from "../../shared/contracts.ts";
+import type { RuntimeServiceDefinition } from "../runtime-services/types.ts";
+import { mapRuntimeDiagnosticsReport } from "../runtime-services/diagnostics.ts";
 
 const BACKGROUND_SERVICES: RuntimeServiceDefinition[] = [
   { name: "bus-audit", group: "observability", criticality: "optional", start: initBusAuditLog, stop: stopBusAuditLog },

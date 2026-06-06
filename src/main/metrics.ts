@@ -11,31 +11,25 @@ import {
   appendFileSync,
   existsSync,
   mkdirSync,
-  readFileSync,
   renameSync,
   statSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { BUS_EVENTS, bus } from "./event-bus.js";
-import { appLogger } from "./logger.js";
+import { BUS_EVENTS, bus } from "./event-bus.ts";
+import { appLogger } from "./logger.ts";
+import {
+  createEmptyMetricsSummary,
+  readTodayMetricsSummary,
+  type MetricsSummary,
+  type MetricsSummaryCache,
+  type RunMetrics,
+} from "./metrics-summary.ts";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // M29: 10 MB 后轮转
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-export type RunMetrics = {
-  runId: string;
-  sessionId: string;
-  modelEntryId: string;
-  startedAt: number;
-  endedAt: number;
-  durationMs: number;
-  toolCallCount: number;
-  toolFailCount: number;
-  finalState: string;
-};
 
 type ActiveRunTracker = {
   sessionId: string;
@@ -53,6 +47,7 @@ const activeRuns = new Map<string, ActiveRunTracker>();
 let metricsPath = "";
 let initialized = false;
 let teardownMetrics: (() => void) | null = null;
+let todayMetricsCache: MetricsSummaryCache = null;
 
 function getMetricsPath(): string {
   if (!metricsPath) {
@@ -80,6 +75,7 @@ function appendMetric(metric: RunMetrics): void {
       }
     }
     appendFileSync(filePath, JSON.stringify(metric) + "\n", "utf-8");
+    todayMetricsCache = null;
   } catch (err) {
     appLogger.warn({
       scope: "metrics",
@@ -93,48 +89,19 @@ function appendMetric(metric: RunMetrics): void {
 // 查询接口
 // ---------------------------------------------------------------------------
 
-export type MetricsSummary = {
-  totalRuns: number;
-  totalDurationMs: number;
-  totalToolCalls: number;
-  averageDurationMs: number;
-};
-
 export function getTodayMetrics(): MetricsSummary {
   const filePath = getMetricsPath();
-  if (!existsSync(filePath)) {
-    return { totalRuns: 0, totalDurationMs: 0, totalToolCalls: 0, averageDurationMs: 0 };
-  }
-
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayTs = todayStart.getTime();
 
-  const summary: MetricsSummary = {
-    totalRuns: 0,
-    totalDurationMs: 0,
-    totalToolCalls: 0,
-    averageDurationMs: 0,
-  };
-
   try {
-    const lines = readFileSync(filePath, "utf-8").split("\n").filter(Boolean);
-    for (const line of lines) {
-      try {
-        const m = JSON.parse(line) as RunMetrics;
-        if (m.startedAt >= todayTs) {
-          summary.totalRuns++;
-          summary.totalDurationMs += m.durationMs;
-          summary.totalToolCalls += m.toolCallCount;
-        }
-      } catch { /* skip malformed lines */ }
-    }
-
-    summary.averageDurationMs =
-      summary.totalRuns > 0 ? Math.round(summary.totalDurationMs / summary.totalRuns) : 0;
-  } catch { /* file read error */ }
-
-  return summary;
+    const result = readTodayMetricsSummary(filePath, todayTs, todayMetricsCache);
+    todayMetricsCache = result.cache;
+    return result.summary;
+  } catch {
+    return createEmptyMetricsSummary();
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,10 +1,10 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { getSettings } from "../settings.js";
+import { getSettings } from "../settings.ts";
 import {
   formatDateTimeInTimeZone,
   resolveConfiguredTimeZone,
-} from "../../shared/timezone.js";
+} from "../../shared/timezone.ts";
 
 const parameters = Type.Object({});
 

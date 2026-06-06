@@ -1,8 +1,8 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { getMemdirStore, getMemoryPipeline, type MemdirEntry } from "../memory/service.js";
-import { formatMemorySaveResultText } from "./memory-result.js";
-import type { MemoryVectorPersistResult } from "./memory-vector.js";
+import { getMemdirStore, getMemoryPipeline, type MemdirEntry } from "../memory/service.ts";
+import { formatMemorySaveResultText } from "./memory-result.ts";
+import type { MemoryVectorPersistResult } from "./memory-vector.ts";
 
 const memorySaveParameters = Type.Object({
   summary: Type.String({

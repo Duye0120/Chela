@@ -1,8 +1,8 @@
 import * as assert from "node:assert/strict";
 
-import { RuntimeServiceLifecycle } from "../src/main/runtime-services/lifecycle.js";
-import { orderRuntimeServices, RuntimeServiceRegistryError } from "../src/main/runtime-services/registry.js";
-import type { RuntimeServiceDefinition } from "../src/main/runtime-services/types.js";
+import { RuntimeServiceLifecycle } from "../src/main/runtime-services/lifecycle.ts";
+import { orderRuntimeServices, RuntimeServiceRegistryError } from "../src/main/runtime-services/registry.ts";
+import type { RuntimeServiceDefinition } from "../src/main/runtime-services/types.ts";
 
 async function main(): Promise<void> {
   const order: string[] = [];

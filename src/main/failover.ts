@@ -7,12 +7,12 @@
 // ---------------------------------------------------------------------------
 
 import { net } from "electron";
-import { DEFAULT_MODEL_ENTRY_ID } from "../shared/provider-directory.js";
+import { DEFAULT_MODEL_ENTRY_ID } from "../shared/provider-directory.ts";
 import {
   listSelectableModelEntries,
   resolveModelEntry,
-} from "./providers.js";
-import { appLogger } from "./logger.js";
+} from "./providers.ts";
+import { appLogger } from "./logger.ts";
 
 // ---------------------------------------------------------------------------
 // Types

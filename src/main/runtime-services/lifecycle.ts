@@ -1,4 +1,4 @@
-import { orderRuntimeServices } from "./registry.js";
+import { orderRuntimeServices } from "./registry.ts";
 import type {
   RuntimeServiceDefinition,
   RuntimeServiceHealthStatus,
@@ -6,7 +6,7 @@ import type {
   RuntimeServiceState,
   RuntimeServiceStatus,
   RuntimeServiceStatusReport,
-} from "./types.js";
+} from "./types.ts";
 
 export class RuntimeServiceLifecycle {
   private readonly definitions: RuntimeServiceDefinition[];

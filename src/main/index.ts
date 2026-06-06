@@ -2,46 +2,47 @@ import {
   app,
   BrowserWindow,
 } from "electron";
-import { registerFilesIpc } from "./ipc/files.js";
-import { registerSessionsIpc } from "./ipc/sessions.js";
-import { registerChatIpc } from "./ipc/chat.js";
-import { registerHarnessIpc } from "./ipc/harness.js";
-import { registerSettingsIpc } from "./ipc/settings.js";
-import { registerRuntimeIpc } from "./ipc/runtime.js";
-import { registerMemoryIpc } from "./ipc/memory.js";
-import { registerMcpIpc } from "./ipc/mcp.js";
-import { registerPluginsIpc } from "./ipc/plugins.js";
-import { registerWorkspaceIpc } from "./ipc/workspace.js";
-import { registerProvidersIpc } from "./ipc/providers.js";
-import { registerWorkbenchIpc } from "./ipc/workbench.js";
-import { registerWindowIpc } from "./ipc/window.js";
-import { registerWorkerIpc } from "./ipc/worker.js";
-import { registerSkillsIpc } from "./ipc/skills.js";
+import { registerFilesIpc } from "./ipc/files.ts";
+import { registerSessionsIpc } from "./ipc/sessions.ts";
+import { registerChatIpc } from "./ipc/chat.ts";
+import { registerHarnessIpc } from "./ipc/harness.ts";
+import { registerSettingsIpc } from "./ipc/settings.ts";
+import { registerRuntimeIpc } from "./ipc/runtime.ts";
+import { registerMemoryIpc } from "./ipc/memory.ts";
+import { registerMcpIpc } from "./ipc/mcp.ts";
+import { registerPluginsIpc } from "./ipc/plugins.ts";
+import { registerWorkspaceIpc } from "./ipc/workspace.ts";
+import { registerProvidersIpc } from "./ipc/providers.ts";
+import { registerWorkbenchIpc } from "./ipc/workbench.ts";
+import { registerWindowIpc } from "./ipc/window.ts";
+import { registerWorkerIpc } from "./ipc/worker.ts";
+import { registerSkillsIpc } from "./ipc/skills.ts";
 import {
   configureAppIdentity,
   createMainWindow,
   getMainWindow,
   migrateLegacyUserData,
-} from "./window.js";
+} from "./window.ts";
 import {
   destroyAllAgents,
-} from "./agent.js";
+} from "./agent.ts";
 import {
   recoverInterruptedRuns,
-} from "./session/service.js";
+} from "./session/service.ts";
 import {
   setTerminalWindow,
   destroyAllTerminals,
-} from "./terminal.js";
-import { harnessRuntime } from "./harness/singleton.js";
-import { startBackgroundServices, stopBackgroundServices } from "./bootstrap/services.js";
-import { registerQuickInvoke, unregisterQuickInvoke } from "./quick-invoke.js";
+} from "./terminal.ts";
+import { harnessRuntime } from "./harness/singleton.ts";
+import { startBackgroundServices, stopBackgroundServices } from "./bootstrap/services.ts";
+import { registerQuickInvoke, unregisterQuickInvoke } from "./quick-invoke.ts";
 import {
   appLogger,
   registerProcessLogging,
-} from "./logger.js";
-import { applyGlobalNetworkSettings } from "./network/proxy.js";
-import { initTraceService } from "./trace/service.js";
+} from "./logger.ts";
+import { applyGlobalNetworkSettings } from "./network/proxy.ts";
+import { initTraceService } from "./trace/service.ts";
+import { initializeProviderState } from "./providers.ts";
 
 configureAppIdentity();
 
@@ -82,6 +83,7 @@ app.whenReady()
   .then(async () => {
     migrateLegacyUserData();
     applyGlobalNetworkSettings();
+    await initializeProviderState();
     appLogger.info({
       scope: "app.lifecycle",
       message: "应用启动完成",

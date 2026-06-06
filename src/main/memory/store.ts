@@ -7,8 +7,8 @@ import type {
   MemoryListInput,
   MemoryMetadata,
   MemoryRecord,
-} from "../../shared/contracts.js";
-import { normalizeMemoryMetadata } from "./metadata.js";
+} from "../../shared/contracts.ts";
+import { normalizeMemoryMetadata } from "./metadata.ts";
 
 type MemoryRow = {
   id: number;

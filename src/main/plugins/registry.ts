@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { ChelaPluginManifest } from "../../shared/plugins.js";
-import { validateChelaPluginManifest } from "../../shared/plugins.js";
+import type { ChelaPluginManifest } from "../../shared/plugins.ts";
+import { validateChelaPluginManifest } from "../../shared/plugins.ts";
+import {
+  readJsonFileSync,
+  readRequiredJsonFileSync,
+  writeJsonFileSync,
+} from "../json-file.ts";
 
 export type ScannedPlugin = {
   directory: string;
@@ -19,10 +24,6 @@ export type PluginScanResult = {
   plugins: ScannedPlugin[];
   errors: PluginScanError[];
 };
-
-function readJsonFile(filePath: string): unknown {
-  return JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
-}
 
 export function scanPluginDirectory(rootDir: string): PluginScanResult {
   if (!fs.existsSync(rootDir)) {
@@ -43,7 +44,7 @@ export function scanPluginDirectory(rootDir: string): PluginScanResult {
     }
 
     try {
-      const result = validateChelaPluginManifest(readJsonFile(manifestPath));
+      const result = validateChelaPluginManifest(readRequiredJsonFileSync(manifestPath));
       if (result.ok) {
         const existingManifestPath = pluginIds.get(result.manifest.id);
         if (existingManifestPath) {
@@ -95,28 +96,18 @@ export class PluginStateStore {
   }
 
   private read(): PersistedPluginState {
-    try {
-      if (fs.existsSync(this.filePath)) {
-        const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf-8")) as Partial<PersistedPluginState>;
-        return {
-          enabled:
-            parsed.enabled && typeof parsed.enabled === "object"
-              ? Object.fromEntries(
-                  Object.entries(parsed.enabled).filter(([, value]) => typeof value === "boolean"),
-                )
-              : {},
-        };
-      }
-    } catch {
-      /* fall back to default state */
-    }
-    return { enabled: {} };
+    const parsed = readJsonFileSync<Partial<PersistedPluginState>>(this.filePath, {});
+    return {
+      enabled:
+        parsed.enabled && typeof parsed.enabled === "object"
+          ? Object.fromEntries(
+              Object.entries(parsed.enabled).filter(([, value]) => typeof value === "boolean"),
+            )
+          : {},
+    };
   }
 
   private write(state: PersistedPluginState): void {
-    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    const tempPath = `${this.filePath}.tmp`;
-    fs.writeFileSync(tempPath, JSON.stringify(state, null, 2), "utf-8");
-    fs.renameSync(tempPath, this.filePath);
+    writeJsonFileSync(this.filePath, state);
   }
 }

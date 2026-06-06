@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
-import { Select as SelectPrimitive } from "radix-ui";
+import * as SelectPrimitive from "@radix-ui/react-select";
 import { cva, type VariantProps } from "class-variance-authority";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 

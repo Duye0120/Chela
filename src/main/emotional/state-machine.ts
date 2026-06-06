@@ -9,8 +9,8 @@
 import { app } from "electron";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { BUS_EVENTS, bus } from "../event-bus.js";
-import { appLogger } from "../logger.js";
+import { BUS_EVENTS, bus } from "../event-bus.ts";
+import { appLogger } from "../logger.ts";
 
 // ---------------------------------------------------------------------------
 // Types

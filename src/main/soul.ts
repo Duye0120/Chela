@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { SoulFilesStatus } from "../shared/contracts.js";
+import type { SoulFilesStatus } from "../shared/contracts.ts";
 
 const SOUL_DIR = ".pi";
 const SOUL_FILE = "SOUL.md";

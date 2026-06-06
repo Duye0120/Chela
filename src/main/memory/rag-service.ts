@@ -6,12 +6,12 @@ import type {
   MemoryRebuildResult,
   MemorySearchResult,
   MemoryStats,
-} from "../../shared/contracts.js";
-import { MemoryWorkerClient, type EmbeddingProviderInfo } from "./embedding.js";
-import { getSettings } from "../settings.js";
-import { normalizeMemoryMetadata } from "./metadata.js";
-import { isLocalEmbeddingModelId } from "../../shared/memory.js";
-import { resolveEmbeddingProvider } from "../providers.js";
+} from "../../shared/contracts.ts";
+import { MemoryWorkerClient, type EmbeddingProviderInfo } from "./embedding.ts";
+import { getSettings } from "../settings.ts";
+import { normalizeMemoryMetadata } from "./metadata.ts";
+import { isLocalEmbeddingModelId } from "../../shared/memory.ts";
+import { resolveEmbeddingProvider } from "../providers.ts";
 
 function getMemoryDbPath(): string {
   return join(app.getPath("userData"), "chela-memory.db");

@@ -1,7 +1,7 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import type { McpConnection, McpConnectionManager } from "./client.js";
-import { normalizeMcpIdentifier } from "./config.js";
+import type { McpConnection, McpConnectionManager } from "./client.ts";
+import { normalizeMcpIdentifier } from "./config.ts";
 
 /**
  * Convert MCP server tools into AgentTool instances.

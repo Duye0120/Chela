@@ -1,14 +1,14 @@
-import type { AgentHandle } from "../agent.js";
-import type { ConfirmationResponse } from "../../shared/agent-events.js";
-import type { RunKind, RunSource } from "../../shared/contracts.js";
-import { PRIMARY_AGENT_OWNER, buildSystemOwnerId } from "../agent-owners.js";
+import type { AgentHandle } from "../agent.ts";
+import type { ConfirmationResponse } from "../../shared/agent-events.ts";
+import type { RunKind, RunSource } from "../../shared/contracts.ts";
+import { PRIMARY_AGENT_OWNER, buildSystemOwnerId } from "../agent-owners.ts";
 import {
   loadInterruptedApprovals,
   saveInterruptedApprovals,
-} from "./approvals-store.js";
-import { appendHarnessAuditEvent } from "./audit.js";
-import { loadPersistedHarnessRuns, savePersistedHarnessRuns } from "./store.js";
-import { BUS_EVENTS, bus } from "../event-bus.js";
+} from "./approvals-store.ts";
+import { appendHarnessAuditEvent } from "./audit.ts";
+import { loadPersistedHarnessRuns, savePersistedHarnessRuns } from "./store.ts";
+import { BUS_EVENTS, bus } from "../event-bus.ts";
 import type {
   HarnessApprovalResolution,
   HarnessApprovalSource,
@@ -20,7 +20,7 @@ import type {
   HarnessRunSnapshot,
   HarnessRunState,
   InterruptedApprovalRecord,
-} from "./types.js";
+} from "./types.ts";
 
 type ActiveHarnessRun = HarnessRunSnapshot & {
   handle: AgentHandle | null;

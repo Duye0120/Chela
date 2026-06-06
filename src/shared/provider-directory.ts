@@ -6,7 +6,7 @@ import type {
   ModelLimitsOverride,
   ProviderSource,
   ProviderType,
-} from "./contracts.js";
+} from "./contracts.ts";
 
 export const BUILTIN_PROVIDER_SOURCE_IDS = {
   anthropic: "builtin:anthropic",

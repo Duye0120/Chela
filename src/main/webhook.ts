@@ -4,8 +4,8 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { BUS_EVENTS, bus } from "./event-bus.js";
-import { appLogger } from "./logger.js";
+import { BUS_EVENTS, bus } from "./event-bus.ts";
+import { appLogger } from "./logger.ts";
 
 // ---------------------------------------------------------------------------
 // Types

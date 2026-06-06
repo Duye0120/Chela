@@ -5,6 +5,7 @@ import type {
   GitDiffSource,
   GitDiffSourceSnapshot,
 } from "@shared/contracts";
+import { getErrorMessage } from "@shared/text-utils";
 import { Badge } from "@renderer/components/assistant-ui/badge";
 import { DiffView } from "@renderer/components/DiffView";
 import {
@@ -90,13 +91,7 @@ export function getDiffFileDomId(path: string) {
   return `diff-file-${encodeURIComponent(path)}`;
 }
 
-export function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
-  }
-
-  return fallback;
-}
+export { getErrorMessage };
 
 export function formatBranchLabel(overview: GitDiffOverview) {
   if (!overview.isGitRepo) {

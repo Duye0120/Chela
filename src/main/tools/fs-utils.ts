@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { isPathAllowed, isPathForbiddenRead } from "../security.js";
+import { isPathAllowed, isPathForbiddenRead } from "../security.ts";
+import { escapeRegExp } from "../../shared/text-utils.ts";
 
 const BINARY_EXTENSIONS = new Set([
   ".png",
@@ -37,10 +38,6 @@ export type WorkspaceFileEntry = {
   relativePath: string;
   mtimeMs: number;
 };
-
-function escapeRegExp(value: string) {
-  return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
-}
 
 export function resolveWorkspacePath(
   workspacePath: string,

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  memo,
   useMemo,
   useRef,
   useState,
@@ -297,14 +298,14 @@ function createScreenshotMarkerPayloads(
   });
 }
 
-export function BrowserPreviewPanel({
+const BrowserPreviewPanelImpl = ({
   onClose,
   onElementSelected,
   onScreenshotCaptured,
   browserContextItems,
   resetInteractionSignal = 0,
   className,
-}: BrowserPreviewPanelProps) {
+}: BrowserPreviewPanelProps) => {
   const [currentUrl, setCurrentUrl] = useState(readInitialBrowserUrl);
   const [draftUrl, setDraftUrl] = useState(currentUrl);
   const [loadState, setLoadState] = useState<BrowserLoadState>("idle");
@@ -1140,4 +1141,6 @@ export function BrowserPreviewPanel({
       </PreviewSurface>
     </section>
   );
-}
+};
+
+export const BrowserPreviewPanel = memo(BrowserPreviewPanelImpl);

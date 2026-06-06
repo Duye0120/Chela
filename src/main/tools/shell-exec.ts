@@ -4,10 +4,10 @@ import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { checkShellCommand, isPathAllowed } from "../security.js";
-import { getSettings } from "../settings.js";
-import { buildShellExecSpawn, resolveShell } from "../shell.js";
-import { recordShellCommand } from "./command-history.js";
+import { checkShellCommand, isPathAllowed } from "../security.ts";
+import { getSettings } from "../settings.ts";
+import { buildShellExecSpawn, resolveShell } from "../shell.ts";
+import { recordShellCommand } from "./command-history.ts";
 
 const parameters = Type.Object({
   command: Type.String({ description: "要执行的 shell 命令" }),

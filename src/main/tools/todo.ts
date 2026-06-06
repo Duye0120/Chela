@@ -5,7 +5,7 @@ import {
   listSessionTodos,
   writeSessionTodos,
   type SessionTodoItem,
-} from "../session/service.js";
+} from "../session/service.ts";
 
 const todoStatusSchema = Type.Union([
   Type.Literal("pending"),

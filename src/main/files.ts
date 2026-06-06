@@ -8,37 +8,14 @@ import type {
   SelectedFile,
   WorkspaceDirectoryListing,
   WorkspaceFileEntry,
-} from "../shared/contracts.js";
-import { isPathAllowed, isPathForbiddenRead } from "./security.js";
+} from "../shared/contracts.ts";
+import { isPathAllowed, isPathForbiddenRead } from "./security.ts";
+import {
+  getExtension,
+  IMAGE_EXTENSIONS,
+  TEXT_EXTENSIONS,
+} from "../shared/file-extensions.ts";
 
-const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico"]);
-const TEXT_EXTENSIONS = new Set([
-  "ts",
-  "tsx",
-  "js",
-  "jsx",
-  "mjs",
-  "cjs",
-  "json",
-  "md",
-  "txt",
-  "yml",
-  "yaml",
-  "toml",
-  "html",
-  "css",
-  "scss",
-  "less",
-  "py",
-  "java",
-  "go",
-  "rs",
-  "sh",
-  "ps1",
-  "xml",
-  "csv",
-  "env",
-]);
 const MAX_PREVIEW_CHARACTERS = 6_000;
 const MAX_WORKSPACE_DIRECTORY_ENTRIES = 250;
 const MIME_EXTENSION_MAP = new Map<string, string>([
@@ -70,10 +47,6 @@ const TEXT_MIME_TYPES = new Set([
   "application/javascript",
   "application/typescript",
 ]);
-
-function getExtension(filePath: string) {
-  return extname(filePath).replace(/^\./, "").toLowerCase();
-}
 
 function toWorkspaceRelativePath(workspacePath: string, targetPath: string) {
   return relative(workspacePath, targetPath).replace(/\\/g, "/");

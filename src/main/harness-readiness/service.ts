@@ -1,13 +1,13 @@
 import { app } from "electron";
 import { join } from "node:path";
 
-import { bus } from "../event-bus.js";
-import { appLogger } from "../logger.js";
-import { ObservabilityDispatcher } from "../observability/dispatcher.js";
-import { ReadinessObservabilitySink } from "../observability/sinks/readiness-sink.js";
-import { resolveRuntimePaths } from "../runtime-paths.js";
-import type { RuntimeServiceHealth } from "../runtime-services/types.js";
-import { ReadinessTraceRecorder } from "./trace-recorder.js";
+import { bus } from "../event-bus.ts";
+import { appLogger } from "../logger.ts";
+import { ObservabilityDispatcher } from "../observability/dispatcher.ts";
+import { ReadinessObservabilitySink } from "../observability/sinks/readiness-sink.ts";
+import { resolveRuntimePaths } from "../runtime-paths.ts";
+import type { RuntimeServiceHealth } from "../runtime-services/types.ts";
+import { ReadinessTraceRecorder } from "./trace-recorder.ts";
 
 let readinessTraceRecorder: ReadinessTraceRecorder | undefined;
 let readinessDispatcher: ObservabilityDispatcher | undefined;

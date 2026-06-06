@@ -12,9 +12,9 @@ import type {
   SkillDiscoveryResult,
   SkillInstallRequest,
   SkillInstallResult,
-} from "../shared/contracts.js";
-import { getSkillUsageTargets } from "../shared/skill-usage.js";
-import { getSettings } from "./settings.js";
+} from "../shared/contracts.ts";
+import { getSkillUsageTargets } from "../shared/skill-usage.ts";
+import { getSettings } from "./settings.ts";
 
 type ParsedSkillContent = {
   name: string | null;

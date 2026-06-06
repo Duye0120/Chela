@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 import { join } from "node:path";
 
-import { resolveRuntimePaths } from "../src/main/runtime-paths.js";
+import { resolveRuntimePaths } from "../src/main/runtime-paths.ts";
 
 function main(): void {
   const paths = resolveRuntimePaths(join("tmp", "ChelaUserData"));

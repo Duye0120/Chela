@@ -3,10 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { ObservabilityDispatcher, type ObservabilitySink } from "../src/main/observability/dispatcher.js";
-import { ReadinessObservabilitySink } from "../src/main/observability/sinks/readiness-sink.js";
-import { ReadinessTraceRecorder } from "../src/main/harness-readiness/trace-recorder.js";
-import { ReadinessTraceStore } from "../src/main/harness-readiness/trace-store.js";
+import { ObservabilityDispatcher, type ObservabilitySink } from "../src/main/observability/dispatcher.ts";
+import { ReadinessObservabilitySink } from "../src/main/observability/sinks/readiness-sink.ts";
+import { ReadinessTraceRecorder } from "../src/main/harness-readiness/trace-recorder.ts";
+import { ReadinessTraceStore } from "../src/main/harness-readiness/trace-store.ts";
 
 type TestBusHandler = (event: string, data: unknown) => void;
 

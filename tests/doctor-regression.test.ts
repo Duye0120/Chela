@@ -9,6 +9,14 @@ import {
   summarizeDoctorChecks,
 } from "../src/main/doctor.ts";
 
+const doctorSource = fs.readFileSync(
+  new URL("../src/main/doctor.ts", import.meta.url),
+  "utf8",
+);
+
+assert.doesNotMatch(doctorSource, /spawnSync/);
+assert.match(doctorSource, /execFile/);
+
 function withTempDir(test: (dir: string) => void): void {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chela-doctor-"));
   try {

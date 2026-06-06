@@ -9,14 +9,14 @@
 import { app } from "electron";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { BUS_EVENTS, bus } from "../event-bus.js";
-import { appLogger } from "../logger.js";
-import { scheduler } from "../scheduler.js";
-import { listSessions, loadSession } from "../session/facade.js";
-import { getMemdirStore } from "../memory/service.js";
-import { processPersonalityDrift, buildPersonalityDriftPromptText } from "./personality-drift.js";
-import { getSettings } from "../settings.js";
-import { getDateKeyInTimeZone, resolveConfiguredTimeZone } from "../../shared/timezone.js";
+import { BUS_EVENTS, bus } from "../event-bus.ts";
+import { appLogger } from "../logger.ts";
+import { scheduler } from "../scheduler.ts";
+import { listSessions, loadSession } from "../session/facade.ts";
+import { getMemdirStore } from "../memory/service.ts";
+import { processPersonalityDrift, buildPersonalityDriftPromptText } from "./personality-drift.ts";
+import { getSettings } from "../settings.ts";
+import { getDateKeyInTimeZone, resolveConfiguredTimeZone } from "../../shared/timezone.ts";
 
 // ---------------------------------------------------------------------------
 // Types

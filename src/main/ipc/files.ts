@@ -1,12 +1,12 @@
-import { IPC_CHANNELS } from "../../shared/ipc.js";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
 import {
   pickFiles,
   readFilePreview,
   readImageDataUrl,
   saveClipboardFile,
-} from "../files.js";
-import { requireMainWindow } from "../window.js";
-import { handleIpc } from "./handle.js";
+} from "../files.ts";
+import { requireMainWindow } from "../window.ts";
+import { handleIpc } from "./handle.ts";
 
 export function registerFilesIpc(): void {
   handleIpc(IPC_CHANNELS.filesPick, async () =>

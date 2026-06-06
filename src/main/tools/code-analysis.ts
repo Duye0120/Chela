@@ -11,13 +11,13 @@ import type {
   CodeInspectDetails,
   CodeSymbolKind,
   CodeSymbolSummary,
-} from "../../shared/contracts.js";
-import { isPathAllowed, isPathForbiddenRead } from "../security.js";
+} from "../../shared/contracts.ts";
+import { isPathAllowed, isPathForbiddenRead } from "../security.ts";
 import {
   isTextFile,
   resolveWorkspacePath,
   toRelativeWorkspacePath,
-} from "./fs-utils.js";
+} from "./fs-utils.ts";
 
 const inspectParameters = Type.Object({
   path: Type.String({ description: "要分析的 TS/TSX/JS/JSX 文件路径" }),

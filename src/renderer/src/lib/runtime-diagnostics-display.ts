@@ -2,7 +2,7 @@ import type {
   RuntimeDiagnosticsReport,
   RuntimeDiagnosticsServiceStatus,
   RuntimeDiagnosticsServiceStatusValue,
-} from "../../../shared/contracts.js";
+} from "../../../shared/contracts.ts";
 
 export type RuntimeDiagnosticsSummaryItem = {
   label: string;

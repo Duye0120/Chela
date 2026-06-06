@@ -2,12 +2,12 @@ import {
   appendFileSync,
   existsSync,
   mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
 } from "node:fs";
-import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
+import {
+  atomicWriteTextSync,
+  readJsonFileSync,
+} from "../json-file.ts";
 
 export function ensureDir(dirPath: string): void {
   if (!existsSync(dirPath)) {
@@ -16,10 +16,7 @@ export function ensureDir(dirPath: string): void {
 }
 
 export function atomicWrite(filePath: string, data: string): void {
-  ensureDir(dirname(filePath));
-  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-  writeFileSync(tempPath, data, "utf-8");
-  renameSync(tempPath, filePath);
+  atomicWriteTextSync(filePath, data);
 }
 
 export function appendLine(filePath: string, line: string): void {
@@ -27,14 +24,4 @@ export function appendLine(filePath: string, line: string): void {
   appendFileSync(filePath, line + "\n", "utf-8");
 }
 
-export function readJsonFile<T>(filePath: string, fallback: T): T {
-  if (!existsSync(filePath)) {
-    return fallback;
-  }
-
-  try {
-    return JSON.parse(readFileSync(filePath, "utf-8")) as T;
-  } catch {
-    return fallback;
-  }
-}
+export const readJsonFile = readJsonFileSync;

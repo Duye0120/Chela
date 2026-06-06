@@ -5,6 +5,6 @@ export {
   getRequiredCompactedUntilSeq,
   getSessionMemoryPromptSection,
   reactiveCompact,
-} from "./snapshot.js";
-export { createTransformContext } from "./budget.js";
-export { buildContextSystemPrompt } from "./engine.js";
+} from "./snapshot.ts";
+export { createTransformContext } from "./budget.ts";
+export { buildContextSystemPrompt } from "./engine.ts";

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { loadTranscript } from "../session/transcript.js";
+import { loadTranscript } from "../session/transcript.ts";
 
 const MAX_HISTORY_ENTRIES = 200;
 

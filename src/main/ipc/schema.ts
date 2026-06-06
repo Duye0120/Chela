@@ -7,8 +7,8 @@ import type {
   McpServerConfigDraft,
   ProviderSourceDraft,
   Settings,
-} from "../../shared/contracts.js";
-import { IPC_CHANNELS, type IpcErrorPayload } from "../../shared/ipc.js";
+} from "../../shared/contracts.ts";
+import { IPC_CHANNELS, type IpcErrorPayload } from "../../shared/ipc.ts";
 import path from "node:path";
 
 type PlainRecord = Record<string, unknown>;

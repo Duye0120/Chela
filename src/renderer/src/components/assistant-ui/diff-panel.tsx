@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   RefreshCwIcon,
   XIcon,
@@ -90,13 +90,13 @@ function getFirstNonEmptySource(overview: GitDiffOverview | null) {
   return DIFF_SOURCES.find((source) => overview.sources[source].totalFiles > 0) ?? null;
 }
 
-export function DiffWorkbenchContent({
+const DiffWorkbenchContentImpl = ({
   onClose,
   overview,
   isLoading,
   onRefresh,
   className,
-}: DiffWorkbenchContentProps) {
+}: DiffWorkbenchContentProps) => {
   // ── State: diff layout ──────────────────────────────────────────────
   const [layout, setLayout] = useState<"vertical" | "horizontal">(diffWorkbenchDraft.layout);
 
@@ -982,7 +982,9 @@ export function DiffWorkbenchContent({
       </div>
     </section>
   );
-}
+};
+
+export const DiffWorkbenchContent = memo(DiffWorkbenchContentImpl);
 
 type DiffPanelProps = Omit<DiffWorkbenchContentProps, "className"> & {
   open: boolean;

@@ -1,7 +1,7 @@
 import { app } from "electron";
 import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { HarnessAuditEvent } from "./types.js";
+import type { HarnessAuditEvent } from "./types.ts";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // M28: 10 MB 后轮转
 

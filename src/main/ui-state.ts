@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { app } from "electron";
 import type {
   RightPanelView,
@@ -8,12 +7,16 @@ import type {
   SessionGroup,
   SessionGroupCreateInput,
   WindowUiState,
-} from "../shared/contracts.js";
+} from "../shared/contracts.ts";
 import {
   listPersistedArchivedSessions,
   listPersistedSessions,
   setPersistedSessionGroup,
-} from "./session/service.js";
+} from "./session/service.ts";
+import {
+  readJsonFileSync,
+  writeJsonFileSync,
+} from "./json-file.ts";
 
 const UI_STATE_FILE = "ui-state.json";
 const GROUPS_FILE = "groups.json";
@@ -28,32 +31,6 @@ function getUiStatePath(): string {
 
 function getGroupsPath(): string {
   return join(getDataDir(), GROUPS_FILE);
-}
-
-function ensureParentDir(filePath: string): void {
-  const parent = dirname(filePath);
-  if (parent && !existsSync(parent)) {
-    mkdirSync(parent, { recursive: true });
-  }
-}
-
-function atomicWrite(filePath: string, data: string): void {
-  ensureParentDir(filePath);
-  const tmpPath = filePath + ".tmp";
-  writeFileSync(tmpPath, data, "utf-8");
-  renameSync(tmpPath, filePath);
-}
-
-function readJsonFile<T>(filePath: string, fallback: T): T {
-  if (!existsSync(filePath)) {
-    return fallback;
-  }
-
-  try {
-    return JSON.parse(readFileSync(filePath, "utf-8")) as T;
-  } catch {
-    return fallback;
-  }
 }
 
 function normalizeRightPanelView(value: unknown): RightPanelView {
@@ -110,7 +87,7 @@ function normalizeUiState(
 
 export function getUiState(): WindowUiState {
   const filePath = getUiStatePath();
-  const parsed = readJsonFile<
+  const parsed = readJsonFileSync<
     Partial<WindowUiState> & {
       rightPanelOpen?: boolean;
       rightPanelWidth?: number | null;
@@ -122,7 +99,7 @@ export function getUiState(): WindowUiState {
 }
 
 function writeUiState(ui: WindowUiState): void {
-  atomicWrite(getUiStatePath(), JSON.stringify(normalizeUiState(ui), null, 2));
+  writeJsonFileSync(getUiStatePath(), normalizeUiState(ui));
 }
 
 export function setDiffPanelOpen(open: boolean): void {
@@ -145,7 +122,7 @@ export function setRightPanelState(partial: Partial<RightPanelState>): void {
 }
 
 export function listGroups(): SessionGroup[] {
-  const groups = readJsonFile(getGroupsPath(), [] as Array<Partial<SessionGroup>>);
+  const groups = readJsonFileSync(getGroupsPath(), [] as Array<Partial<SessionGroup>>);
   return groups
     .filter((group) => typeof group.id === "string" && typeof group.name === "string")
     .map((group) => ({
@@ -156,7 +133,7 @@ export function listGroups(): SessionGroup[] {
 }
 
 function writeGroups(groups: SessionGroup[]): void {
-  atomicWrite(getGroupsPath(), JSON.stringify(groups, null, 2));
+  writeJsonFileSync(getGroupsPath(), groups);
 }
 
 export function createGroup(input: SessionGroupCreateInput): SessionGroup {

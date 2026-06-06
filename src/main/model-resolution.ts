@@ -1,7 +1,7 @@
-import type { ModelRoutingRole } from "../shared/contracts.js";
-import { DEFAULT_MODEL_ENTRY_ID } from "../shared/provider-directory.js";
-import { resolveModelEntry } from "./providers.js";
-import { getSettings } from "./settings.js";
+import type { ModelRoutingRole } from "../shared/contracts.ts";
+import { DEFAULT_MODEL_ENTRY_ID } from "../shared/provider-directory.ts";
+import { resolveModelEntry } from "./providers.ts";
+import { getSettings } from "./settings.ts";
 
 const FALLBACK_MODEL_ENTRY_IDS = [
   DEFAULT_MODEL_ENTRY_ID,

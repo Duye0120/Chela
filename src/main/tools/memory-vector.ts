@@ -1,6 +1,6 @@
-import type { MemoryAddInput } from "../../shared/contracts.js";
-import type { MemorySaveStatus } from "../memory/dedupe.js";
-import type { MemdirEntry } from "../memory/service.js";
+import type { MemoryAddInput } from "../../shared/contracts.ts";
+import type { MemorySaveStatus } from "../memory/dedupe.ts";
+import type { MemdirEntry } from "../memory/service.ts";
 
 export type MemoryVectorPersistResult =
   | { status: "written" }

@@ -1,8 +1,4 @@
-import { app, safeStorage } from "electron";
-import { createHash } from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
-import { completeSimple, getModel, type Model } from "@earendil-works/pi-ai";
+import { completeSimple, type Model } from "@earendil-works/pi-ai";
 import type {
   ModelCapabilities,
   ModelCapabilitiesOverride,
@@ -14,10 +10,9 @@ import type {
   ModelUsageConflict,
   ProviderSource,
   ProviderSourceDraft,
-  ProviderType,
   SourceCredentials,
   SourceTestResult,
-} from "../shared/contracts.js";
+} from "../shared/contracts.ts";
 import {
   BUILTIN_SOURCES,
   CURATED_MODEL_CATALOG,
@@ -28,38 +23,29 @@ import {
   findKnownModelMetadata,
   getUnknownModelCapabilities,
   getUnknownModelLimits,
-  getRuntimeApiForProviderType,
   normalizeKnownModelId,
-} from "../shared/provider-directory.js";
+} from "../shared/provider-directory.ts";
 import {
   createProviderErrorResult,
   createProviderModelsResult,
-} from "../shared/provider-errors.js";
-import { getSettings, updateSettings } from "./settings.js";
-import { appLogger } from "./logger.js";
-import { fetchProviderModelIds } from "./provider-model-fetch.js";
-
-const SOURCES_FILE = "provider-sources.json";
-const ENTRIES_FILE = "model-entries.json";
-const CREDENTIALS_FILE = "credentials.json";
-const LEGACY_BUILTIN_PROVIDERS = new Set(["anthropic", "openai", "google"]);
-const DEFAULT_CONTEXT_WINDOW = 128_000;
-const DEFAULT_MAX_OUTPUT_TOKENS = 8_192;
-
-type CredentialsStore = Record<string, { apiKey?: string }>;
-type PersistedCredentialRecord = {
-  apiKey?: string;
-  encryptedApiKey?: string;
-  storage?: "plain" | "safeStorage";
-  baseUrl?: string;
-};
-type RawCredentialsStore = Record<string, PersistedCredentialRecord>;
-
-type ProviderState = {
-  sources: ProviderSource[];
-  entries: ModelEntry[];
-  credentials: CredentialsStore;
-};
+} from "../shared/provider-errors.ts";
+import { getSettings, updateSettings } from "./settings.ts";
+import { appLogger } from "./logger.ts";
+import { fetchProviderModelIds } from "./provider-model-fetch.ts";
+import { readJsonFile } from "./json-file.ts";
+import {
+  flushProviderStateToDisk,
+  getProviderEntriesPath,
+  getProviderSourcesPath,
+  readRawCredentials,
+  type ProviderState,
+} from "./provider-persistence.ts";
+import {
+  buildProviderModel,
+  fingerprintApiKey,
+  getApiKeyForSource,
+  isLocalOpenAiCompatibleSource,
+} from "./provider-model-builder.ts";
 
 type ResolvedModelEntry = {
   entry: ModelEntry;
@@ -69,148 +55,8 @@ type ResolvedModelEntry = {
   runtimeSignature: string;
 };
 
-type ReadCredentialsResult = {
-  credentials: CredentialsStore;
-  legacyBaseUrls: Map<string, string>;
-  needsRewrite: boolean;
-};
-
-function getUserDataPath(fileName: string): string {
-  return path.join(app.getPath("userData"), fileName);
-}
-
-function readJsonFile<T>(filePath: string, fallback: T): T {
-  try {
-    if (fs.existsSync(filePath)) {
-      return JSON.parse(fs.readFileSync(filePath, "utf-8")) as T;
-    }
-  } catch {
-    // ignore corrupt files and fall back
-  }
-  return fallback;
-}
-
-function writeJsonFile(filePath: string, data: unknown): void {
-  const tmpPath = filePath + ".tmp";
-  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
-  fs.renameSync(tmpPath, filePath);
-}
-
-function canEncryptCredentials(): boolean {
-  try {
-    return safeStorage.isEncryptionAvailable();
-  } catch {
-    return false;
-  }
-}
-
-function decryptStoredApiKey(
-  sourceKey: string,
-  record: PersistedCredentialRecord,
-): { apiKey: string; needsRewrite: boolean } | null {
-  if (typeof record.encryptedApiKey === "string" && record.encryptedApiKey.trim()) {
-    try {
-      const decrypted = safeStorage.decryptString(
-        Buffer.from(record.encryptedApiKey, "base64"),
-      ).trim();
-      if (!decrypted) {
-        return null;
-      }
-      return {
-        apiKey: decrypted,
-        needsRewrite:
-          record.storage !== "safeStorage" ||
-          typeof record.apiKey === "string",
-      };
-    } catch (error) {
-      appLogger.warn({
-        scope: "providers",
-        message: "读取加密 API Key 失败，当前 source 将被视为未配置。",
-        data: { sourceKey },
-        error,
-      });
-      return null;
-    }
-  }
-
-  const apiKey = typeof record.apiKey === "string" ? record.apiKey.trim() : "";
-  if (!apiKey) {
-    return null;
-  }
-
-  return {
-    apiKey,
-    needsRewrite: canEncryptCredentials() || record.storage === "safeStorage",
-  };
-}
-
-function readCredentialsStore(filePath: string): ReadCredentialsResult {
-  const rawCredentials = readJsonFile<RawCredentialsStore>(filePath, {});
-  const credentials: CredentialsStore = {};
-  const legacyBaseUrls = new Map<string, string>();
-  let needsRewrite = false;
-
-  for (const [key, value] of Object.entries(rawCredentials)) {
-    if (!value || typeof value !== "object") {
-      needsRewrite = true;
-      continue;
-    }
-
-    const decrypted = decryptStoredApiKey(key, value);
-    const baseUrl = normalizeBaseUrl(value.baseUrl);
-    const targetKey = LEGACY_BUILTIN_PROVIDERS.has(key) ? `builtin:${key}` : key;
-
-    if (targetKey !== key) {
-      needsRewrite = true;
-    }
-
-    if (decrypted?.apiKey) {
-      credentials[targetKey] = { apiKey: decrypted.apiKey };
-    }
-
-    if (decrypted?.needsRewrite) {
-      needsRewrite = true;
-    }
-
-    if (baseUrl) {
-      if (LEGACY_BUILTIN_PROVIDERS.has(key)) {
-        legacyBaseUrls.set(targetKey, baseUrl);
-        needsRewrite = true;
-      } else {
-        needsRewrite = true;
-      }
-    }
-  }
-
-  return { credentials, legacyBaseUrls, needsRewrite };
-}
-
-function serializeCredentialsStore(credentials: CredentialsStore): RawCredentialsStore {
-  const canEncrypt = canEncryptCredentials();
-  const persisted: RawCredentialsStore = {};
-
-  for (const [sourceId, value] of Object.entries(credentials)) {
-    const apiKey = value.apiKey?.trim();
-    if (!apiKey) {
-      continue;
-    }
-
-    if (canEncrypt) {
-      persisted[sourceId] = {
-        storage: "safeStorage",
-        encryptedApiKey: safeStorage.encryptString(apiKey).toString("base64"),
-      };
-      continue;
-    }
-
-    persisted[sourceId] = {
-      storage: "plain",
-      apiKey,
-    };
-  }
-
-  return persisted;
-}
+let cachedProviderState: ProviderState | null = null;
+let pendingProviderStateFlush: Promise<void> = Promise.resolve();
 
 function normalizeBaseUrl(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
@@ -270,10 +116,6 @@ function normalizeProviderOptions(
 function maskKey(key: string): string {
   if (key.length <= 8) return "••••••••";
   return key.slice(0, 6) + "••••" + key.slice(-4);
-}
-
-function fingerprintKey(key: string): string {
-  return createHash("sha256").update(key).digest("hex").slice(0, 16);
 }
 
 function sortSources(sources: ProviderSource[]): ProviderSource[] {
@@ -346,14 +188,12 @@ function resolveKnownDetectedMetadata(
   };
 }
 
-function readProviderState(): ProviderState {
-  const sourcesPath = getUserDataPath(SOURCES_FILE);
-  const entriesPath = getUserDataPath(ENTRIES_FILE);
-  const credentialsPath = getUserDataPath(CREDENTIALS_FILE);
-
-  const persistedSources = readJsonFile<ProviderSource[]>(sourcesPath, []);
-  const persistedEntries = readJsonFile<ModelEntry[]>(entriesPath, []);
-  const credentialsResult = readCredentialsStore(credentialsPath);
+async function hydrateProviderState(): Promise<ProviderState> {
+  const [persistedSources, persistedEntries, credentialsResult] = await Promise.all([
+    readJsonFile<ProviderSource[]>(getProviderSourcesPath(), []),
+    readJsonFile<ModelEntry[]>(getProviderEntriesPath(), []),
+    readRawCredentials(normalizeBaseUrl),
+  ]);
   const { credentials, legacyBaseUrls } = credentialsResult;
 
   const builtinSources = BUILTIN_SOURCES.map((builtin) => {
@@ -456,22 +296,47 @@ function readProviderState(): ProviderState {
   return nextState;
 }
 
-function writeProviderState(state: ProviderState): void {
-  writeJsonFile(getUserDataPath(SOURCES_FILE), sortSources(state.sources));
-  writeJsonFile(
-    getUserDataPath(ENTRIES_FILE),
-    sortEntries(state.entries, state.sources),
-  );
-  writeJsonFile(
-    getUserDataPath(CREDENTIALS_FILE),
-    serializeCredentialsStore(state.credentials),
-  );
-
-  try {
-    fs.chmodSync(getUserDataPath(CREDENTIALS_FILE), 0o600);
-  } catch {
-    // Windows may ignore chmod
+function readProviderState(): ProviderState {
+  if (cachedProviderState) {
+    return cachedProviderState;
   }
+
+  throw new Error("Provider state has not been initialized.");
+}
+
+export async function initializeProviderState(): Promise<void> {
+  cachedProviderState = await hydrateProviderState();
+}
+
+async function flushProviderStateAsync(state: ProviderState): Promise<void> {
+  const sources = sortSources(state.sources);
+  const entries = sortEntries(state.entries, state.sources);
+  await flushProviderStateToDisk({ ...state, sources, entries });
+}
+
+function writeProviderState(state: ProviderState): void {
+  cachedProviderState = {
+    sources: sortSources(state.sources).map(cloneSource),
+    entries: sortEntries(state.entries, state.sources).map(cloneEntry),
+    credentials: Object.fromEntries(
+      Object.entries(state.credentials).map(([sourceId, value]) => [
+        sourceId,
+        { ...value },
+      ]),
+    ),
+  };
+  const stateToFlush = cachedProviderState;
+  pendingProviderStateFlush = pendingProviderStateFlush
+    .catch(() => undefined)
+    .then(() => flushProviderStateAsync(stateToFlush))
+    .catch((error) => {
+      appLogger.warn({
+        scope: "providers",
+        message: "写入 provider state 失败。",
+        error,
+      });
+    });
+  void pendingProviderStateFlush;
 }
 
 function requireSource(state: ProviderState, sourceId: string): ProviderSource {
@@ -726,177 +591,6 @@ function validateEntryDraft(
   };
 }
 
-function resolveCapabilities(entry: ModelEntry): ModelCapabilities {
-  return {
-    vision: entry.capabilities.vision ?? entry.detectedCapabilities.vision,
-    imageOutput:
-      entry.capabilities.imageOutput ?? entry.detectedCapabilities.imageOutput,
-    toolCalling:
-      entry.capabilities.toolCalling ?? entry.detectedCapabilities.toolCalling,
-    reasoning:
-      entry.capabilities.reasoning ?? entry.detectedCapabilities.reasoning,
-    embedding:
-      entry.capabilities.embedding ?? entry.detectedCapabilities.embedding,
-  };
-}
-
-function resolveLimits(entry: ModelEntry): ModelLimits {
-  return {
-    contextWindow:
-      entry.limits.contextWindow ?? entry.detectedLimits.contextWindow,
-    maxOutputTokens:
-      entry.limits.maxOutputTokens ?? entry.detectedLimits.maxOutputTokens,
-  };
-}
-
-function extractCompat(entry: ModelEntry): Record<string, unknown> | undefined {
-  const compat = entry.providerOptions?.compat;
-  if (!compat || typeof compat !== "object" || Array.isArray(compat)) {
-    return undefined;
-  }
-  return compat as Record<string, unknown>;
-}
-
-function inferOpenAiCompatibleCompat(
-  source: ProviderSource,
-): Record<string, unknown> | undefined {
-  if (source.providerType !== "openai-compatible") {
-    return undefined;
-  }
-
-  const baseUrl = source.baseUrl?.trim().toLowerCase();
-  if (!baseUrl) {
-    return undefined;
-  }
-
-  // DashScope's OpenAI-compatible endpoints reject the `developer` role and
-  // follow the older `max_tokens` style rather than newer OpenAI defaults.
-  if (baseUrl.includes("dashscope.aliyuncs.com")) {
-    return {
-      supportsStore: false,
-      supportsDeveloperRole: false,
-      supportsReasoningEffort: false,
-      maxTokensField: "max_tokens",
-    };
-  }
-
-  if (isLocalOpenAiCompatibleSource(source)) {
-    return {
-      supportsStore: false,
-      supportsDeveloperRole: false,
-      supportsReasoningEffort: false,
-      maxTokensField: "max_tokens",
-    };
-  }
-
-  return undefined;
-}
-
-function isLocalOpenAiCompatibleSource(source: ProviderSource): boolean {
-  if (source.providerType !== "openai-compatible" || !source.baseUrl) {
-    return false;
-  }
-
-  try {
-    const url = new URL(source.baseUrl);
-    return (
-      url.hostname === "localhost" ||
-      url.hostname === "127.0.0.1" ||
-      url.hostname === "::1" ||
-      url.hostname === "[::1]"
-    );
-  } catch {
-    return false;
-  }
-}
-
-function getApiKeyForSource(
-  credentials: ProviderState["credentials"],
-  source: ProviderSource,
-): string {
-  const apiKey = credentials[source.id]?.apiKey?.trim();
-  if (apiKey) {
-    return apiKey;
-  }
-
-  return isLocalOpenAiCompatibleSource(source) ? "local" : "";
-}
-
-function resolveCompat(
-  source: ProviderSource,
-  entry: ModelEntry,
-): Record<string, unknown> | undefined {
-  const inferredCompat = inferOpenAiCompatibleCompat(source);
-  const explicitCompat = extractCompat(entry);
-
-  if (!inferredCompat && !explicitCompat) {
-    return undefined;
-  }
-
-  return {
-    ...(inferredCompat ?? {}),
-    ...(explicitCompat ?? {}),
-  };
-}
-
-function extractHeaders(entry: ModelEntry): Record<string, string> | undefined {
-  const headers = entry.providerOptions?.headers;
-  if (!headers || typeof headers !== "object" || Array.isArray(headers)) {
-    return undefined;
-  }
-
-  const result: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers as Record<string, unknown>)) {
-    if (typeof value === "string") {
-      result[key] = value;
-    }
-  }
-
-  return Object.keys(result).length > 0 ? result : undefined;
-}
-
-function buildCustomModel(source: ProviderSource, entry: ModelEntry): Model<any> {
-  const capabilities = resolveCapabilities(entry);
-  const limits = resolveLimits(entry);
-  return {
-    id: entry.modelId,
-    name: entry.name,
-    api: getRuntimeApiForProviderType(source.providerType),
-    provider: source.providerType,
-    baseUrl: source.baseUrl ?? "",
-    reasoning: capabilities.reasoning ?? false,
-    input: capabilities.vision ? ["text", "image"] : ["text"],
-    cost: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-    },
-    contextWindow: limits.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
-    maxTokens: limits.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
-    headers: extractHeaders(entry),
-    compat:
-      source.providerType === "openai-compatible"
-        ? (resolveCompat(source, entry) as any)
-        : undefined,
-  };
-}
-
-function buildNativeModel(source: ProviderSource, entry: ModelEntry): Model<any> {
-  const baseModel = getModel(source.providerType as any, entry.modelId as never);
-  if (!baseModel) {
-    throw new Error(`找不到内置模型：${entry.modelId}`);
-  }
-  const limits = resolveLimits(entry);
-  return {
-    ...baseModel,
-    name: entry.name,
-    contextWindow: limits.contextWindow ?? baseModel.contextWindow,
-    maxTokens: limits.maxOutputTokens ?? baseModel.maxTokens,
-    headers: extractHeaders(entry) ?? baseModel.headers,
-  };
-}
-
 export function listSources(): ProviderSource[] {
   return readProviderState().sources.map(cloneSource);
 }
@@ -1069,10 +763,7 @@ export async function testSource(
       };
     }
 
-    const model =
-      normalized.kind === "builtin" && normalized.mode === "native"
-        ? buildNativeModel(normalized, candidateEntry)
-        : buildCustomModel(normalized, candidateEntry);
+    const model = buildProviderModel(normalized, candidateEntry);
 
     await completeSimple(
       model,
@@ -1092,7 +783,7 @@ export async function testSource(
 
 export async function fetchSourceModels(
   draft: ProviderSourceDraft,
-): Promise<import("../shared/contracts.js").SourceModelsResult> {
+): Promise<import("../shared/contracts.ts").SourceModelsResult> {
   let normalized: ProviderSource;
   try {
     const state = readProviderState();
@@ -1273,10 +964,7 @@ export function resolveModelEntry(entryId: string): ResolvedModelEntry {
     throw new Error(`source「${source.name}」尚未配置 API Key。`);
   }
 
-  const model =
-    source.kind === "builtin" && source.mode === "native"
-      ? buildNativeModel(source, entry)
-      : buildCustomModel(source, entry);
+  const model = buildProviderModel(source, entry);
 
   return {
     entry: cloneEntry(entry),
@@ -1295,7 +983,7 @@ export function resolveModelEntry(entryId: string): ResolvedModelEntry {
       capabilities: entry.capabilities,
       limits: entry.limits,
       providerOptions: entry.providerOptions,
-      apiKeyFingerprint: fingerprintKey(apiKey),
+      apiKeyFingerprint: fingerprintApiKey(apiKey),
     }),
   };
 }

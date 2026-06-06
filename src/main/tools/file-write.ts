@@ -2,8 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { isPathAllowed, isWritePathForbidden } from "../security.js";
-import { withFileMutationQueue } from "./file-mutation-queue.js";
+import { isPathAllowed, isWritePathForbidden } from "../security.ts";
+import { withFileMutationQueue } from "./file-mutation-queue.ts";
 
 const parameters = Type.Object({
   path: Type.String({ description: "文件路径（相对于 workspace 或绝对路径）" }),

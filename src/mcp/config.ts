@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, renameSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { McpServerConfigDraft } from "../shared/contracts.js";
+import type { McpServerConfigDraft } from "../shared/contracts.ts";
 
 export type McpServerConfig = {
   type?: "stdio" | "streamable-http";
@@ -21,6 +21,13 @@ export type McpConfig = {
 };
 
 const MCP_CONFIG_FILE = "mcp.json";
+type McpConfigCacheEntry = {
+  size: number;
+  mtimeMs: number;
+  config: McpConfig;
+};
+
+const mcpConfigCache = new Map<string, McpConfigCacheEntry>();
 
 export function getMcpConfigPath(workspacePath: string): string {
   return join(workspacePath, MCP_CONFIG_FILE);
@@ -146,21 +153,51 @@ function normalizeServerConfig(
   };
 }
 
+function createEmptyMcpConfig(): McpConfig {
+  return { mcpServers: {} };
+}
+
+function cacheMcpConfig(configPath: string, config: McpConfig): McpConfig {
+  if (!existsSync(configPath)) {
+    mcpConfigCache.delete(configPath);
+    return config;
+  }
+
+  const stat = statSync(configPath);
+  mcpConfigCache.set(configPath, {
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    config,
+  });
+  return config;
+}
+
+function invalidateMcpConfigCache(workspacePath: string): void {
+  mcpConfigCache.delete(getMcpConfigPath(workspacePath));
+}
+
 /**
  * Read and parse the mcp.json config from workspace.
  */
 export function loadMcpConfig(workspacePath: string): McpConfig {
   const configPath = getMcpConfigPath(workspacePath);
   if (!existsSync(configPath)) {
-    return { mcpServers: {} };
+    mcpConfigCache.delete(configPath);
+    return createEmptyMcpConfig();
   }
 
   try {
+    const stat = statSync(configPath);
+    const cached = mcpConfigCache.get(configPath);
+    if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
+      return cached.config;
+    }
+
     const raw = readFileSync(configPath, "utf-8");
     const parsed = JSON.parse(raw) as Partial<McpConfig>;
     if (!isPlainObject(parsed)) {
       warnMcpConfig(configPath, "MCP 配置根对象无效，已回退为空配置。");
-      return { mcpServers: {} };
+      return cacheMcpConfig(configPath, createEmptyMcpConfig());
     }
 
     const rawServers = isPlainObject(parsed.mcpServers)
@@ -172,7 +209,7 @@ export function loadMcpConfig(workspacePath: string): McpConfig {
       if (rawServers != null) {
         warnMcpConfig(configPath, "mcpServers 字段无效，已回退为空配置。");
       }
-      return { mcpServers: {} };
+      return cacheMcpConfig(configPath, createEmptyMcpConfig());
     }
 
     const normalizedServers: Record<string, McpServerConfig> = {};
@@ -203,15 +240,16 @@ export function loadMcpConfig(workspacePath: string): McpConfig {
       normalizedServers[serverName] = normalized;
     }
 
-    return {
+    return cacheMcpConfig(configPath, {
       mcpServers: normalizedServers,
-    };
+    });
   } catch (err) {
     console.warn("[mcp.config] 解析 MCP 配置失败，已回退为空配置。", {
       configPath,
       error: err instanceof Error ? err.message : String(err),
     });
-    return { mcpServers: {} };
+    mcpConfigCache.delete(configPath);
+    return createEmptyMcpConfig();
   }
 }
 
@@ -312,6 +350,7 @@ export function saveMcpServerConfig(
     ...config,
     mcpServers: servers,
   });
+  invalidateMcpConfigCache(workspacePath);
   return loadMcpConfig(workspacePath);
 }
 
@@ -323,6 +362,7 @@ export function deleteMcpServerConfig(workspacePath: string, serverName: string)
     ...config,
     mcpServers: servers,
   });
+  invalidateMcpConfigCache(workspacePath);
   return loadMcpConfig(workspacePath);
 }
 

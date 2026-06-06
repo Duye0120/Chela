@@ -1,7 +1,7 @@
 import { Notification } from "electron";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { BUS_EVENTS, bus } from "../event-bus.js";
+import { BUS_EVENTS, bus } from "../event-bus.ts";
 
 const parameters = Type.Object({
   title: Type.String({ description: "通知标题" }),

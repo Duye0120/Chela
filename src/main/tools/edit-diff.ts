@@ -9,7 +9,7 @@
  * Source reference: badlogic/pi-mono packages/coding-agent/src/core/tools/edit-diff.ts (MIT).
  */
 
-import { createTwoFilesPatch, parsePatch } from "../diff-shim.js";
+import { createTwoFilesPatch, parsePatch } from "../diff-shim.ts";
 
 export type Edit = {
   oldText: string;

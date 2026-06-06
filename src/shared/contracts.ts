@@ -1,8 +1,8 @@
-import type { AgentEvent, ConfirmationResponse } from "./agent-events.js";
-import type { MemoryEmbeddingModelId } from "./memory.js";
-import type { ChelaPluginManifest } from "./plugins.js";
-import type { ProviderErrorCode } from "./provider-errors.js";
-import type { RunFailureKind } from "./run-recovery.js";
+import type { AgentEvent, ConfirmationResponse } from "./agent-events.ts";
+import type { MemoryEmbeddingModelId } from "./memory.ts";
+import type { ChelaPluginManifest } from "./plugins.ts";
+import type { ProviderErrorCode } from "./provider-errors.ts";
+import type { RunFailureKind } from "./run-recovery.ts";
 
 export type ChatRole = "user" | "assistant" | "system";
 export type ChatMessageStatus = "idle" | "streaming" | "done" | "error";

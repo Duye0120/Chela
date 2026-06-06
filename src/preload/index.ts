@@ -15,13 +15,13 @@ import type {
   TriggerQueuedMessageInput,
   SessionGroupCreateInput,
   TrimSessionMessagesInput,
-} from "../shared/contracts.js";
-import type { AgentEvent, ConfirmationResponse } from "../shared/agent-events.js";
+} from "../shared/contracts.ts";
+import type { AgentEvent, ConfirmationResponse } from "../shared/agent-events.ts";
 import {
   IPC_CHANNELS,
   IPC_ERROR_MESSAGE_PREFIX,
   type IpcErrorPayload,
-} from "../shared/ipc.js";
+} from "../shared/ipc.ts";
 
 type DesktopIpcError = Error & IpcErrorPayload;
 

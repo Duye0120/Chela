@@ -1,24 +1,24 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import type { McpConnectionManager } from "../../mcp/client.js";
+import type { McpConnectionManager } from "../../mcp/client.ts";
 import {
   getAllMcpTools,
   getMcpBrokerTool,
   getMcpResourceTools,
-} from "../../mcp/adapter.js";
-import { createCommandHistoryTool } from "./command-history.js";
-import { createCodeDiagnosticsTool, createCodeInspectTool } from "./code-analysis.js";
-import { getTimeTool } from "./get-time.js";
-import { createFileEditTool } from "./file-edit.js";
-import { createFileReadTool } from "./file-read.js";
-import { createFileWriteTool } from "./file-write.js";
-import { createGlobSearchTool } from "./glob-search.js";
-import { createGrepSearchTool } from "./grep-search.js";
-import { createMemorySaveTool, createMemoryListTool } from "./memory.js";
-import { createShellExecTool } from "./shell-exec.js";
-import { createTodoReadTool, createTodoWriteTool } from "./todo.js";
-import { createWebFetchTool } from "./web-fetch.js";
-import { createWebSearchTool } from "./web-search.js";
-import { notifyUserTool } from "./notify.js";
+} from "../../mcp/adapter.ts";
+import { createCommandHistoryTool } from "./command-history.ts";
+import { createCodeDiagnosticsTool, createCodeInspectTool } from "./code-analysis.ts";
+import { getTimeTool } from "./get-time.ts";
+import { createFileEditTool } from "./file-edit.ts";
+import { createFileReadTool } from "./file-read.ts";
+import { createFileWriteTool } from "./file-write.ts";
+import { createGlobSearchTool } from "./glob-search.ts";
+import { createGrepSearchTool } from "./grep-search.ts";
+import { createMemorySaveTool, createMemoryListTool } from "./memory.ts";
+import { createShellExecTool } from "./shell-exec.ts";
+import { createTodoReadTool, createTodoWriteTool } from "./todo.ts";
+import { createWebFetchTool } from "./web-fetch.ts";
+import { createWebSearchTool } from "./web-search.ts";
+import { notifyUserTool } from "./notify.ts";
 
 type ToolAssemblyOptions = {
   workspacePath: string;

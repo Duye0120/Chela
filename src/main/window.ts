@@ -2,8 +2,8 @@ import { cpSync, existsSync, readdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, screen } from "electron";
-import { IPC_CHANNELS } from "../shared/ipc.js";
-import { appLogger, attachWindowLogging } from "./logger.js";
+import { IPC_CHANNELS } from "../shared/ipc.ts";
+import { appLogger, attachWindowLogging } from "./logger.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIN_WINDOW_WIDTH = 920;

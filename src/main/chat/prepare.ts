@@ -3,24 +3,24 @@ import {
   getHandle,
   initAgent,
   type AgentHandle,
-} from "../agent.js";
-import { ElectronAdapter } from "../adapter.js";
-import { PRIMARY_AGENT_OWNER } from "../agent-owners.js";
-import { harnessRuntime } from "../harness/singleton.js";
-import { appLogger } from "../logger.js";
-import { resolveWithFailover } from "../failover.js";
-import { getGitDiffSnapshot } from "../git.js";
-import { getSettings } from "../settings.js";
+} from "../agent.ts";
+import { ElectronAdapter } from "../adapter.ts";
+import { PRIMARY_AGENT_OWNER } from "../agent-owners.ts";
+import { harnessRuntime } from "../harness/singleton.ts";
+import { appLogger } from "../logger.ts";
+import { resolveWithFailover } from "../failover.ts";
+import { getGitDiffSnapshot } from "../git.ts";
+import { getSettings } from "../settings.ts";
 import {
   appendRunStartedEvent,
   appendUserMessageEvent,
-} from "../session/service.js";
-import { loadSession } from "../session/facade.js";
-import { requireMainWindow } from "../window.js";
-import { BUS_EVENTS, bus } from "../event-bus.js";
-import type { ChatRunContext } from "./types.js";
-import type { SendMessageInput } from "../../shared/contracts.js";
-import type { ResolvedRuntimeModel } from "../model-resolution.js";
+} from "../session/service.ts";
+import { loadSession } from "../session/facade.ts";
+import { requireMainWindow } from "../window.ts";
+import { BUS_EVENTS, bus } from "../event-bus.ts";
+import type { ChatRunContext } from "./types.ts";
+import type { SendMessageInput } from "../../shared/contracts.ts";
+import type { ResolvedRuntimeModel } from "../model-resolution.ts";
 
 function isHandlePromptRuntimeCurrent(
   handle: AgentHandle,

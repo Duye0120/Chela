@@ -1,9 +1,9 @@
 import { app } from "electron";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { PRIMARY_AGENT_OWNER, buildSystemOwnerId } from "../agent-owners.js";
-import type { RunKind, RunSource } from "../../shared/contracts.js";
-import type { HarnessRunSnapshot } from "./types.js";
+import { PRIMARY_AGENT_OWNER, buildSystemOwnerId } from "../agent-owners.ts";
+import type { RunKind, RunSource } from "../../shared/contracts.ts";
+import type { HarnessRunSnapshot } from "./types.ts";
 
 type PersistedHarnessRuns = {
   runs: HarnessRunSnapshot[];

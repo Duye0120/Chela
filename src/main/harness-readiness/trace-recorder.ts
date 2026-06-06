@@ -1,7 +1,7 @@
-import { createReadinessEvent } from "./sanitize.js";
-import { ReadinessTraceStore } from "./trace-store.js";
-import type { ReadinessComponent, ReadinessTraceEvent, ReadinessTraceStatus } from "./types.js";
-import type { RuntimeServiceHealth } from "../runtime-services/types.js";
+import { createReadinessEvent } from "./sanitize.ts";
+import { ReadinessTraceStore } from "./trace-store.ts";
+import type { ReadinessComponent, ReadinessTraceEvent, ReadinessTraceStatus } from "./types.ts";
+import type { RuntimeServiceHealth } from "../runtime-services/types.ts";
 
 export const READINESS_BUS_EVENTS = {
   RUN_CREATED: "run:created",

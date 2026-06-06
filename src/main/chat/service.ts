@@ -4,20 +4,20 @@ import type {
   RemoveQueuedMessageInput,
   SendMessageInput,
   TriggerQueuedMessageInput,
-} from "../../shared/contracts.js";
+} from "../../shared/contracts.ts";
 import {
   enqueueSessionQueuedMessage,
   moveSessionQueuedMessageToFront,
   removeSessionQueuedMessage,
-} from "../session/facade.js";
-import { cancelChatRun } from "./cancel.js";
-import { executeChatRun } from "./execute.js";
+} from "../session/facade.ts";
+import { cancelChatRun } from "./cancel.ts";
+import { executeChatRun } from "./execute.ts";
 import {
   completeChatRun,
   finalizeCompletedChatRun,
   finalizeFailedChatRun,
-} from "./finalize.js";
-import { createChatRunContext, prepareChatRun } from "./prepare.js";
+} from "./finalize.ts";
+import { createChatRunContext, prepareChatRun } from "./prepare.ts";
 
 export async function sendChatMessage(input: SendMessageInput): Promise<void> {
   const context = createChatRunContext(input);
@@ -35,7 +35,7 @@ export async function sendChatMessage(input: SendMessageInput): Promise<void> {
 
 export async function enqueueQueuedMessage(
   input: EnqueueQueuedMessageInput,
-): Promise<import("../../shared/contracts.js").QueuedMessage> {
+): Promise<import("../../shared/contracts.ts").QueuedMessage> {
   const nextText = input.text.trim();
   if (!nextText) {
     throw new Error("排队消息不能为空。");

@@ -6,19 +6,19 @@ import {
   shell,
   type OpenDialogOptions,
 } from "electron";
-import { IPC_CHANNELS } from "../../shared/ipc.js";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
 import {
   listWorkspaceDirectory,
   readWorkspaceFilePreview,
-} from "../files.js";
-import { getSoulFilesStatus } from "../soul.js";
-import { getSettings, updateSettings } from "../settings.js";
-import { getMainWindow } from "../window.js";
-import { handleIpc } from "./handle.js";
+} from "../files.ts";
+import { getSoulFilesStatus } from "../soul.ts";
+import { getSettings, updateSettings } from "../settings.ts";
+import { getMainWindow } from "../window.ts";
+import { handleIpc } from "./handle.ts";
 import {
   validateWorkspacePathPayload,
   validateWorkspaceRelativePathPayload,
-} from "./schema.js";
+} from "./schema.ts";
 
 export function registerWorkspaceIpc(): void {
   handleIpc(IPC_CHANNELS.workspaceChange, async (_event, path: string) => {

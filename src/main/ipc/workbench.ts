@@ -1,5 +1,5 @@
-import { IPC_CHANNELS } from "../../shared/ipc.js";
-import type { GitCommitInput, RightPanelState } from "../../shared/contracts.js";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
+import type { GitCommitInput, RightPanelState } from "../../shared/contracts.ts";
 import {
   createAndSwitchGitBranch,
   getGitBranchSummary,
@@ -11,21 +11,21 @@ import {
   commitGitChanges,
   pullGitChanges,
   pushGitChanges,
-} from "../git.js";
-import { getSettings } from "../settings.js";
+} from "../git.ts";
+import { getSettings } from "../settings.ts";
 import {
   createTerminal,
   destroyTerminal,
   resizeTerminal,
   writeTerminal,
-} from "../terminal.js";
-import { getUiState, setDiffPanelOpen, setRightPanelState } from "../ui-state.js";
-import { handleIpc } from "./handle.js";
+} from "../terminal.ts";
+import { getUiState, setDiffPanelOpen, setRightPanelState } from "../ui-state.ts";
+import { handleIpc } from "./handle.ts";
 import {
   validateGitBranchNamePayload,
   validateGitCommitPayload,
   validateGitPathsPayload,
-} from "./schema.js";
+} from "./schema.ts";
 
 export function registerWorkbenchIpc(): void {
   handleIpc(

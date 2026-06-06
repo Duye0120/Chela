@@ -1,27 +1,27 @@
-import { completeRun, destroyAgent } from "../agent.js";
-import { PRIMARY_AGENT_OWNER } from "../agent-owners.js";
-import { getGitDiffSnapshot } from "../git.js";
-import { HarnessRunCancelledError } from "../harness/runtime.js";
-import { harnessRuntime } from "../harness/singleton.js";
-import { appLogger } from "../logger.js";
-import { scheduleAutoMemorySummarize } from "../memory/service.js";
+import { completeRun, destroyAgent } from "../agent.ts";
+import { PRIMARY_AGENT_OWNER } from "../agent-owners.ts";
+import { getGitDiffSnapshot } from "../git.ts";
+import { HarnessRunCancelledError } from "../harness/runtime.ts";
+import { harnessRuntime } from "../harness/singleton.ts";
+import { appLogger } from "../logger.ts";
+import { scheduleAutoMemorySummarize } from "../memory/service.ts";
 import {
   appendAssistantMessageEvent,
   appendRunFinishedEvent,
   getSessionMeta,
   loadTranscriptEvents,
   renamePersistedSession,
-} from "../session/service.js";
-import { indexSessionSearchDocument } from "../session/search.js";
-import { BUS_EVENTS, bus } from "../event-bus.js";
-import { WorkerService } from "../worker-service.js";
+} from "../session/service.ts";
+import { indexSessionSearchDocument } from "../session/search.ts";
+import { BUS_EVENTS, bus } from "../event-bus.ts";
+import { WorkerService } from "../worker-service.ts";
 import {
   buildRunChangeSummary,
   collectRunTouchedPaths,
-} from "./run-change-summary.js";
-import type { ChatRunContext } from "./types.js";
-import type { ChatMessage, RunChangeSummary } from "../../shared/contracts.js";
-import { formatChatRuntimeErrorMessage } from "../../shared/chat-runtime-errors.js";
+} from "./run-change-summary.ts";
+import type { ChatRunContext } from "./types.ts";
+import type { ChatMessage, RunChangeSummary } from "../../shared/contracts.ts";
+import { formatChatRuntimeErrorMessage } from "../../shared/chat-runtime-errors.ts";
 
 async function maybeAutoRenameSessionTitle(
   sessionId: string,

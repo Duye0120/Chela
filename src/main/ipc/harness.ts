@@ -1,4 +1,4 @@
-import { IPC_CHANNELS } from "../../shared/ipc.js";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
 import {
   dismissInterruptedApproval,
   listPendingApprovalGroups,
@@ -6,8 +6,8 @@ import {
   listInterruptedApprovals,
   resumeInterruptedApproval,
   resolveApprovalResponse,
-} from "../harness/approvals.js";
-import { handleIpc } from "./handle.js";
+} from "../harness/approvals.ts";
+import { handleIpc } from "./handle.ts";
 
 export function registerHarnessIpc(): void {
   handleIpc(

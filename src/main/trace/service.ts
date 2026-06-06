@@ -7,18 +7,18 @@
 // 同时将 harness 生命周期事件映射为 AgentEvent 并通过 IPC 发送给 renderer。
 // ---------------------------------------------------------------------------
 
-import { BUS_EVENTS, bus, type EventMap } from "../event-bus.js";
-import { IPC_CHANNELS } from "../../shared/ipc.js";
-import { getMainWindow } from "../window.js";
-import type { AgentEvent } from "../../shared/agent-events.js";
+import { BUS_EVENTS, bus, type EventMap } from "../event-bus.ts";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
+import { getMainWindow } from "../window.ts";
+import type { AgentEvent } from "../../shared/agent-events.ts";
 import type {
   TraceNode,
   TraceTree,
   TraceRunSummary,
   TraceEventType,
   TraceNodeStatus,
-} from "../../shared/contracts.js";
-import { appLogger } from "../logger.js";
+} from "../../shared/contracts.ts";
+import { appLogger } from "../logger.ts";
 
 // ---------------------------------------------------------------------------
 // Internal: pending node tracker — pairs start/end events to compute duration

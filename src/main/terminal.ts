@@ -1,9 +1,9 @@
 import * as pty from "node-pty";
 import type { BrowserWindow } from "electron";
-import { IPC_CHANNELS } from "../shared/ipc.js";
-import { appLogger } from "./logger.js";
-import { resolveShell } from "./shell.js";
-import { getSettings } from "./settings.js";
+import { IPC_CHANNELS } from "../shared/ipc.ts";
+import { appLogger } from "./logger.ts";
+import { resolveShell } from "./shell.ts";
+import { getSettings } from "./settings.ts";
 
 type TerminalInstance = {
   id: string;

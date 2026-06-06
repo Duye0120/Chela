@@ -5,8 +5,8 @@ import type {
   MemoryRecord,
   MemorySearchResult,
   MemoryStats,
-} from "../../shared/contracts.js";
-import type { MemoryEmbeddingModelId } from "../../shared/memory.js";
+} from "../../shared/contracts.ts";
+import type { MemoryEmbeddingModelId } from "../../shared/memory.ts";
 
 export type WorkerState = MemoryStats["workerState"];
 

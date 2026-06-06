@@ -7,9 +7,9 @@ import type {
   MemoryRecord,
   MemorySearchResult,
   MemoryStats,
-} from "../../shared/contracts.js";
-import type { MemoryEmbeddingModelId } from "../../shared/memory.js";
-import { appLogger } from "../logger.js";
+} from "../../shared/contracts.ts";
+import type { MemoryEmbeddingModelId } from "../../shared/memory.ts";
+import { appLogger } from "../logger.ts";
 import type {
   EmbeddingProviderInfo,
   ErrorResponse,
@@ -18,10 +18,10 @@ import type {
   MemoryWorkerResponse,
   ReadyMessage,
   WorkerState,
-} from "./embedding-types.js";
-import { createMemoryWorkerExitError } from "./worker-errors.js";
+} from "./embedding-types.ts";
+import { createMemoryWorkerExitError } from "./worker-errors.ts";
 
-export type { EmbeddingProviderInfo } from "./embedding-types.js";
+export type { EmbeddingProviderInfo } from "./embedding-types.ts";
 
 type PendingRequest<T> = {
   resolve: (value: T) => void;
@@ -132,7 +132,7 @@ export class MemoryWorkerClient {
     // `electron.vite.config.ts`); resolving relative to the current bundle URL
     // so the worker thread does NOT load the main bundle (which imports
     // `electron` and would crash inside `worker_threads`).
-    const workerUrl = new URL("./embedding-worker.js", import.meta.url);
+    const workerUrl = new URL("./embedding-worker.ts", import.meta.url);
     const worker = new Worker(workerUrl, {
       workerData: this.initData,
       stderr: true,

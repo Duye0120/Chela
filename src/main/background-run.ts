@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type { RunKind, RunSource } from "../shared/contracts.js";
-import { buildSystemOwnerId } from "./agent-owners.js";
-import { harnessRuntime } from "./harness/singleton.js";
+import type { RunKind, RunSource } from "../shared/contracts.ts";
+import { buildSystemOwnerId } from "./agent-owners.ts";
+import { harnessRuntime } from "./harness/singleton.ts";
 import {
   appendRunFinishedEvent,
   appendRunStartedEvent,
-} from "./session/service.js";
+} from "./session/service.ts";
 
 type ScheduledRunScope = {
   sessionId: string;

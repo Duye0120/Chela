@@ -4,13 +4,13 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { isPathAllowed, isPathForbiddenRead } from "../security.js";
+import { isPathAllowed, isPathForbiddenRead } from "../security.ts";
 import {
   collectWorkspaceFileEntries,
   resolveWorkspaceBasePath,
   toRelativeWorkspacePath,
-} from "./fs-utils.js";
-import { resolveRipgrepCommand } from "./ripgrep.js";
+} from "./fs-utils.ts";
+import { resolveRipgrepCommand } from "./ripgrep.ts";
 
 const execFileAsync = promisify(execFile);
 

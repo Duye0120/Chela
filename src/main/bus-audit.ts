@@ -5,8 +5,8 @@
 import { app } from "electron";
 import { appendFileSync, existsSync, mkdirSync, statSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { bus } from "./event-bus.js";
-import { appLogger } from "./logger.js";
+import { bus } from "./event-bus.ts";
+import { appLogger } from "./logger.ts";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB 后轮转
 let auditPath = "";

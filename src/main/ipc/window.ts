@@ -1,12 +1,12 @@
 import { ipcMain } from "electron";
-import { IPC_CHANNELS } from "../../shared/ipc.js";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
 import {
   computeWindowBounds,
   computeWindowFrameState,
   requireMainWindow,
   setMainWindowBounds,
-} from "../window.js";
-import { handleIpc } from "./handle.js";
+} from "../window.ts";
+import { handleIpc } from "./handle.ts";
 
 export function registerWindowIpc(): void {
   handleIpc(IPC_CHANNELS.windowGetState, async () => {

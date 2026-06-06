@@ -14,7 +14,6 @@
 // ---------------------------------------------------------------------------
 
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
-import { appLogger } from "./logger.js";
 
 // ---------------------------------------------------------------------------
 // 无副作用工具白名单
@@ -50,6 +49,24 @@ type ToolExecutor = (
   signal: AbortSignal,
 ) => Promise<AgentToolResult<any>>;
 
+type ParallelToolsDebugLogger = (input: {
+  scope: string;
+  message: string;
+  data?: unknown;
+}) => void;
+
+let debugLogger: ParallelToolsDebugLogger | null = null;
+
+export function setParallelToolsDebugLogger(
+  logger: ParallelToolsDebugLogger | null,
+): void {
+  debugLogger = logger;
+}
+
+function logDebug(input: Parameters<ParallelToolsDebugLogger>[0]): void {
+  debugLogger?.(input);
+}
+
 // ---------------------------------------------------------------------------
 // ParallelExecutionManager
 // ---------------------------------------------------------------------------
@@ -57,20 +74,32 @@ type ToolExecutor = (
 class ParallelExecutionManager {
   private batches = new Map<string, BatchEntry[]>();
   private cache = new Map<string, Promise<AgentToolResult<any> | null>>();
-  private executors = new Map<string, ToolExecutor>();
+  private executorsByOwner = new Map<string, Map<string, ToolExecutor>>();
+  private runOwners = new Map<string, string>();
   private activeSignals = new Map<string, AbortSignal>();
 
   /**
-   * 注册工具执行器（在 agent 初始化时调用）
+   * 注册工具执行器（在 agent 初始化或工具刷新时调用）
    */
-  registerExecutor(toolName: string, executor: ToolExecutor): void {
-    this.executors.set(toolName, executor);
+  registerExecutors(
+    ownerKey: string,
+    entries: { toolName: string; executor: ToolExecutor }[],
+  ): void {
+    this.executorsByOwner.set(
+      ownerKey,
+      new Map(entries.map((entry) => [entry.toolName, entry.executor])),
+    );
   }
 
   /**
    * 注册一批待执行的工具调用（从 assistant 消息的 toolCall 块提取）
    */
-  registerBatch(runId: string, toolCalls: BatchEntry[], signal: AbortSignal): void {
+  registerBatch(
+    runId: string,
+    ownerKey: string,
+    toolCalls: BatchEntry[],
+    signal: AbortSignal,
+  ): void {
     // 只在有多个无副作用工具时才注册批次
     const parallelCandidates = toolCalls.filter((tc) =>
       SIDE_EFFECT_FREE_TOOLS.has(tc.toolName),
@@ -78,6 +107,7 @@ class ParallelExecutionManager {
     if (parallelCandidates.length <= 1) return;
 
     this.batches.set(runId, parallelCandidates);
+    this.runOwners.set(runId, ownerKey);
     this.activeSignals.set(runId, signal);
   }
 
@@ -87,18 +117,22 @@ class ParallelExecutionManager {
   startPreExecution(runId: string, currentToolCallId: string): void {
     const batch = this.batches.get(runId);
     const signal = this.activeSignals.get(runId);
+    const ownerKey = this.runOwners.get(runId);
     if (!batch || !signal || signal.aborted) return;
+
+    const executors = ownerKey ? this.executorsByOwner.get(ownerKey) : undefined;
+    if (!executors) return;
 
     for (const entry of batch) {
       if (entry.toolCallId === currentToolCallId) continue;
       if (this.cache.has(entry.toolCallId)) continue;
 
-      const executor = this.executors.get(entry.toolName);
+      const executor = executors.get(entry.toolName);
       if (!executor) continue;
 
       // 启动预执行（只做 I/O，不做状态转换）
       const promise = executor(entry.toolCallId, entry.args, signal).catch((err) => {
-        appLogger.debug({
+        logDebug({
           scope: "parallel-tools",
           message: `预执行失败 ${entry.toolName}:${entry.toolCallId}`,
           data: { error: err instanceof Error ? err.message : String(err) },
@@ -110,7 +144,7 @@ class ParallelExecutionManager {
       this.cache.set(entry.toolCallId, promise);
     }
 
-    appLogger.debug({
+    logDebug({
       scope: "parallel-tools",
       message: `启动并行预执行: ${batch.length - 1} 个工具`,
       data: { runId, excludeToolCallId: currentToolCallId },
@@ -145,7 +179,17 @@ class ParallelExecutionManager {
       }
     }
     this.batches.delete(runId);
+    this.runOwners.delete(runId);
     this.activeSignals.delete(runId);
+  }
+
+  clearOwner(ownerKey: string): void {
+    this.executorsByOwner.delete(ownerKey);
+    for (const [runId, runOwnerKey] of this.runOwners) {
+      if (runOwnerKey === ownerKey) {
+        this.clearRun(runId);
+      }
+    }
   }
 
   /**

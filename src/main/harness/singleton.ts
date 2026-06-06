@@ -1,4 +1,4 @@
-import { HarnessRuntime } from "./runtime.js";
+import { HarnessRuntime } from "./runtime.ts";
 
 export const harnessRuntime = new HarnessRuntime();
 

@@ -5,16 +5,16 @@ import type {
   ModelRoutingSettings,
   Settings,
   ThinkingLevel,
-} from "../shared/contracts.js";
+} from "../shared/contracts.ts";
 import {
   DEFAULT_MEMORY_EMBEDDING_MODEL_ID,
   DEFAULT_MEMORY_SEARCH_CANDIDATE_LIMIT,
-} from "../shared/memory.js";
-import { DEFAULT_MODEL_ENTRY_ID } from "../shared/provider-directory.js";
-import { normalizeTimeZoneSetting, SYSTEM_TIME_ZONE } from "../shared/timezone.js";
-import { appLogger } from "./logger.js";
-import { applyGlobalNetworkSettings } from "./network/proxy.js";
-import { findExecutableOnPath } from "./shell.js";
+} from "../shared/memory.ts";
+import { DEFAULT_MODEL_ENTRY_ID } from "../shared/provider-directory.ts";
+import { normalizeTimeZoneSetting, SYSTEM_TIME_ZONE } from "../shared/timezone.ts";
+import { appLogger } from "./logger.ts";
+import { applyGlobalNetworkSettings } from "./network/proxy.ts";
+import { findExecutableOnPath } from "./shell.ts";
 
 const SETTINGS_FILE = "settings.json";
 const BUILTIN_TERMINAL_SHELLS = new Set([

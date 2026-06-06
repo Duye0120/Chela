@@ -1,5 +1,5 @@
-import type { RuntimeDiagnosticsReport } from "../../shared/contracts.js";
-import type { RuntimeServiceStatusReport } from "../runtime-services/types.js";
+import type { RuntimeDiagnosticsReport } from "../../shared/contracts.ts";
+import type { RuntimeServiceStatusReport } from "../runtime-services/types.ts";
 
 export function mapRuntimeDiagnosticsReport(
   report: RuntimeServiceStatusReport,

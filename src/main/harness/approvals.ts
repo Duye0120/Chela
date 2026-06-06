@@ -1,14 +1,14 @@
-import type { ConfirmationResponse } from "../../shared/agent-events.js";
+import type { ConfirmationResponse } from "../../shared/agent-events.ts";
 import type {
   PendingApprovalGroup,
   PendingApprovalNotice,
   InterruptedApprovalGroup,
   InterruptedApprovalNotice,
-} from "../../shared/contracts.js";
-import { buildInterruptedApprovalRecoveryPrompt } from "../../shared/interrupted-approval-recovery.js";
-import { harnessRuntime } from "./singleton.js";
-import { appendRunRecoveryRequestedEvent } from "../session/service.js";
-import type { InterruptedApprovalRecord } from "./types.js";
+} from "../../shared/contracts.ts";
+import { buildInterruptedApprovalRecoveryPrompt } from "../../shared/interrupted-approval-recovery.ts";
+import { harnessRuntime } from "./singleton.ts";
+import { appendRunRecoveryRequestedEvent } from "../session/service.ts";
+import type { InterruptedApprovalRecord } from "./types.ts";
 
 function toInterruptedApprovalPromptInput(
   record: InterruptedApprovalRecord,

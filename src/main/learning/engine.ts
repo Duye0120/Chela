@@ -6,10 +6,10 @@
 // 学习结果在下次 prompt 注入时自动携带，改变 Agent 行为。
 // ---------------------------------------------------------------------------
 
-import { BUS_EVENTS, bus } from "../event-bus.js";
-import { getMemdirStore } from "../memory/service.js";
-import { appLogger } from "../logger.js";
-import { scheduler } from "../scheduler.js";
+import { BUS_EVENTS, bus } from "../event-bus.ts";
+import { getMemdirStore } from "../memory/service.ts";
+import { appLogger } from "../logger.ts";
+import { scheduler } from "../scheduler.ts";
 
 // ---------------------------------------------------------------------------
 // Types

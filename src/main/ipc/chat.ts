@@ -1,19 +1,19 @@
-import { IPC_CHANNELS } from "../../shared/ipc.js";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
 import type {
   EnqueueQueuedMessageInput,
   RemoveQueuedMessageInput,
   TriggerQueuedMessageInput,
   TrimSessionMessagesInput,
-} from "../../shared/contracts.js";
+} from "../../shared/contracts.ts";
 import {
   cancelChatRun,
   enqueueQueuedMessage,
   removeQueuedMessage,
   sendChatMessage,
   triggerQueuedMessage,
-} from "../chat/service.js";
-import { trimSessionMessages } from "../session/facade.js";
-import { handleIpc } from "./handle.js";
+} from "../chat/service.ts";
+import { trimSessionMessages } from "../session/facade.ts";
+import { handleIpc } from "./handle.ts";
 
 export function registerChatIpc(): void {
   handleIpc(IPC_CHANNELS.chatSend, async (_event, input) => sendChatMessage(input));

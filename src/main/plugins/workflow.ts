@@ -1,4 +1,4 @@
-import type { ChelaWorkflowDefinition } from "../../shared/plugins.js";
+import type { ChelaWorkflowDefinition } from "../../shared/plugins.ts";
 
 export type WorkflowTool = (input: Record<string, unknown>) => Promise<unknown> | unknown;
 

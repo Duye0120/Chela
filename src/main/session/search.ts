@@ -4,11 +4,11 @@ import {
   readdirSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { SessionSearchResult, SessionTranscriptEvent } from "../../shared/contracts.js";
-import { appLogger } from "../logger.js";
-import { atomicWrite, readJsonFile } from "./io.js";
-import { readMeta, type PersistedSessionMeta } from "./meta.js";
-import { getDataDir, getSessionDir, getSessionsDir } from "./paths.js";
+import type { SessionSearchResult, SessionTranscriptEvent } from "../../shared/contracts.ts";
+import { appLogger } from "../logger.ts";
+import { atomicWrite, readJsonFile } from "./io.ts";
+import { readMeta, type PersistedSessionMeta } from "./meta.ts";
+import { getDataDir, getSessionDir, getSessionsDir } from "./paths.ts";
 
 type SessionSearchDocument = {
   sessionId: string;

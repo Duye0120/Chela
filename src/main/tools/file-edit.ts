@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "@earendil-works/pi-ai";
-import { isPathAllowed, isWritePathForbidden } from "../security.js";
+import { isPathAllowed, isWritePathForbidden } from "../security.ts";
 import {
   applyEditsToNormalizedContent,
   buildStructuredPatch,
@@ -11,9 +11,9 @@ import {
   restoreLineEndings,
   type StructuredPatchHunk,
   stripBom,
-} from "./edit-diff.js";
-import { withFileMutationQueue } from "./file-mutation-queue.js";
-import { isTextFile, resolveWorkspacePath } from "./fs-utils.js";
+} from "./edit-diff.ts";
+import { withFileMutationQueue } from "./file-mutation-queue.ts";
+import { isTextFile, resolveWorkspacePath } from "./fs-utils.ts";
 
 const editEntrySchema = Type.Object({
   oldText: Type.String({ description: "要替换的原始文本（必须在原文中唯一可定位）" }),

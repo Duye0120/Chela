@@ -1,5 +1,5 @@
-import type { MemorySaveStatus } from "../memory/dedupe.js";
-import type { MemoryVectorPersistResult } from "./memory-vector.js";
+import type { MemorySaveStatus } from "../memory/dedupe.ts";
+import type { MemoryVectorPersistResult } from "./memory-vector.ts";
 
 export type MemorySaveResultView = {
   summary: string;

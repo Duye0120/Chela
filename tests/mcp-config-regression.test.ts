@@ -95,4 +95,41 @@ await withTempDir((dir) => {
   assert.equal(config.mcpServers.fs, undefined);
 });
 
+await withTempDir((dir) => {
+  const configPath = path.join(dir, "mcp.json");
+  fs.writeFileSync(configPath, `${JSON.stringify({
+    mcpServers: {
+      fs: {
+        command: "node",
+        args: ["server.js"],
+      },
+    },
+  })}\n`, "utf8");
+
+  const firstConfig = loadMcpConfig(dir);
+  const cachedConfig = loadMcpConfig(dir);
+  assert.equal(firstConfig.mcpServers.fs.command, "node");
+  assert.equal(cachedConfig, firstConfig);
+
+  saveMcpServerConfig(dir, {
+    originalName: "fs",
+    name: "fs",
+    type: "stdio",
+    command: "pnpm",
+    args: ["mcp"],
+    env: null,
+    envPassthrough: [],
+    cwd: null,
+    url: null,
+    bearerTokenEnvVar: null,
+    headers: {},
+    headersFromEnv: {},
+    disabled: false,
+  });
+
+  const refreshedConfig = loadMcpConfig(dir);
+  assert.equal(refreshedConfig.mcpServers.fs.command, "pnpm");
+  assert.notEqual(refreshedConfig, firstConfig);
+});
+
 console.log("mcp config regression tests passed");

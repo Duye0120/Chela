@@ -5,25 +5,25 @@ import type {
   AgentEvent,
   AgentEventScope,
   ConfirmationResponse,
-} from "../shared/agent-events.js";
-import type { HarnessApprovalResolution } from "./harness/types.js";
+} from "../shared/agent-events.ts";
+import type { HarnessApprovalResolution } from "./harness/types.ts";
 import type {
   AgentStep,
   ChatMessage,
   RunChangeSummary,
   RuntimeSkillUsage,
-} from "../shared/contracts.js";
-import { extractRuntimeSkillUsages } from "../shared/skill-usage.js";
-import { IPC_CHANNELS } from "../shared/ipc.js";
-import { getSettings } from "./settings.js";
-import { appLogger } from "./logger.js";
+} from "../shared/contracts.ts";
+import { extractRuntimeSkillUsages } from "../shared/skill-usage.ts";
+import { IPC_CHANNELS } from "../shared/ipc.ts";
+import { getSettings } from "./settings.ts";
+import { appLogger } from "./logger.ts";
 import {
   appendConfirmationRequestedEvent,
   appendConfirmationResolvedEvent,
   appendRunStateChangedEvent,
   appendToolFinishedEvent,
   appendToolStartedEvent,
-} from "./session/service.js";
+} from "./session/service.ts";
 
 type TerminalEventFallback =
   | { type: "agent_end"; runChangeSummary?: RunChangeSummary | null }
@@ -132,7 +132,7 @@ export class ElectronAdapter {
   private readonly scope: AgentEventScope;
   private readonly buffer: RunBuffer;
   private pendingTerminalEvent: AgentEvent | null = null;
-  private readonly flushedTerminalRunIds = new Set<string>();
+  private terminalEventFlushed = false;
 
   constructor(window: BrowserWindow, scope: AgentEventScope) {
     this.window = window;
@@ -515,7 +515,7 @@ export class ElectronAdapter {
       return;
     }
 
-    if (this.flushedTerminalRunIds.has(this.scope.runId)) {
+    if (this.terminalEventFlushed) {
       return;
     }
 
@@ -529,7 +529,7 @@ export class ElectronAdapter {
   }
 
   queueTerminalError(message: string): void {
-    if (this.flushedTerminalRunIds.has(this.scope.runId)) {
+    if (this.terminalEventFlushed) {
       return;
     }
 
@@ -553,7 +553,7 @@ export class ElectronAdapter {
   }
 
   flushTerminalEvent(fallback?: TerminalEventFallback): void {
-    if (this.flushedTerminalRunIds.has(this.scope.runId)) {
+    if (this.terminalEventFlushed) {
       return;
     }
 
@@ -567,7 +567,7 @@ export class ElectronAdapter {
 
     if (this.pendingTerminalEvent && this.send(this.pendingTerminalEvent)) {
       this.pendingTerminalEvent = null;
-      this.flushedTerminalRunIds.add(this.scope.runId);
+      this.terminalEventFlushed = true;
     }
   }
 

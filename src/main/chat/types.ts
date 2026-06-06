@@ -1,13 +1,13 @@
 import type {
   GitDiffOverview,
   SendMessageInput,
-} from "../../shared/contracts.js";
-import type { AgentHandle } from "../agent.js";
-import type { ElectronAdapter } from "../adapter.js";
-import type { HarnessRunScope } from "../harness/types.js";
-import { getSettings } from "../settings.js";
-import type { ResolvedRuntimeModel } from "../model-resolution.js";
-import { loadSession } from "../session/facade.js";
+} from "../../shared/contracts.ts";
+import type { AgentHandle } from "../agent.ts";
+import type { ElectronAdapter } from "../adapter.ts";
+import type { HarnessRunScope } from "../harness/types.ts";
+import { getSettings } from "../settings.ts";
+import type { ResolvedRuntimeModel } from "../model-resolution.ts";
+import { loadSession } from "../session/facade.ts";
 
 export type ChatRuntimeSettings = ReturnType<typeof getSettings>;
 export type ExistingChatSession = NonNullable<ReturnType<typeof loadSession>>;

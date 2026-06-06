@@ -94,3 +94,24 @@
   - `pnpm run dev` 已通过 main/preload 构建并启动 renderer dev server；日志显示 `electron main process built successfully`、`electron preload scripts built successfully`、`starting electron app...`
 - 未做：
   - 未运行 `pnpm build` / `pnpm check`，原因是本轮是本地 Electron 安装产物修复，已用 Electron resolve、Electron CLI 和 dev 启动烟测验证。
+
+## Git Commit Empty Selection Error Handling
+
+- 时间：2026-06-06 14:47 +0800
+- 改了什么：
+  - `commitGitChanges` 在提交前检查选中文件是否已经形成 staged diff；没有可提交内容时返回 `GIT_COMMIT_EMPTY` 业务错误。
+  - `commitGitChanges` 识别 Git 输出中的 `nothing to commit` / `no changes added to commit`，转换成明确的中文提示。
+  - IPC error normalization 保留 `Error.code`，避免 Git 用户状态错误被统一包装成 `INTERNAL_ERROR`。
+  - `tests/git-regression.test.ts` 增加选中文件正常提交和选中干净文件返回 `GIT_COMMIT_EMPTY` 的回归覆盖。
+- 为什么改：Diff 面板提交在没有 staged 内容或选中文件没有可提交内容时，会把 `git commit` 的整段 `git status` 输出包装成内部错误，用户看到像 Git/应用损坏。
+- 涉及文件：
+  - `src/main/git.ts`
+  - `src/main/ipc/handle.ts`
+  - `tests/git-regression.test.ts`
+  - `docs/changes/2026-06-06/changes.md`
+- 验证结果：
+  - `pnpm exec tsx tests/git-regression.test.ts`
+  - `pnpm exec tsx tests/ipc-contract-regression.test.ts`
+  - `pnpm exec tsc --noEmit -p tsconfig.json --allowImportingTsExtensions`
+- 未做：
+  - 未运行 `pnpm build` / `pnpm check`，原因是本轮范围集中在 Git commit 服务和 IPC 错误归类，已用 Git/IPC 回归测试和 main TypeScript 验证。

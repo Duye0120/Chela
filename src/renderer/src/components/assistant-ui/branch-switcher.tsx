@@ -23,6 +23,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@renderer/components/ui/popover";
+import { getErrorMessage } from "@shared/text-utils";
 import { cn } from "@renderer/lib/utils";
 
 type BranchSwitcherProps = {
@@ -53,14 +54,6 @@ function formatBranchLabel(branchSummary: GitBranchSummary | null) {
   }
 
   return branchSummary.branchName;
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
-  }
-
-  return "分支操作失败，请稍后重试。";
 }
 
 function sortBranches(branches: GitBranchEntry[]) {
@@ -156,7 +149,7 @@ export function BranchSwitcher({
       setBranches(currentBranches);
       setHasLoadedBranches(true);
     } catch (nextError) {
-      setError(getErrorMessage(nextError));
+      setError(getErrorMessage(nextError, "分支操作失败，请稍后重试。"));
     } finally {
       setLoading(false);
     }
@@ -265,7 +258,7 @@ export function BranchSwitcher({
         await onBranchChanged?.();
         handleOpenChange(false);
       } catch (nextError) {
-        setError(getErrorMessage(nextError));
+        setError(getErrorMessage(nextError, "分支操作失败，请稍后重试。"));
       } finally {
         setSubmitting(false);
       }
@@ -296,7 +289,7 @@ export function BranchSwitcher({
       await onBranchChanged?.();
       handleOpenChange(false);
     } catch (nextError) {
-      setError(getErrorMessage(nextError));
+      setError(getErrorMessage(nextError, "分支操作失败，请稍后重试。"));
     } finally {
       setSubmitting(false);
     }

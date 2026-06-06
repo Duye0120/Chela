@@ -15,7 +15,7 @@
 import { app } from "electron";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { appLogger } from "../logger.js";
+import { appLogger } from "../logger.ts";
 
 // ---------------------------------------------------------------------------
 // Types

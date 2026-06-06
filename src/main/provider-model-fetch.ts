@@ -1,4 +1,4 @@
-import type { ProviderSource } from "../shared/contracts.js";
+import type { ProviderSource } from "../shared/contracts.ts";
 
 type FetchLike = typeof fetch;
 

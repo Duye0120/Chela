@@ -1,4 +1,4 @@
-import { IPC_CHANNELS } from "../../shared/ipc.js";
+import { IPC_CHANNELS } from "../../shared/ipc.ts";
 import {
   deleteEntry,
   deleteSource,
@@ -13,13 +13,13 @@ import {
   setCredentials,
   testSource,
   fetchSourceModels,
-} from "../providers.js";
-import { handleIpc } from "./handle.js";
+} from "../providers.ts";
+import { handleIpc } from "./handle.ts";
 import {
   validateProviderApiKeyPayload,
   validateProviderSourceDraftPayload,
   validateSourceIdPayload,
-} from "./schema.js";
+} from "./schema.ts";
 
 export function registerProvidersIpc(): void {
   handleIpc(IPC_CHANNELS.providersListSources, async () => listSources());

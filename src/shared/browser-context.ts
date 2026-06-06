@@ -1,4 +1,4 @@
-import type { BrowserContextItem } from "./contracts.js";
+import type { BrowserContextItem } from "./contracts.ts";
 
 export function isBrowserContextItem(value: unknown): value is BrowserContextItem {
   if (!value || typeof value !== "object") {

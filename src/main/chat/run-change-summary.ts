@@ -5,7 +5,7 @@ import type {
   GitDiffOverview,
   RunChangeSummary,
   RunChangeSummaryFile,
-} from "../../shared/contracts.js";
+} from "../../shared/contracts.ts";
 
 const MUTATING_FILE_TOOLS = new Set(["file_edit", "edit_file", "file_write"]);
 

@@ -1,10 +1,12 @@
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 
 const require = createRequire(import.meta.url);
+const execFileAsync = promisify(execFile);
 
 export type DoctorStatus = "pass" | "warn" | "fail";
 
@@ -178,9 +180,7 @@ export function evaluateNativeModuleLoad(input: {
 export async function runDoctor(projectRoot = process.cwd()): Promise<DoctorSummary> {
   const checks: DoctorCheckResult[] = [
     evaluateNodeVersion({ projectRoot }),
-    checkCommand("pnpm", "pnpm", ["--version"]),
     checkPackageExecutable("tsx", "tsx"),
-    checkRipgrep(),
     checkNativeModule("better-sqlite3", "better-sqlite3"),
     checkNativeModule("node-pty", "node-pty"),
     checkResolvableDependency("electron", "Electron"),
@@ -190,12 +190,19 @@ export async function runDoctor(projectRoot = process.cwd()): Promise<DoctorSumm
     checkResolvableDependency("@modelcontextprotocol/sdk", "MCP SDK"),
   ];
 
-  return summarizeDoctorChecks(checks);
+  const asyncChecks = await Promise.all([
+    checkCommand("pnpm", "pnpm", ["--version"]),
+    checkRipgrep(),
+  ]);
+
+  return summarizeDoctorChecks([...checks, ...asyncChecks]);
 }
 
-function checkCommand(id: string, label: string, args: string[]): DoctorCheckResult {
-  const locatedPath = lookupCommand(id);
-  const commandResult = runCommand(id, args);
+async function checkCommand(id: string, label: string, args: string[]): Promise<DoctorCheckResult> {
+  const [locatedPath, commandResult] = await Promise.all([
+    lookupCommand(id),
+    runCommand(id, args),
+  ]);
   if (commandResult.exitCode === 0) {
     return {
       id,
@@ -253,11 +260,11 @@ function checkPackageExecutable(packageName: string, label: string): DoctorCheck
   };
 }
 
-function checkRipgrep(): DoctorCheckResult {
+async function checkRipgrep(): Promise<DoctorCheckResult> {
   try {
     const { rgPath } = require("@vscode/ripgrep") as { rgPath?: string };
     if (rgPath && fs.existsSync(rgPath)) {
-      const version = runCommand(rgPath, ["--version"]);
+      const version = await runCommand(rgPath, ["--version"]);
       return {
         id: "@vscode/ripgrep",
         label: "@vscode/ripgrep",
@@ -339,28 +346,42 @@ function checkResolvableDependency(packageName: string, label: string): DoctorCh
   };
 }
 
-function runCommand(command: string, args: string[]): CommandResult {
-  const result = spawnSync(command, args, {
-    encoding: "utf8",
-    shell: process.platform === "win32",
-    windowsHide: true,
-  });
+async function runCommand(command: string, args: string[]): Promise<CommandResult> {
+  try {
+    const result = await execFileAsync(command, args, {
+      encoding: "utf8",
+      shell: process.platform === "win32",
+      windowsHide: true,
+    });
 
-  return {
-    exitCode: result.status,
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
-    errorMessage: result.error?.message ?? null,
-  };
+    return {
+      exitCode: 0,
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
+      errorMessage: null,
+    };
+  } catch (error) {
+    const failure = error as NodeJS.ErrnoException & {
+      code?: unknown;
+      stdout?: unknown;
+      stderr?: unknown;
+    };
+
+    return {
+      exitCode: typeof failure.code === "number" ? failure.code : null,
+      stdout: typeof failure.stdout === "string" ? failure.stdout : "",
+      stderr: typeof failure.stderr === "string" ? failure.stderr : "",
+      errorMessage: failure.message ?? null,
+    };
+  }
 }
 
-function lookupCommand(command: string): string | null {
-  const result =
-    process.platform === "win32"
-      ? spawnSync("where.exe", [command], { encoding: "utf8", windowsHide: true })
-      : spawnSync("command", ["-v", command], { encoding: "utf8", shell: true });
+async function lookupCommand(command: string): Promise<string | null> {
+  const result = process.platform === "win32"
+    ? await runCommand("where.exe", [command])
+    : await runCommand("command", ["-v", command]);
 
-  if (result.status !== 0) {
+  if (result.exitCode !== 0) {
     return null;
   }
 

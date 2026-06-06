@@ -1,5 +1,5 @@
 import { globalShortcut, BrowserWindow } from "electron";
-import { appLogger } from "./logger.js";
+import { appLogger } from "./logger.ts";
 
 const SHORTCUT = "Alt+Space";
 

@@ -2,7 +2,7 @@ import type {
   ChatSession,
   ChatSessionSummary,
   EnqueueQueuedMessageInput,
-} from "../../shared/contracts.js";
+} from "../../shared/contracts.ts";
 import {
   archivePersistedSession,
   createPersistedSession,
@@ -22,11 +22,11 @@ import {
   setPersistedSessionPinned,
   trimPersistedSessionMessages,
   unarchivePersistedSession,
-} from "./service.js";
+} from "./service.ts";
 import {
   reindexSessionSearch,
   searchSessions,
-} from "./search.js";
+} from "./search.ts";
 
 export function listSessions(): ChatSessionSummary[] {
   return listPersistedSessions();

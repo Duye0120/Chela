@@ -1,8 +1,8 @@
 import type {
   MemoryMetadata,
   MemorySearchResult,
-} from "../../shared/contracts.js";
-import type { StoredMemoryCandidate } from "./store.js";
+} from "../../shared/contracts.ts";
+import type { StoredMemoryCandidate } from "./store.ts";
 
 type RankedCandidate = {
   id: number;

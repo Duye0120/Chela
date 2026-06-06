@@ -1,7 +1,7 @@
 import { app, shell, type BrowserWindow } from "electron";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { getHarnessAuditLogPath } from "./harness/audit.js";
+import { getHarnessAuditLogPath } from "./harness/audit.ts";
 import {
   isPlainLogObject,
   sanitizeForLog,
@@ -10,8 +10,8 @@ import {
   sanitizeStringForLog,
   serializeLogError,
   type SerializedLogError,
-} from "./log-sanitize.js";
-import type { DiagnosticLogBundle, DiagnosticLogSnapshot } from "../shared/contracts.js";
+} from "./log-sanitize.ts";
+import type { DiagnosticLogBundle, DiagnosticLogSnapshot } from "../shared/contracts.ts";
 
 export type AppLogLevel = "debug" | "info" | "warn" | "error";
 
@@ -132,7 +132,7 @@ export async function openDiagnosticLogFolder(
   }
 }
 
-export { sanitizeLogMessage, sanitizeLogValue } from "./log-sanitize.js";
+export { sanitizeLogMessage, sanitizeLogValue } from "./log-sanitize.ts";
 
 function writeLog(level: AppLogLevel, input: AppLogInput): void {
   const filePath = getAppLogPath();

@@ -7,14 +7,14 @@
 // ---------------------------------------------------------------------------
 
 import { execSync } from "node:child_process";
-import type { PromptSection } from "./prompt-control-plane.js";
-import { appLogger } from "./logger.js";
-import { getSettings } from "./settings.js";
+import type { PromptSection } from "./prompt-control-plane.ts";
+import { appLogger } from "./logger.ts";
+import { getSettings } from "./settings.ts";
 import {
   formatDateTimeInTimeZone,
   getWeekdayLabelInTimeZone,
   resolveConfiguredTimeZone,
-} from "../shared/timezone.js";
+} from "../shared/timezone.ts";
 
 // ---------------------------------------------------------------------------
 // 环境数据收集

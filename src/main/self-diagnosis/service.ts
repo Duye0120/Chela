@@ -9,9 +9,9 @@
 import { app } from "electron";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BUS_EVENTS, bus } from "../event-bus.js";
-import { scheduler, type ScheduleJobCallback } from "../scheduler.js";
-import { appLogger } from "../logger.js";
+import { BUS_EVENTS, bus } from "../event-bus.ts";
+import { scheduler, type ScheduleJobCallback } from "../scheduler.ts";
+import { appLogger } from "../logger.ts";
 
 // ---------------------------------------------------------------------------
 // Types

@@ -1,4 +1,4 @@
-import type { RunKind, RunSource } from "../../shared/contracts.js";
+import type { RunKind, RunSource } from "../../shared/contracts.ts";
 
 export type HarnessRunState =
   | "running"

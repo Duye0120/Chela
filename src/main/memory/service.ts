@@ -9,26 +9,26 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { completeSimple, type TextContent } from "@earendil-works/pi-ai";
-import type { MemoryStats } from "../../shared/contracts.js";
-import { executeBackgroundRun } from "../background-run.js";
-import { appLogger } from "../logger.js";
-import { resolveModelEntry } from "../providers.js";
+import type { MemoryStats } from "../../shared/contracts.ts";
+import { executeBackgroundRun } from "../background-run.ts";
+import { appLogger } from "../logger.ts";
+import { resolveModelEntry } from "../providers.ts";
 import {
   appendMemoryRefreshEvent,
   loadTranscriptEvents,
-} from "../session/service.js";
-import { getSettings } from "../settings.js";
-import { getChelaMemoryService } from "./rag-service.js";
+} from "../session/service.ts";
+import { getSettings } from "../settings.ts";
+import { getChelaMemoryService } from "./rag-service.ts";
 import {
   classifyMemorySaveCandidate,
   type MemorySaveStatus,
-} from "./dedupe.js";
+} from "./dedupe.ts";
 import {
   createMemoryPipeline,
   createMemoryRefreshQueue,
   type MemoryCandidate,
   type MemoryRefreshReport,
-} from "./pipeline.js";
+} from "./pipeline.ts";
 
 // ---------------------------------------------------------------------------
 // Hard limits — aligned with Claude Code memdir philosophy

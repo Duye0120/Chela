@@ -1,7 +1,7 @@
 import type {
   RuntimeSkillUsage,
   SkillUsageTarget,
-} from "./contracts.js";
+} from "./contracts.ts";
 
 type SkillUsageRegistryEntry = {
   skillId: string;

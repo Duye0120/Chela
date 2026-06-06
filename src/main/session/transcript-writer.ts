@@ -6,18 +6,18 @@ import type {
   SelectedFile,
   SendMessageOrigin,
   SessionTranscriptEvent,
-} from "../../shared/contracts.js";
-import { appendLine } from "./io.js";
+} from "../../shared/contracts.ts";
+import { appendLine } from "./io.ts";
 import {
   readMeta,
   updateIndexWithMeta,
   updateMeta,
   writeMeta,
   type PersistedSessionMeta,
-} from "./meta.js";
-import { getTranscriptPath } from "./paths.js";
-import { loadTranscript } from "./transcript.js";
-import { withSessionWriteLock } from "./write-lock.js";
+} from "./meta.ts";
+import { getTranscriptPath } from "./paths.ts";
+import { loadTranscript } from "./transcript.ts";
+import { withSessionWriteLock } from "./write-lock.ts";
 
 function deriveSessionTitle(text: string, attachments: SelectedFile[]) {
   const trimmed = text.trim();

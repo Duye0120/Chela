@@ -5,13 +5,13 @@ import type {
   RuntimeDiagnosticsServiceGroup,
   RuntimeDiagnosticsServiceStatus,
   RuntimeDiagnosticsServiceStatusValue,
-} from "../src/shared/contracts.js";
+} from "../src/shared/contracts.ts";
 import {
   buildRuntimeDiagnosticsSummaryItems,
   getRuntimeDiagnosticsServiceDetail,
   getRuntimeDiagnosticsStatusLabel,
   sortRuntimeDiagnosticsServices,
-} from "../src/renderer/src/lib/runtime-diagnostics-display.js";
+} from "../src/renderer/src/lib/runtime-diagnostics-display.ts";
 
 function service(
   name: string,

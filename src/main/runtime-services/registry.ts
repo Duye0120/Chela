@@ -1,4 +1,4 @@
-import type { RuntimeServiceDefinition } from "./types.js";
+import type { RuntimeServiceDefinition } from "./types.ts";
 
 export class RuntimeServiceRegistryError extends Error {
   constructor(message: string) {

@@ -6,7 +6,8 @@ import {
   FORBIDDEN_FILE_PATTERNS,
   FORBIDDEN_WRITE_DIRS,
   FETCH_POLICY,
-} from "../shared/security.js";
+} from "../shared/security.ts";
+import { escapeRegExp } from "../shared/text-utils.ts";
 
 // ── File System ────────────────────────────────────────────────
 
@@ -37,10 +38,6 @@ function normalizePolicyPath(targetPath: string): string {
   return resolvePathWithSymlinks(targetPath).replace(/\\/g, "/");
 }
 
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function globToRegex(pattern: string): RegExp {
   let source = "";
   for (let index = 0; index < pattern.length; index += 1) {
@@ -64,7 +61,7 @@ function globToRegex(pattern: string): RegExp {
       continue;
     }
 
-    source += escapeRegex(char);
+    source += escapeRegExp(char);
   }
 
   return new RegExp(`(^|/)${source}$`);
@@ -107,12 +104,69 @@ export type ShellCheckResult = {
 };
 
 function splitCommandForPolicy(command: string): string[] {
-  return command
-    .replace(/\0/g, "")
-    .replace(/\r\n|\n\r|\r/g, "\n")
-    .split(/\n|&&|\|\||;|\||&/g)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const normalized = command.replace(/\0/g, "").replace(/\r\n|\n\r|\r/g, "\n");
+  const segments: string[] = [];
+  let current = "";
+  let quote: "'" | "\"" | null = null;
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    const char = normalized[index];
+    const next = normalized[index + 1];
+
+    if (char === "\\" && quote !== "'") {
+      current += char;
+      if (next) {
+        index += 1;
+        current += next;
+      }
+      continue;
+    }
+
+    if ((char === "\"" || char === "'") && quote === null) {
+      quote = char;
+      current += char;
+      continue;
+    }
+
+    if (char === quote) {
+      quote = null;
+      current += char;
+      continue;
+    }
+
+    const isDoubleSeparator =
+      quote === null &&
+      ((char === "&" && next === "&") || (char === "|" && next === "|"));
+    if (isDoubleSeparator) {
+      const segment = current.trim();
+      if (segment) {
+        segments.push(segment);
+      }
+      current = "";
+      index += 1;
+      continue;
+    }
+
+    const isSingleSeparator =
+      quote === null && (char === "\n" || char === ";" || char === "|" || char === "&");
+    if (isSingleSeparator) {
+      const segment = current.trim();
+      if (segment) {
+        segments.push(segment);
+      }
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  const segment = current.trim();
+  if (segment) {
+    segments.push(segment);
+  }
+
+  return segments;
 }
 
 export function checkShellCommand(command: string): ShellCheckResult {

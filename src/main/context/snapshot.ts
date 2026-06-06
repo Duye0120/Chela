@@ -5,17 +5,17 @@ import type {
   SelectedFile,
   SessionMemorySnapshot,
   SessionTranscriptEvent,
-} from "../../shared/contracts.js";
+} from "../../shared/contracts.ts";
 import {
   buildRunRecoveryPrompt,
   classifyRunFailureReason,
   type RunRecoveryTranscriptLine,
-} from "../../shared/run-recovery.js";
-import { executeBackgroundRun } from "../background-run.js";
-import { getGitDiffSnapshot } from "../git.js";
-import { harnessRuntime } from "../harness/singleton.js";
-import { getEntry } from "../providers.js";
-import { resolveModelForRole, resolveRuntimeModel } from "../model-resolution.js";
+} from "../../shared/run-recovery.ts";
+import { executeBackgroundRun } from "../background-run.ts";
+import { getGitDiffSnapshot } from "../git.ts";
+import { harnessRuntime } from "../harness/singleton.ts";
+import { getEntry } from "../providers.ts";
+import { resolveModelForRole, resolveRuntimeModel } from "../model-resolution.ts";
 import {
   appendCompactAppliedEvent,
   getPersistedSnapshot,
@@ -24,8 +24,8 @@ import {
   loadTranscriptEvents,
   updateSessionMeta,
   writePersistedSnapshot,
-} from "../session/service.js";
-import { getSettings } from "../settings.js";
+} from "../session/service.ts";
+import { getSettings } from "../settings.ts";
 
 const PROTECTED_USER_TURNS = 6;
 const PROTECTED_MESSAGE_COUNT = PROTECTED_USER_TURNS * 2;

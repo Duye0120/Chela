@@ -1,6 +1,6 @@
-import { ReadinessTraceRecorder } from "../../harness-readiness/trace-recorder.js";
-import type { RuntimeServiceHealth } from "../../runtime-services/types.js";
-import type { ObservabilitySink } from "../dispatcher.js";
+import { ReadinessTraceRecorder } from "../../harness-readiness/trace-recorder.ts";
+import type { RuntimeServiceHealth } from "../../runtime-services/types.ts";
+import type { ObservabilitySink } from "../dispatcher.ts";
 
 export type ReadinessObservabilitySinkOptions = {
   recorder: ReadinessTraceRecorder;

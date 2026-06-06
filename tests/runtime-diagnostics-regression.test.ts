@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 
-import { mapRuntimeDiagnosticsReport } from "../src/main/runtime-services/diagnostics.js";
-import type { RuntimeServiceStatusReport } from "../src/main/runtime-services/types.js";
+import { mapRuntimeDiagnosticsReport } from "../src/main/runtime-services/diagnostics.ts";
+import type { RuntimeServiceStatusReport } from "../src/main/runtime-services/types.ts";
 
 function main(): void {
   const sourceReport: RuntimeServiceStatusReport = {

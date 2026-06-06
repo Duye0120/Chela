@@ -1,5 +1,5 @@
-import { buildAmbientContextSection } from "../ambient-context.js";
-import { getSemanticMemoryPromptSection } from "../memory/service.js";
+import { buildAmbientContextSection } from "../ambient-context.ts";
+import { getSemanticMemoryPromptSection } from "../memory/service.ts";
 import {
   assemblePromptSections,
   buildPlatformConstitutionSection,
@@ -11,13 +11,13 @@ import {
   buildTurnIntentPatchSection,
   buildWorkspacePolicySection,
   type PromptSection,
-} from "../prompt-control-plane.js";
-import { buildSoulPromptSection } from "../soul.js";
-import { getSettings } from "../settings.js";
+} from "../prompt-control-plane.ts";
+import { buildSoulPromptSection } from "../soul.ts";
+import { getSettings } from "../settings.ts";
 import {
   ensureContextSnapshotCoverage,
   getSessionMemoryPromptSection,
-} from "./snapshot.js";
+} from "./snapshot.ts";
 
 const SYSTEM_PROMPT_RATIO = 0.18;
 const MIN_SYSTEM_PROMPT_BUDGET = 1_200;

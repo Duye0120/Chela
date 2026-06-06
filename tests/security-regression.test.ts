@@ -46,6 +46,48 @@ withTempWorkspace((workspacePath) => {
 }
 
 {
+  const result = checkShellCommand('echo "hello && world"');
+  assert.equal(result.allowed, true);
+  assert.equal(result.needsConfirmation, false);
+}
+
+{
+  const result = checkShellCommand('echo "$(rm -rf /)"');
+  assert.equal(result.allowed, false);
+  assert.equal(result.needsConfirmation, false);
+}
+
+{
+  const result = checkShellCommand("echo $(Remove-Item -Recurse C:\\temp\\chela)");
+  assert.equal(result.allowed, false);
+  assert.equal(result.needsConfirmation, false);
+}
+
+{
+  const result = checkShellCommand("reg delete HKCU\\Software\\Chela /f");
+  assert.equal(result.allowed, false);
+  assert.equal(result.needsConfirmation, false);
+}
+
+{
+  const result = checkShellCommand("format C: /fs:NTFS /q");
+  assert.equal(result.allowed, false);
+  assert.equal(result.needsConfirmation, false);
+}
+
+{
+  const result = checkShellCommand("cipher /w:C:\\temp");
+  assert.equal(result.allowed, false);
+  assert.equal(result.needsConfirmation, false);
+}
+
+{
+  const result = checkShellCommand("bcdedit /set testsigning on");
+  assert.equal(result.allowed, false);
+  assert.equal(result.needsConfirmation, false);
+}
+
+{
   const result = checkShellCommand("rmdir /s /q C:\\temp\\chela");
   assert.equal(result.allowed, false);
   assert.equal(result.needsConfirmation, false);
