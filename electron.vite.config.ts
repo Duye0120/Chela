@@ -35,6 +35,38 @@ export default defineConfig({
   },
   renderer: {
     plugins: [react()],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) {
+              return undefined;
+            }
+
+            if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/react-router-dom/")) {
+              return "vendor-react";
+            }
+            if (id.includes("@assistant-ui")) {
+              return "vendor-assistant-ui";
+            }
+            if (id.includes("@radix-ui")) {
+              return "vendor-radix";
+            }
+            if (id.includes("@tiptap") || id.includes("tiptap-markdown")) {
+              return "vendor-editor";
+            }
+            if (id.includes("react-markdown") || id.includes("remark-gfm")) {
+              return "vendor-markdown";
+            }
+            if (id.includes("@xterm")) {
+              return "vendor-terminal";
+            }
+
+            return "vendor";
+          },
+        },
+      },
+    },
     server: {
       host: "127.0.0.1",
       hmr: {
