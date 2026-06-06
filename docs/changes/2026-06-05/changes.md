@@ -70,3 +70,92 @@
   - `pnpm exec tsc --noEmit -p tsconfig.renderer.json --pretty false`
 - 未做：
   - 未运行 `pnpm build` / `pnpm check`，原因是本轮只改模型设置页 autosave 和 targeted 回归入口，仓库规则要求优先最小验证。
+
+## Optimization Report P0 Cleanup
+
+- 时间：2026-06-05 20:18 +0800
+- 改了什么：
+  - `Thread` 聊天主组件改为 memoized export，降低 App 级状态变化时重建高频聊天树的概率。
+  - 并行工具执行器改为按 agent owner 注册，run 批次记录 owner，销毁 agent 时释放 owner 级执行器、run 批次和 superseded init generation。
+  - `ElectronAdapter` 的终态事件 flush 状态从无限增长 Set 改为单 run 布尔字段。
+  - `parallel-tools` 移除对 Electron logger 链路的静态依赖，改为主进程注入 debug logger，保持 Node-side test import-safe。
+  - `test:regression` 纳入所有顶层 `.test.ts` 文件，并新增脚本断言防止孤儿测试再次出现。
+  - `.gitignore` 覆盖本地输出目录、Playwright MCP 记录、临时文本和根目录截图；将已跟踪临时产物从 Git 索引移除。
+- 为什么改：落实优化审查报告中高收益的渲染性能、长期运行内存增长和仓库卫生问题，同时保持改动边界小。
+- 涉及文件：
+  - `src/renderer/src/components/assistant-ui/thread.tsx`
+  - `src/main/parallel-tools.ts`
+  - `src/main/agent.ts`
+  - `src/main/adapter.ts`
+  - `tests/agent-lifecycle-regression.test.ts`
+  - `tests/parallel-tools-regression.test.ts`
+  - `tests/renderer-performance-regression.test.ts`
+  - `tests/package-scripts-regression.test.ts`
+  - `package.json`
+  - `.gitignore`
+- 验证结果：
+  - `pnpm exec tsx tests/agent-lifecycle-regression.test.ts`
+  - `pnpm exec tsx tests/parallel-tools-regression.test.ts`
+  - `pnpm exec tsx tests/renderer-performance-regression.test.ts`
+  - `pnpm exec tsx tests/package-scripts-regression.test.ts`
+  - `pnpm exec tsx tests/settings-navigation-regression.test.ts && pnpm exec tsx tests/runtime-paths-regression.test.ts && pnpm exec tsx tests/runtime-services-regression.test.ts && pnpm exec tsx tests/observability-dispatcher-regression.test.ts && pnpm exec tsx tests/renderer-zustand-store-regression.test.ts`
+  - `pnpm exec tsx tests/browser-interview-regression.test.ts && pnpm exec tsx tests/harness-readiness-regression.test.ts && pnpm exec tsx tests/harness-readiness-recorder-regression.test.ts && pnpm exec tsx tests/memory-worker-error-regression.test.ts`
+  - `pnpm exec tsc --noEmit -p tsconfig.renderer.json`
+  - `pnpm exec tsc --noEmit -p tsconfig.json --allowImportingTsExtensions`
+- 未做：
+  - 未运行 `pnpm build` / `pnpm check`，原因是仓库规则要求优先最小验证；默认 main `tsc` 当前被既有 `src/main/harness-readiness/report.ts` 的 `.ts` 扩展导入挡住，本轮用 `--allowImportingTsExtensions` 验证 main 改动。
+  - 未改 `providers.ts` 同步 I/O，原因是该项牵涉 provider state API 和持久化策略，适合独立改造和更完整回归。
+
+## Optimization Report Follow-up Cleanup
+
+- 时间：2026-06-05 22:08 +0800
+- 改了什么：
+  - `providers.ts` 改为 provider state 内存缓存、异步 hydration 和异步落盘，`src/main/index.ts` 在注册 IPC 前等待 provider state 初始化。
+  - 新增 `src/main/json-file.ts`、`src/shared/file-extensions.ts`、`src/shared/text-utils.ts`，并复用到 provider、files、git、security、worker 和 fs-utils 路径。
+  - 拆出 `src/main/provider-credentials.ts`、`src/main/worker-runtime.ts` 和 `src/renderer/src/hooks/use-right-panel-resize.ts`，降低 provider、worker 和 App 入口的单文件职责。
+  - 删除 renderer 顶层纯 re-export 组件入口，调用侧改用真实组件路径。
+  - 补强 shell 安全策略的引号分段、嵌套 `$()` 检测和 Windows 高危命令模式。
+  - MCP server 连接/初始化失败改为输出日志，减少工具不可用时的静默失败。
+  - `createUntrackedPatch` 增加未跟踪文件大小保护，避免大文件一次性读入内存。
+  - metrics 日汇总增加缓存模块，MCP 配置读取增加 stat cache，降低重复文件扫描成本。
+  - renderer Vite 配置新增 `manualChunks`，依赖统一到 `framer-motion` 和直接 Radix 包，移除未使用依赖，并将 `electron`、`@types/diff` 放入 devDependencies。
+  - 新增 GitHub Actions Windows CI，覆盖安装、package 脚本守卫、核心 smoke tests、main TS 和 renderer TS。
+- 为什么改：继续收拢优化审查报告中的性能、依赖、测试、CI、安全和模块边界问题，把高风险和高收益项落到可验证的小改动。
+- 涉及文件：
+  - `src/main/providers.ts`
+  - `src/main/index.ts`
+  - `src/main/json-file.ts`
+  - `src/main/provider-credentials.ts`
+  - `src/main/worker-runtime.ts`
+  - `src/main/security.ts`
+  - `src/main/git.ts`
+  - `src/main/metrics.ts`
+  - `src/main/metrics-summary.ts`
+  - `src/mcp/config.ts`
+  - `src/renderer/src/App.tsx`
+  - `src/renderer/src/hooks/use-right-panel-resize.ts`
+  - `src/shared/file-extensions.ts`
+  - `src/shared/text-utils.ts`
+  - `electron.vite.config.ts`
+  - `package.json`
+  - `.github/workflows/ci.yml`
+  - `tests/*-regression.test.ts`
+- 验证结果：
+  - `pnpm exec tsx tests/security-regression.test.ts`
+  - `pnpm exec tsx tests/git-regression.test.ts`
+  - `pnpm exec tsx tests/mcp-config-regression.test.ts`
+  - `pnpm exec tsx tests/metrics-cache-regression.test.ts`
+  - `pnpm exec tsx tests/module-split-regression.test.ts`
+  - `pnpm exec tsx tests/provider-state-cache-regression.test.ts`
+  - `pnpm exec tsx tests/shared-utils-regression.test.ts`
+  - `pnpm exec tsx tests/package-scripts-regression.test.ts`
+  - `pnpm exec tsc --noEmit -p tsconfig.json --allowImportingTsExtensions`
+  - `pnpm exec tsc --noEmit -p tsconfig.renderer.json`
+- 未做：
+  - 未运行 `pnpm build` / `pnpm check`，原因是本轮仍按仓库规则选择和报告整改直接相关的 targeted 验证。
+  - 未迁移到 Vitest，原因是这是测试体系迁移，会引入 runner、隔离模型和脚本约定变化。
+  - 未把 `doctor.ts` 的 `spawnSync` 全量改成异步执行，原因是 doctor 诊断流程需要单独验证 CLI 输出顺序和错误语义。
+  - 未对所有非首屏面板做 `React.lazy`，原因是本轮已先落地 `manualChunks`，组件级 lazy 需要结合首屏行为和 Electron renderer 加载体验分批验证。
+  - 未完成 `worker-service.ts` commit 逻辑全量拆到 `worker-commit.ts`，原因是当前只抽出通用 generation fallback，commit 编排拆分会触及更多业务分支。
+  - 未把 `session/io.ts`、`ui-state.ts`、`plugins/registry.ts` 的同步 JSON helper 全部迁到异步共享 helper，原因是这些路径包含启动态或注册扫描语义，适合逐个按调用链改造。
+  - 未做 agent/chat/tools/context/session 的大规模覆盖率补齐，原因是这是测试覆盖专项，适合按模块拆成后续任务。
