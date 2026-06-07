@@ -28,6 +28,7 @@ import { TerminalDrawer } from "@renderer/components/assistant-ui/terminal-drawe
 import { ThreadRuntimeLayer } from "@renderer/components/assistant-ui/thread-runtime-layer";
 import { TitleBar } from "@renderer/components/assistant-ui/title-bar";
 import {
+  ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@renderer/components/ui/resizable";
@@ -56,6 +57,7 @@ import {
   readStoredNumber,
   resolveSettingsSectionFromPath,
   toSidebarPercentageSize,
+  toSidebarPixelSize,
   type DeepPartialSettings,
 } from "@renderer/lib/app-shell";
 import { useAppBoot } from "@renderer/hooks/use-app-boot";
@@ -334,7 +336,7 @@ export default function App() {
     }
 
     panel.expand();
-    panel.resize(toSidebarPercentageSize(lastExpandedSidebarSizeRef.current));
+    panel.resize(toSidebarPixelSize(lastExpandedSidebarSizeRef.current));
   }, []);
 
   useEffect(() => {
@@ -1046,6 +1048,7 @@ export default function App() {
               />
             </aside>
           </ResizablePanel>
+          <ResizableHandle className="w-1.5 shrink-0 bg-transparent" />
           <ResizablePanel id="shell-main">
             <section className="relative flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
               <div
