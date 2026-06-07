@@ -91,6 +91,15 @@ export function toSidebarPercentageSize(size: number) {
   return `${clampSidebarSize(size)}%`;
 }
 
+export function toSidebarPixelSize(size: number) {
+  if (typeof window === "undefined" || window.innerWidth <= 0) {
+    return `${MIN_SIDEBAR_WIDTH}px`;
+  }
+
+  const percentageWidth = Math.round((clampSidebarSize(size) / 100) * window.innerWidth);
+  return `${Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, percentageWidth))}px`;
+}
+
 export function migrateLegacySidebarWidth(storedWidth: number) {
   if (storedWidth <= 100) {
     return clampSidebarSize(storedWidth);
