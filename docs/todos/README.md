@@ -7,6 +7,15 @@
 
 ---
 
+## 明日待处理
+
+源：[2026-06-07.md](2026-06-07.md)
+
+- [ ] 侧边栏打不开。
+- [ ] Git 仍有问题且很卡，需要调整。
+
+---
+
 ## 🧱 底层基建完善路线图
 
 源：[foundation-hardening-roadmap.md](foundation-hardening-roadmap.md)
