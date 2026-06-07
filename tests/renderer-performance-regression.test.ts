@@ -45,6 +45,27 @@ assert.match(
 assert.match(appSource, /lazy\(\(\) => import\("@renderer\/components\/assistant-ui\/diff-panel"\)/);
 assert.match(appSource, /lazy\(\(\) => import\("@renderer\/components\/browser-preview\/BrowserPreviewPanel"\)/);
 assert.match(appSource, /lazy\(\(\) => import\("@renderer\/components\/assistant-ui\/trace-panel"\)/);
+assert.match(
+  appSource,
+  /import\s*\{[\s\S]*\bResizableHandle\b[\s\S]*\}\s*from "@renderer\/components\/ui\/resizable";/,
+  "Shell sidebar should import the resizable handle so the collapsed sidebar can be reopened by dragging.",
+);
+const shellSidebarIndex = appSource.indexOf('id="shell-sidebar"');
+const shellSidebarHandleIndex = appSource.indexOf("<ResizableHandle", shellSidebarIndex);
+const shellMainIndex = appSource.indexOf('id="shell-main"', shellSidebarIndex);
+assert.ok(shellSidebarIndex >= 0, "App shell should render the sidebar panel.");
+assert.ok(shellSidebarHandleIndex > shellSidebarIndex, "Shell sidebar should render a drag handle after the sidebar panel.");
+assert.ok(shellMainIndex > shellSidebarHandleIndex, "Shell sidebar drag handle should sit before the main panel.");
+assert.match(
+  appSource,
+  /panel\.resize\(toSidebarPixelSize\(lastExpandedSidebarSizeRef\.current\)\)/,
+  "Programmatic sidebar expansion should restore a pixel-clamped width so stale small percentages cannot collapse again.",
+);
+assert.doesNotMatch(
+  appSource,
+  /panel\.resize\(toSidebarPercentageSize\(lastExpandedSidebarSizeRef\.current\)\)/,
+  "Programmatic sidebar expansion should not reuse a stale percentage below the panel minimum width.",
+);
 assert.match(appSource, /<Suspense fallback=\{null\}>/);
 assert.match(appSource, /ThreadRuntimeLayer/);
 assert.match(appSource, /const handleCreateProjectClick = useCallback/);

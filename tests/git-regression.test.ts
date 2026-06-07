@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { commitGitChanges, getDiffForFiles, pushGitChanges } from "../src/main/git.ts";
+import { commitGitChanges, getDiffForFiles, getGitDiffSnapshot, pushGitChanges } from "../src/main/git.ts";
 
 function withTempDir(test: (dir: string) => Promise<void> | void): Promise<void> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chela-git-"));
@@ -70,6 +70,37 @@ await withTempDir(async (dir) => {
   assert.match(diff, /diff --git a\/large-untracked\.txt b\/large-untracked\.txt/);
   assert.match(diff, /File is too large to display/);
   assert.doesNotMatch(diff, /xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/);
+});
+
+await withTempDir(async (dir) => {
+  const repoDir = path.join(dir, "repo");
+  fs.mkdirSync(repoDir, { recursive: true });
+  git(["init"], repoDir);
+  git(["config", "user.name", "Chela Test"], repoDir);
+  git(["config", "user.email", "chela@example.test"], repoDir);
+  fs.writeFileSync(path.join(repoDir, "README.md"), "# Chela\n");
+  git(["add", "README.md"], repoDir);
+  git(["commit", "-m", "test: seed repo"], repoDir);
+
+  for (let index = 0; index < 96; index += 1) {
+    fs.writeFileSync(path.join(repoDir, `untracked-${index}.txt`), `new file ${index}\n`);
+  }
+
+  const overview = await getGitDiffSnapshot(repoDir);
+  const allFiles = overview.sources.all.files;
+  const fullPatchFiles = allFiles.filter((file) => file.patch.includes("@@"));
+  const deferredFiles = allFiles.filter((file) => file.patch.includes("Diff preview deferred"));
+
+  assert.equal(overview.sources.all.totalFiles, 96);
+  assert.equal(allFiles.length, 96);
+  assert.ok(
+    fullPatchFiles.length < allFiles.length,
+    "Git diff snapshots should avoid materializing every patch in large dirty trees.",
+  );
+  assert.ok(
+    deferredFiles.length > 0,
+    "Git diff snapshots should keep file rows while deferring excess patch previews.",
+  );
 });
 
 await withTempDir(async (dir) => {
