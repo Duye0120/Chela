@@ -21,6 +21,7 @@ const execFileAsync = promisify(execFile);
 const EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const GIT_MAX_BUFFER = 10 * 1024 * 1024;
 const MAX_UNTRACKED_PATCH_BYTES = 1024 * 1024;
+const MAX_DIFF_PREVIEW_FILES_PER_SOURCE = 40;
 const DIFF_SOURCES = ["unstaged", "staged", "all"] as const satisfies readonly GitDiffSource[];
 
 type GitCommandResult = {
@@ -437,6 +438,13 @@ function resolvePreviewPath(workspacePath: string, filePath: string, kind: GitDi
   return existsSync(absolutePath) ? absolutePath : undefined;
 }
 
+function createDeferredPatch(filePath: string) {
+  return [
+    `diff --git a/${filePath} b/${filePath}`,
+    "Diff preview deferred for performance. Select the file before generating a commit plan to load the full diff.",
+  ].join("\n");
+}
+
 function createUntrackedPatch(workspacePath: string, filePath: string) {
   const absolutePath = path.resolve(workspacePath, filePath);
 
@@ -547,6 +555,26 @@ async function buildDiffFile(
   };
 }
 
+function buildDeferredDiffFile(
+  workspacePath: string,
+  source: GitDiffSource,
+  entry: GitStatusEntry,
+): GitDiffFile {
+  const status = resolveSourceStatus(entry, source);
+  const patch = createDeferredPatch(entry.path);
+  const kind = resolveFileKind(entry.path, patch);
+
+  return {
+    path: entry.path,
+    status,
+    patch,
+    kind,
+    additions: 0,
+    deletions: 0,
+    previewPath: resolvePreviewPath(workspacePath, entry.path, kind),
+  };
+}
+
 function createSourceSnapshot(files: GitDiffFile[]): GitDiffSourceSnapshot {
   return {
     files,
@@ -570,11 +598,16 @@ async function buildSourceSnapshot(
     return createEmptySourceSnapshot();
   }
 
-  const files = await Promise.all(
-    sourceEntries.map((entry) => buildDiffFile(workspacePath, baseRef, source, entry)),
+  const previewEntries = sourceEntries.slice(0, MAX_DIFF_PREVIEW_FILES_PER_SOURCE);
+  const deferredEntries = sourceEntries.slice(MAX_DIFF_PREVIEW_FILES_PER_SOURCE);
+  const previewFiles = await Promise.all(
+    previewEntries.map((entry) => buildDiffFile(workspacePath, baseRef, source, entry)),
+  );
+  const deferredFiles = deferredEntries.map((entry) =>
+    buildDeferredDiffFile(workspacePath, source, entry),
   );
 
-  return createSourceSnapshot(files);
+  return createSourceSnapshot([...previewFiles, ...deferredFiles]);
 }
 
 export async function getGitDiffSnapshot(workspacePath: string): Promise<GitDiffOverview> {
