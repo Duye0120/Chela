@@ -61,7 +61,9 @@ function readStoredNumber(keys: string[]) {
   }
 
   for (const key of keys) {
-    const value = Number(localStorage.getItem(key));
+    const raw = localStorage.getItem(key);
+    if (raw === null) continue;
+    const value = Number(raw);
     if (Number.isFinite(value)) {
       return value;
     }

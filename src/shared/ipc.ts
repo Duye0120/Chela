@@ -115,6 +115,9 @@ export const IPC_CHANNELS = {
 
   // Terminal (main ↔ renderer)
   terminalCreate: "terminal:create",
+  terminalAttach: "terminal:attach",
+  terminalList: "terminal:list",
+  gitTaskSnapshot: "git:task-snapshot",
   terminalWrite: "terminal:write",
   terminalResize: "terminal:resize",
   terminalDestroy: "terminal:destroy",
@@ -154,4 +157,37 @@ export const IPC_CHANNELS = {
   windowToggleMaximize: "window:toggle-maximize",
   windowClose: "window:close",
   windowStateChanged: "window:state-changed",
+  windowWorkspacePageRequested: "window:workspace-page-requested",
+  windowFocusTask: "window:focus-task",
+  windowFocusSession: "window:focus-session",
+  windowShowCompanion: "window:show-companion",
+
+  clipboardShelfShow: "clipboard-shelf:show",
+  clipboardShelfGetState: "clipboard-shelf:get-state",
+  clipboardShelfSetPaused: "clipboard-shelf:set-paused",
+  clipboardShelfCopy: "clipboard-shelf:copy",
+  clipboardShelfRemove: "clipboard-shelf:remove",
+  clipboardShelfClear: "clipboard-shelf:clear",
+  clipboardShelfChanged: "clipboard-shelf:changed",
+
+  plannerList: "planner:list",
+  plannerRecordExecution: "planner:record-execution",
+  plannerSave: "planner:save",
+  plannerRemove: "planner:remove",
+  plannerShow: "planner:show",
+  plannerDiscuss: "planner:discuss",
+  plannerStartCodex: "planner:start-codex",
+  plannerCancelCodex: "planner:cancel-codex",
+  plannerChanged: "planner:changed",
 } as const;
+
+export const WORKSPACE_PAGES = {
+  terminal: "/terminal",
+  board: "/planner/board",
+  calendar: "/planner/calendar",
+  upcoming: "/planner/upcoming",
+  note: "/planner/notes",
+  shelf: "/shelf",
+} as const;
+
+export type WorkspacePage = keyof typeof WORKSPACE_PAGES;

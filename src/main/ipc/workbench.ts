@@ -1,5 +1,6 @@
 import { IPC_CHANNELS } from "../../shared/ipc.ts";
 import type { GitCommitInput, RightPanelState } from "../../shared/contracts.ts";
+import type { TerminalAgentId } from "../../shared/terminal-agents.ts";
 import {
   createAndSwitchGitBranch,
   getGitBranchSummary,
@@ -14,8 +15,10 @@ import {
 } from "../git.ts";
 import { getSettings } from "../settings.ts";
 import {
+  attachTerminal,
   createTerminal,
   destroyTerminal,
+  listTerminals,
   resizeTerminal,
   writeTerminal,
 } from "../terminal.ts";
@@ -25,13 +28,21 @@ import {
   validateGitBranchNamePayload,
   validateGitCommitPayload,
   validateGitPathsPayload,
+  validateWorkspacePathPayload,
 } from "./schema.ts";
 
 export function registerWorkbenchIpc(): void {
   handleIpc(
     IPC_CHANNELS.terminalCreate,
-    async (_event, options?: { cwd?: string }) => createTerminal(options),
+    async (_event, options?: { cwd?: string; agent?: TerminalAgentId }) => createTerminal({
+      cwd: options?.cwd === undefined ? undefined : validateWorkspacePathPayload(options.cwd),
+      agent: options?.agent,
+    }),
   );
+  handleIpc(IPC_CHANNELS.terminalAttach, async (_event, id: string) =>
+    attachTerminal(id),
+  );
+  handleIpc(IPC_CHANNELS.terminalList, async () => listTerminals());
   handleIpc(
     IPC_CHANNELS.terminalWrite,
     async (_event, id: string, data: string) => writeTerminal(id, data),
@@ -49,6 +60,9 @@ export function registerWorkbenchIpc(): void {
   );
   handleIpc(IPC_CHANNELS.gitStatus, async () =>
     getGitDiffSnapshot(getSettings().workspace),
+  );
+  handleIpc(IPC_CHANNELS.gitTaskSnapshot, async (_event, directory: unknown) =>
+    getGitDiffSnapshot(validateWorkspacePathPayload(directory)),
   );
   handleIpc(IPC_CHANNELS.gitListBranches, async () =>
     listGitBranches(getSettings().workspace),

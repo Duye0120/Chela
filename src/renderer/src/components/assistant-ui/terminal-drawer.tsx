@@ -18,6 +18,7 @@ type Tab = {
   terminalId: string;
   label: string;
   shellLabel: string;
+  exitCode?: number;
 };
 
 function getShellLabel(shell: string | undefined) {
@@ -40,28 +41,44 @@ export function TerminalDrawer({ open, onToggle, settings }: Props) {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [drawerHeight, setDrawerHeight] = useState(200);
   const [isResizing, setIsResizing] = useState(false);
+  const [error, setError] = useState("");
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const creatingRef = useRef(false);
+  const openedRef = useRef(false);
 
   const desktopApi = window.desktopApi;
 
   const createTab = useCallback(async () => {
-    if (!desktopApi) return;
-    const terminalId = await desktopApi.terminal.create();
-    const tab: Tab = {
-      id: crypto.randomUUID(),
-      terminalId,
-      label: `Terminal ${tabs.length + 1}`,
-      shellLabel: getShellLabel(settings?.terminal.shell),
-    };
-    setTabs((prev) => [...prev, tab]);
-    setActiveTabId(tab.id);
+    if (!desktopApi || creatingRef.current) return;
+    creatingRef.current = true;
+    setError("");
+    try {
+      const terminalId = await desktopApi.terminal.create();
+      const tab: Tab = {
+        id: terminalId,
+        terminalId,
+        label: `Terminal ${tabs.length + 1}`,
+        shellLabel: getShellLabel(settings?.terminal.shell),
+      };
+      setTabs((prev) => [...prev, tab]);
+      setActiveTabId(tab.id);
+    } catch (reason) {
+      setError(`打开终端失败：${String(reason)}`);
+    } finally {
+      creatingRef.current = false;
+    }
   }, [desktopApi, settings?.terminal.shell, tabs.length]);
 
   const closeTab = useCallback(
     async (tabId: string) => {
       const tab = tabs.find((t) => t.id === tabId);
-      if (tab && desktopApi) {
+      if (!tab || !desktopApi) return;
+      if (tab.exitCode === undefined && !window.confirm("关闭将终止此终端会话及其中的前台进程。继续关闭？")) return;
+      try {
         await desktopApi.terminal.destroy(tab.terminalId);
+      } catch (reason) {
+        setError(`关闭终端失败：${String(reason)}`);
+        return;
       }
       setTabs((prev) => prev.filter((t) => t.id !== tabId));
       setActiveTabId((prev) => {
@@ -73,16 +90,22 @@ export function TerminalDrawer({ open, onToggle, settings }: Props) {
         }
         return prev;
       });
+      if (tabs.length === 1 && open) onToggle();
     },
-    [tabs, desktopApi],
+    [tabs, desktopApi, open, onToggle],
   );
 
   // Auto-create first tab when opened
   useEffect(() => {
-    if (open && tabs.length === 0) {
+    if (open && !openedRef.current && tabs.length === 0) {
       void createTab();
     }
+    openedRef.current = open;
   }, [open, tabs.length, createTab]);
+
+  useEffect(() => desktopApi?.terminal.onExit((id, exitCode) => {
+    setTabs((previous) => previous.map((tab) => tab.terminalId === id ? { ...tab, exitCode } : tab));
+  }), [desktopApi]);
 
   // Drag to resize
   const handleMouseDown = useCallback(
@@ -119,6 +142,7 @@ export function TerminalDrawer({ open, onToggle, settings }: Props) {
   return (
     <div
       className={`shrink-0 overflow-hidden border-t border-[color:var(--color-control-border)] shadow-[0_-4px_16px_rgba(0,0,0,0.03)] dark:shadow-[0_-4px_16px_rgba(0,0,0,0.2)] ${open ? "pointer-events-auto" : "pointer-events-none"}`}
+      inert={!open}
       style={{
         height: visibleHeight,
         opacity: open ? 1 : 0,
@@ -153,14 +177,13 @@ export function TerminalDrawer({ open, onToggle, settings }: Props) {
                     {tab.label}
                   </span>
                   <span className="text-[10px] font-normal text-[color:var(--color-text-muted)]">
-                    - {tab.shellLabel}
+                    - {tab.exitCode === undefined ? tab.shellLabel : `已退出 (${tab.exitCode})`}
                   </span>
                 </span>
                 <span
                   onClick={(e) => {
                     e.stopPropagation();
                     void closeTab(tab.id);
-                    if (tabs.length <= 1 && open) onToggle();
                   }}
                   className={`rounded p-0.5 text-[color:var(--color-text-muted)] hover:bg-shell-hover hover:text-foreground ${tab.id === activeTabId ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
                 >
@@ -183,7 +206,6 @@ export function TerminalDrawer({ open, onToggle, settings }: Props) {
               type="button"
               onClick={() => {
                 if (activeTabId) void closeTab(activeTabId);
-                if (tabs.length <= 1 && open) onToggle();
               }}
               className="rounded-[var(--radius-shell)] p-1 transition hover:bg-shell-hover hover:text-foreground"
               aria-label="关闭当前终端"
@@ -193,6 +215,7 @@ export function TerminalDrawer({ open, onToggle, settings }: Props) {
           </div>
         </div>
 
+        {error && <p role="alert" className="px-2 py-1 text-xs text-[color:var(--chela-status-error-text)]">{error}</p>}
         {/* Terminal content */}
         <div className="relative flex-1 overflow-hidden">
           {tabs.map((tab) => (

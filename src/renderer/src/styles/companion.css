@@ -1,0 +1,85 @@
+:root,
+body,
+#root {
+  background: transparent;
+  color: var(--color-text-primary);
+}
+
+#root {
+  border-radius: 0;
+}
+
+.companion-shell {
+  position: relative;
+  padding: 8px 14px;
+}
+
+.companion-shell[data-mode="compact"] {
+  padding: 0;
+}
+
+.companion-hotspot {
+  position: absolute;
+  z-index: 1;
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  display: grid;
+  width: 16px;
+  height: 64px;
+  place-items: center;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+
+.companion-hotspot::before {
+  width: 3px;
+  height: 28px;
+  border-radius: var(--radius-control);
+  background: currentColor;
+  opacity: 0;
+  content: "";
+}
+
+.companion-shell[data-align="right"] .companion-hotspot {
+  inset-inline: auto 0;
+}
+
+.companion-shell[data-bubble-above="true"] .companion-hotspot {
+  inset-block: auto 0;
+}
+
+.companion-hotspot:hover::before,
+.companion-hotspot:focus-visible::before {
+  opacity: 0.85;
+}
+
+.companion-face {
+  cursor: pointer;
+  border-radius: var(--radius-control);
+  background: var(--color-control-bg);
+  color: var(--color-text-primary);
+  font-family: var(--app-ui-font-family);
+  font-weight: 650;
+  line-height: 1;
+  user-select: none;
+}
+
+.companion-face:hover {
+  background: var(--color-control-bg-hover);
+}
+
+.companion-face:focus-visible,
+.companion-hotspot:focus-visible {
+  outline: 2px solid var(--color-control-focus-ring);
+  outline-offset: -2px;
+}
+
+.companion-message {
+  background: var(--color-control-bg);
+}
+
+.companion-message[data-role="user"] {
+  margin-inline-start: auto;
+  background: var(--color-selection-bg);
+  color: var(--color-selection-fg);
+}

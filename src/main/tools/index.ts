@@ -16,6 +16,7 @@ import { createGrepSearchTool } from "./grep-search.ts";
 import { createMemorySaveTool, createMemoryListTool } from "./memory.ts";
 import { createShellExecTool } from "./shell-exec.ts";
 import { createTodoReadTool, createTodoWriteTool } from "./todo.ts";
+import { getPlannerTools } from "./planner.ts";
 import { createWebFetchTool } from "./web-fetch.ts";
 import { createWebSearchTool } from "./web-search.ts";
 import { notifyUserTool } from "./notify.ts";
@@ -87,6 +88,7 @@ export function getBuiltinTools(options: BuiltinToolOptions): AgentTool<any, any
     todoRead,
     todoWrite,
     aliasTool(todoWrite, "TodoWrite", "写入待办"),
+    ...getPlannerTools(options.sessionId),
     createMemorySaveTool(options.sessionId),
     createMemoryListTool(),
     notifyUserTool,

@@ -105,8 +105,10 @@ export async function prepareChatRun(context: ChatRunContext): Promise<void> {
     runKind: "chat",
     runSource: "user",
     lane: "foreground",
+    metadata: { toolsDisabled: input.toolsDisabled === true },
   });
   context.runCreated = true;
+  harnessRuntime.assertRunActive(runScope);
 
   if (origin === "user" || origin === "guided") {
     const displayText = input.displayText?.trim() || input.text;
@@ -161,6 +163,7 @@ export async function prepareChatRun(context: ChatRunContext): Promise<void> {
   let handle = getHandle(input.sessionId);
   if (
     !handle ||
+    handle.activeRunId !== null ||
     handle.modelEntryId !== resolvedModel.entry.id ||
     handle.runtimeSignature !== resolvedModel.runtimeSignature ||
     !isHandlePromptRuntimeCurrent(handle, resolvedModel) ||
@@ -178,7 +181,7 @@ export async function prepareChatRun(context: ChatRunContext): Promise<void> {
   }
 
   context.handle = handle;
+  harnessRuntime.assertRunActive(runScope);
   bindHandleToRun(handle, context.adapter, input.runId);
   harnessRuntime.attachHandle(runScope, handle);
-  harnessRuntime.assertRunActive(runScope);
 }

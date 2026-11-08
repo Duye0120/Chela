@@ -30,6 +30,7 @@ import {
   getLegacyFlatSessionPath,
   getLegacyStorePath,
   getSessionDir,
+  getSessionMetaPath,
   getSessionsDir,
   getSnapshotPath,
   getTranscriptPath,
@@ -37,9 +38,12 @@ import {
 import {
   createMetaFromSession,
   normalizeTodoItem,
+  pendingTranscriptProjections,
   readIndex,
   readMeta,
+  reconcileTranscriptProjection,
   removeFromIndex,
+  resolveLastRunFields,
   sortSessionSummaries,
   updateIndexWithMeta,
   updateMeta,
@@ -130,9 +134,10 @@ function readSnapshot(sessionId: string): SessionMemorySnapshot {
   return readJsonFile(getSnapshotPath(sessionId), createEmptySnapshot(sessionId));
 }
 
-function materializeSession(meta: PersistedSessionMeta): ChatSession {
-  const transcript = loadTranscript(meta.id);
-
+function materializeSession(
+  meta: PersistedSessionMeta,
+  transcript = loadTranscript(meta.id),
+): ChatSession {
   return {
     id: meta.id,
     title: meta.title,
@@ -148,46 +153,6 @@ function materializeSession(meta: PersistedSessionMeta): ChatSession {
       Array.isArray(meta.queuedMessages) && meta.queuedMessages.length > 0
         ? [...meta.queuedMessages]
         : undefined,
-  };
-}
-
-function resolveLastRunFields(
-  events: SessionTranscriptEvent[],
-): Pick<PersistedSessionMeta, "lastModelEntryId" | "lastRunId" | "lastRunState"> {
-  let lastModelEntryId: string | null = null;
-  let lastRunId: string | null = null;
-  let lastRunState: PersistedSessionMeta["lastRunState"] = undefined;
-
-  for (const event of events) {
-    switch (event.type) {
-      case "run_started":
-        lastModelEntryId = event.modelEntryId;
-        lastRunId = event.runId;
-        lastRunState = "running";
-        break;
-      case "run_state_changed":
-        lastRunId = event.runId;
-        lastRunState =
-          event.state === "awaiting_confirmation" ? "awaiting_confirmation" : "running";
-        break;
-      case "run_finished":
-        lastRunId = event.runId;
-        lastRunState =
-          event.finalState === "completed"
-            ? "completed"
-            : event.finalState === "aborted"
-              ? "cancelled"
-              : "error";
-        break;
-      default:
-        break;
-    }
-  }
-
-  return {
-    lastModelEntryId,
-    lastRunId,
-    lastRunState,
   };
 }
 
@@ -342,6 +307,7 @@ function migrateFlatSessionFiles(): void {
 }
 
 let storageReady = false;
+let checkedColdSessionIndex = false;
 
 export function ensureSessionStorageReady(): void {
   if (storageReady) {
@@ -357,23 +323,46 @@ export function ensureSessionStorageReady(): void {
   }
 }
 
-export function listPersistedSessions(): ChatSessionSummary[] {
+function readSessionSummaries(): ChatSessionSummary[] {
   ensureSessionStorageReady();
-  return sortSessionSummaries(
-    readIndex().summaries.filter((summary) => !summary.archived),
-  );
+  const summaries = new Map(readIndex().summaries.map((summary) => [summary.id, summary]));
+  if (!checkedColdSessionIndex) {
+    checkedColdSessionIndex = true;
+    for (const summary of summaries.values()) {
+      if (summary.lastRunState === "running" || summary.lastRunState === "awaiting_confirmation") {
+        pendingTranscriptProjections.add(summary.id);
+      }
+    }
+  }
+
+  for (const sessionId of pendingTranscriptProjections) {
+    const meta = readMeta(sessionId);
+    if (!meta) continue;
+    try {
+      const transcript = loadTranscript(sessionId);
+      const summary = reconcileTranscriptProjection(meta, transcript, summaries.get(sessionId));
+      summaries.set(sessionId, summary);
+    } catch (error) {
+      console.warn("无法读取会话记录以恢复会话摘要", { sessionId, error });
+    }
+  }
+  return [...summaries.values()];
+}
+
+export function listPersistedSessions(): ChatSessionSummary[] {
+  return sortSessionSummaries(readSessionSummaries().filter((summary) => !summary.archived));
 }
 
 export function listPersistedArchivedSessions(): ChatSessionSummary[] {
-  ensureSessionStorageReady();
-  return sortSessionSummaries(
-    readIndex().summaries.filter((summary) => summary.archived),
-  );
+  return sortSessionSummaries(readSessionSummaries().filter((summary) => summary.archived));
 }
 
 export function loadPersistedSession(sessionId: string): ChatSession | null {
   const meta = readMeta(sessionId);
-  return meta ? materializeSession(meta) : null;
+  if (!meta) return null;
+  const transcript = loadTranscript(sessionId);
+  reconcileTranscriptProjection(meta, transcript, readIndex().summaries.find((summary) => summary.id === sessionId));
+  return materializeSession(meta, transcript);
 }
 
 export function saveSessionProjection(session: ChatSession): void {
@@ -417,6 +406,7 @@ export function deletePersistedSession(sessionId: string): void {
     rmSync(sessionDir, { recursive: true, force: true });
   }
   removeFromIndex(sessionId);
+  pendingTranscriptProjections.delete(sessionId);
   removeSessionSearchDocument(sessionId);
 }
 
@@ -680,16 +670,22 @@ export function appendUserMessageEvent(
   return appendUserMessageTranscriptEvent(input);
 }
 
-export function recoverInterruptedRuns(runs: HarnessRunSnapshot[]): void {
+export function recoverInterruptedRuns(runs: HarnessRunSnapshot[]): HarnessRunSnapshot[] {
   ensureSessionStorageReady();
 
+  const interruptedRuns: HarnessRunSnapshot[] = [];
   for (const run of runs) {
-    const meta = readMeta(run.sessionId);
-    if (!meta) {
-      continue;
+    if (!readMeta(run.sessionId)) {
+      try {
+        readFileSync(getSessionMetaPath(run.sessionId), "utf-8");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+      throw new Error(`无法读取会话元数据：${run.sessionId}`);
     }
 
-    appendRunFinishedTranscriptEvent({
+    const event = appendRunFinishedTranscriptEvent({
       sessionId: run.sessionId,
       runId: run.runId,
       ownerId: run.ownerId,
@@ -697,12 +693,24 @@ export function recoverInterruptedRuns(runs: HarnessRunSnapshot[]): void {
         run.state === "awaiting_confirmation" ? "aborted" : "failed",
       reason: "app_restart_interrupted",
     });
+    if (event.type === "run_finished" && event.reason === "app_restart_interrupted") {
+      interruptedRuns.push(run);
+    }
   }
+  return interruptedRuns;
 }
 
 export function getSessionMeta(sessionId: string): PersistedSessionMeta | null {
   ensureSessionStorageReady();
-  return readMeta(sessionId);
+  const meta = readMeta(sessionId);
+  if (meta && pendingTranscriptProjections.has(sessionId)) {
+    try {
+      reconcileTranscriptProjection(meta, loadTranscript(sessionId));
+    } catch (error) {
+      console.warn("无法读取会话记录以恢复会话元数据", { sessionId, error });
+    }
+  }
+  return meta;
 }
 
 export function listSessionTodos(sessionId: string): SessionTodoItem[] {

@@ -6,9 +6,11 @@ import type {
   ChatSessionSummary,
   QueuedMessage,
   SelectedFile,
+  SessionTranscriptEvent,
 } from "../../shared/contracts.ts";
 import { getBrowserContextItems } from "../../shared/browser-context.ts";
-import { atomicWrite, readJsonFile } from "./io.ts";
+import { appLogger } from "../logger.ts";
+import { atomicWrite } from "./io.ts";
 import { getIndexPath, getSessionMetaPath } from "./paths.ts";
 import {
   countMaterializedMessages,
@@ -210,16 +212,29 @@ export function readMeta(sessionId: string): PersistedSessionMeta | null {
 }
 
 export function readIndex(): SessionIndex {
-  return readJsonFile(getIndexPath(), { summaries: [] } satisfies SessionIndex);
+  let raw: string;
+  try {
+    raw = readFileSync(getIndexPath(), "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { summaries: [] };
+    throw error;
+  }
+  const index = JSON.parse(raw) as Partial<SessionIndex> | null;
+  if (!Array.isArray(index?.summaries)) {
+    throw new Error("会话索引格式无效。");
+  }
+  return { summaries: index.summaries };
 }
 
 export function writeIndex(index: SessionIndex): void {
   atomicWrite(getIndexPath(), JSON.stringify(index, null, 2));
 }
 
-export function updateIndexWithMeta(meta: PersistedSessionMeta): void {
-  const transcript = loadTranscript(meta.id);
-  const summary: ChatSessionSummary = {
+function buildSessionSummary(
+  meta: PersistedSessionMeta,
+  transcript: SessionTranscriptEvent[],
+): ChatSessionSummary {
+  return {
     id: meta.id,
     title: meta.title,
     updatedAt: meta.updatedAt,
@@ -229,9 +244,11 @@ export function updateIndexWithMeta(meta: PersistedSessionMeta): void {
     pinned: meta.pinned,
     lastRunState: meta.lastRunState,
   };
+}
 
+function writeIndexSummary(summary: ChatSessionSummary): void {
   const index = readIndex();
-  const filtered = index.summaries.filter((entry) => entry.id !== meta.id);
+  const filtered = index.summaries.filter((entry) => entry.id !== summary.id);
   filtered.push(summary);
   filtered.sort((left, right) => {
     if (Boolean(left.pinned) !== Boolean(right.pinned)) {
@@ -240,6 +257,100 @@ export function updateIndexWithMeta(meta: PersistedSessionMeta): void {
     return right.updatedAt.localeCompare(left.updatedAt);
   });
   writeIndex({ summaries: filtered });
+}
+
+export function updateIndexWithMeta(meta: PersistedSessionMeta): void {
+  writeIndexSummary(buildSessionSummary(meta, loadTranscript(meta.id)));
+}
+
+type LastRunFields = Pick<
+  PersistedSessionMeta,
+  "lastModelEntryId" | "lastRunId" | "lastRunState"
+>;
+
+export function resolveLastRunFields(
+  events: SessionTranscriptEvent[],
+  initial: LastRunFields = { lastModelEntryId: null, lastRunId: null },
+): LastRunFields {
+  let { lastModelEntryId, lastRunId, lastRunState } = initial;
+  for (const event of events) {
+    switch (event.type) {
+      case "run_started":
+        lastModelEntryId = event.modelEntryId;
+        lastRunId = event.runId;
+        lastRunState = "running";
+        break;
+      case "run_state_changed":
+        lastRunId = event.runId;
+        lastRunState =
+          event.state === "awaiting_confirmation" ? "awaiting_confirmation" : "running";
+        break;
+      case "run_finished":
+        lastRunId = event.runId;
+        lastRunState =
+          event.finalState === "completed"
+            ? "completed"
+            : event.finalState === "aborted"
+              ? "cancelled"
+              : "error";
+        break;
+    }
+  }
+  return { lastModelEntryId, lastRunId, lastRunState };
+}
+
+export const pendingTranscriptProjections = new Set<string>();
+
+export function reconcileTranscriptProjection(
+  meta: PersistedSessionMeta,
+  transcript: SessionTranscriptEvent[],
+  indexed?: ChatSessionSummary,
+): ChatSessionSummary {
+  const { transcriptSeq, lastRunState, lastRunId, lastModelEntryId } = meta;
+  const last = transcript.at(-1);
+  if (last && last.seq > transcriptSeq) {
+    const unprojected = transcript.filter((event) => event.seq > transcriptSeq);
+    Object.assign(meta, resolveLastRunFields(unprojected, meta));
+    meta.transcriptSeq = last.seq;
+    if (last.timestamp > meta.updatedAt) meta.updatedAt = last.timestamp;
+  } else if (lastRunState === "running" || lastRunState === "awaiting_confirmation") {
+    Object.assign(meta, resolveLastRunFields(transcript, meta));
+  }
+
+  const summary = buildSessionSummary(meta, transcript);
+  const metaChanged = transcriptSeq !== meta.transcriptSeq || lastRunState !== meta.lastRunState ||
+    lastRunId !== meta.lastRunId || lastModelEntryId !== meta.lastModelEntryId;
+  const indexChanged = !indexed || indexed.updatedAt !== summary.updatedAt ||
+    indexed.messageCount !== summary.messageCount || indexed.lastRunState !== summary.lastRunState;
+  const errors: unknown[] = [];
+  for (const [changed, write] of [
+    [metaChanged, () => writeMeta(meta)],
+    [indexChanged, () => writeIndexSummary(summary)],
+  ] as const) {
+    if (!changed) continue;
+    try {
+      write();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length === 0) {
+    pendingTranscriptProjections.delete(meta.id);
+  } else {
+    pendingTranscriptProjections.add(meta.id);
+    const message = "会话记录已写入，但更新会话摘要失败";
+    try {
+      appLogger.warn({
+        scope: "session.transcript",
+        message,
+        data: { sessionId: meta.id },
+        error: new AggregateError(errors, message),
+      });
+    } catch (loggingError) {
+      console.warn(message, { sessionId: meta.id, errors, loggingError });
+    }
+  }
+  return summary;
 }
 
 export function sortSessionSummaries(

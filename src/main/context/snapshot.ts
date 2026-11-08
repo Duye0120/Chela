@@ -28,7 +28,6 @@ import {
 import { getSettings } from "../settings.ts";
 
 const PROTECTED_USER_TURNS = 6;
-const PROTECTED_MESSAGE_COUNT = PROTECTED_USER_TURNS * 2;
 const SUMMARY_LINE_LIMIT = 6;
 const MAX_IMPORTANT_ITEMS = 8;
 const MAX_AUTO_COMPACT_FAILURES = 3;
@@ -54,6 +53,16 @@ function getMessageEvents(events: SessionTranscriptEvent[]): MessageTranscriptEv
     (event): event is MessageTranscriptEvent =>
       event.type === "user_message" || event.type === "assistant_message",
   );
+}
+
+function findProtectedMessageIndex(events: MessageTranscriptEvent[]): number {
+  let userTurns = 0;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (events[index].type === "user_message" && ++userTurns >= PROTECTED_USER_TURNS) {
+      return index;
+    }
+  }
+  return 0;
 }
 
 function truncateText(text: string, maxLength = 120): string {
@@ -894,11 +903,8 @@ function buildContextSummaryFromUsage(sessionId: string): ContextSummary {
 
 export function getRequiredCompactedUntilSeq(sessionId: string): number {
   const messageEvents = getMessageEvents(loadTranscriptEvents(sessionId));
-  if (messageEvents.length <= PROTECTED_MESSAGE_COUNT) {
-    return 0;
-  }
-
-  return messageEvents[messageEvents.length - PROTECTED_MESSAGE_COUNT - 1]?.seq ?? 0;
+  const cutoffIndex = findProtectedMessageIndex(messageEvents);
+  return messageEvents[cutoffIndex - 1]?.seq ?? 0;
 }
 
 async function resolveBranchName(): Promise<string | null> {
@@ -915,11 +921,11 @@ async function buildSnapshot(sessionId: string): Promise<SessionMemorySnapshot |
   const currentSnapshot = getPersistedSnapshot(sessionId);
   const events = loadTranscriptEvents(sessionId);
   const messageEvents = getMessageEvents(events);
-  if (messageEvents.length <= PROTECTED_MESSAGE_COUNT) {
+  const cutoffIndex = findProtectedMessageIndex(messageEvents);
+  if (cutoffIndex <= 0) {
     return null;
   }
 
-  const cutoffIndex = messageEvents.length - PROTECTED_MESSAGE_COUNT;
   const olderEvents = messageEvents.slice(0, cutoffIndex);
   const compactedUntilSeq = olderEvents.at(-1)?.seq ?? 0;
   if (compactedUntilSeq <= 0) {
@@ -1068,6 +1074,9 @@ async function applySnapshot(
       compactedUntilSeq: snapshot.compactedUntilSeq,
     },
     execute: async (runScope) => {
+      if (getPersistedSnapshot(sessionId).revision + 1 !== snapshot.revision) {
+        throw new Error("会话快照已变化，请重新压缩。");
+      }
       writePersistedSnapshot(snapshot);
       updateSessionMeta(sessionId, (meta) => {
         meta.autoCompactFailureCount = 0;
@@ -1140,6 +1149,9 @@ export async function compactSession(sessionId: string): Promise<ContextSummary>
   if (activeRun && !activeRun.cancelled) {
     throw new Error("当前线程仍在生成中，先停掉再 compact。");
   }
+  if (compactingSessionIds.has(sessionId)) {
+    throw new Error("当前线程正在压缩，请稍后重试。");
+  }
 
   compactingSessionIds.add(sessionId);
   try {
@@ -1159,11 +1171,13 @@ export async function reactiveCompact(sessionId: string): Promise<boolean> {
 
   const meta = getSessionMeta(sessionId);
   if (meta?.autoCompactBlockedAt) return false;
+  const previousCompactedUntilSeq = getPersistedSnapshot(sessionId).compactedUntilSeq;
+  if (getRequiredCompactedUntilSeq(sessionId) <= previousCompactedUntilSeq) return false;
 
   compactingSessionIds.add(sessionId);
   try {
     await applySnapshot(sessionId, "auto");
-    return true;
+    return getPersistedSnapshot(sessionId).compactedUntilSeq > previousCompactedUntilSeq;
   } catch {
     recordAutoCompactFailure(sessionId);
     return false;
@@ -1192,7 +1206,7 @@ export async function ensureContextSnapshotCoverage(
     return buildContextSummaryFromUsage(sessionId);
   }
 
-  if (meta?.autoCompactBlockedAt) {
+  if (meta?.autoCompactBlockedAt || compactingSessionIds.has(sessionId)) {
     return buildContextSummaryFromUsage(sessionId);
   }
 

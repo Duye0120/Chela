@@ -1,8 +1,8 @@
 import { cpSync, existsSync, readdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, screen } from "electron";
-import { IPC_CHANNELS } from "../shared/ipc.ts";
+import { IPC_CHANNELS, WORKSPACE_PAGES } from "../shared/ipc.ts";
 import { appLogger, attachWindowLogging } from "./logger.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -37,7 +37,7 @@ export function configureAppIdentity(): void {
 }
 
 function getPreloadPath() {
-  return join(__dirname, "../preload/index.mjs");
+  return join(__dirname, "../preload/index.cjs");
 }
 
 function getRendererPath() {
@@ -46,6 +46,13 @@ function getRendererPath() {
 
 function getDevServerUrl() {
   return process.env.ELECTRON_RENDERER_URL ?? process.env.VITE_DEV_SERVER_URL;
+}
+
+export function isMainRendererUrl(url: string): boolean {
+  const devServerUrl = getDevServerUrl();
+  const expected = devServerUrl ? new URL(devServerUrl) : pathToFileURL(getRendererPath());
+  expected.hash = "";
+  return url.split("#", 1)[0] === expected.href;
 }
 
 export function migrateLegacyUserData(): void {
@@ -212,9 +219,11 @@ export function createMainWindow(): BrowserWindow {
     }
   });
   if (devServerUrl) {
-    void mainWindow.loadURL(devServerUrl);
+    const initialUrl = new URL(devServerUrl);
+    initialUrl.hash = WORKSPACE_PAGES.board;
+    void mainWindow.loadURL(initialUrl.href);
   } else {
-    void mainWindow.loadFile(getRendererPath());
+    void mainWindow.loadFile(getRendererPath(), { hash: WORKSPACE_PAGES.board });
   }
 
   appLogger.info({

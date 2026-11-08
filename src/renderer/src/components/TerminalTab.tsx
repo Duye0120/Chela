@@ -9,6 +9,7 @@ import "@xterm/xterm/css/xterm.css";
 type Props = {
   terminalId: string;
   visible: boolean;
+  focused?: boolean;
   settings: Settings | null;
 };
 
@@ -63,23 +64,19 @@ function parseFontFamily(fontFamily: string | undefined): string {
   return fonts.join(', ');
 }
 
-export function TerminalTab({ terminalId, visible, settings }: Props) {
+export function TerminalTab({ terminalId, visible, focused = visible, settings }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !terminalId) return;
 
     const term = new Terminal({
-      fontSize: settings?.terminal.fontSize ?? 13,
-      fontFamily: parseFontFamily(settings?.terminal.fontFamily),
       cursorBlink: true,
       cursorStyle: "bar",
       theme: getTerminalTheme(),
-      scrollback: settings?.terminal.scrollback ?? 5000,
       allowProposedApi: true,
       customGlyphs: true,
     });
@@ -97,8 +94,6 @@ export function TerminalTab({ terminalId, visible, settings }: Props) {
       console.warn("Failed to load WebGL addon", e);
     }
 
-    fitAddon.fit();
-
     termRef.current = term;
     fitRef.current = fitAddon;
 
@@ -106,7 +101,9 @@ export function TerminalTab({ terminalId, visible, settings }: Props) {
 
     // Send user keystrokes to pty
     const disposeData = term.onData((data) => {
-      desktopApi?.terminal.write(terminalId, data);
+      void desktopApi?.terminal.write(terminalId, data).catch((error: unknown) => {
+        term.writeln(`\r\n终端输入失败：${String(error)}`);
+      });
     });
 
     // Receive pty output
@@ -116,43 +113,39 @@ export function TerminalTab({ terminalId, visible, settings }: Props) {
 
     // Handle resize
     const disposeResize = term.onResize(({ cols, rows }) => {
-      desktopApi?.terminal.resize(terminalId, cols, rows);
+      void desktopApi?.terminal.resize(terminalId, cols, rows).catch(console.warn);
     });
 
     // Window resize handler
     const resizeObserver = new ResizeObserver(() => {
-      fitAddon.fit();
+      if (container.clientWidth > 0 && container.clientHeight > 0) fitAddon.fit();
     });
     resizeObserver.observe(container);
 
-    cleanupRef.current = () => {
+    void desktopApi?.terminal.attach(terminalId).catch((error: unknown) => {
+      term.writeln(`\r\n连接终端失败：${String(error)}`);
+    });
+
+    return () => {
       disposeData.dispose();
       disposeResize.dispose();
       cleanupOnData?.();
       resizeObserver.disconnect();
       term.dispose();
-    };
-
-    return () => {
-      cleanupRef.current?.();
-      cleanupRef.current = null;
       termRef.current = null;
       fitRef.current = null;
     };
-  }, [
-    settings?.terminal.fontFamily,
-    settings?.terminal.fontSize,
-    settings?.terminal.scrollback,
-    terminalId,
-  ]);
+  }, [terminalId]);
 
   // Re-fit when visibility changes
   useEffect(() => {
-    if (visible && fitRef.current) {
-      requestAnimationFrame(() => fitRef.current?.fit());
-      requestAnimationFrame(() => termRef.current?.focus());
-    }
-  }, [visible]);
+    if (!visible) return;
+    const frame = requestAnimationFrame(() => {
+      fitRef.current?.fit();
+      if (focused) termRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focused, visible]);
 
   useEffect(() => {
     const terminal = termRef.current;
@@ -163,16 +156,18 @@ export function TerminalTab({ terminalId, visible, settings }: Props) {
 
     terminal.options.fontFamily = parseFontFamily(settings?.terminal.fontFamily);
     terminal.options.fontSize =
-      settings?.terminal.fontSize ?? terminal.options.fontSize;
+      settings?.terminal.fontSize ?? 13;
+    terminal.options.scrollback = settings?.terminal.scrollback ?? 5000;
     terminal.options.theme = getTerminalTheme();
     container.style.backgroundColor = getCssVariable(
       "--color-shell-terminal",
       getCssVariable("--chela-bg-surface", ""),
     );
-    fitRef.current?.fit();
+    if (container.clientWidth > 0 && container.clientHeight > 0) fitRef.current?.fit();
   }, [
     settings?.terminal.fontFamily,
     settings?.terminal.fontSize,
+    settings?.terminal.scrollback,
     settings?.theme,
     settings?.customTheme,
   ]);

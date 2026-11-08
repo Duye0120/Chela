@@ -16,5 +16,6 @@ export function createTransformContext(
     if (requiredCompactedUntilSeq > snapshot.compactedUntilSeq) {
       await ensureContextSnapshotCoverage(sessionId);
     }
+    return getPersistedSnapshot(sessionId).compactedUntilSeq >= getRequiredCompactedUntilSeq(sessionId);
   });
 }

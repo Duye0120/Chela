@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CommandLineIcon,
 } from "@heroicons/react/24/outline";
@@ -14,6 +14,8 @@ import type {
   SessionGroup,
   ThinkingLevel,
 } from "@shared/contracts";
+import { WORKSPACE_PAGES, type WorkspacePage } from "@shared/ipc";
+import type { PlannerView } from "@renderer/components/planner-panel";
 import {
   AppBootErrorScreen,
   AppBootingScreen,
@@ -25,6 +27,9 @@ import {
 } from "@renderer/components/assistant-ui/settings-view";
 import { Sidebar } from "@renderer/components/assistant-ui/sidebar";
 import { TerminalDrawer } from "@renderer/components/assistant-ui/terminal-drawer";
+import { TerminalWorkspace, type TerminalWorkspaceHandle } from "@renderer/components/terminal-workspace";
+import type { PlannerItem } from "@shared/planner";
+import type { TerminalAgentId } from "@shared/terminal-agents";
 import { ThreadRuntimeLayer } from "@renderer/components/assistant-ui/thread-runtime-layer";
 import { TitleBar } from "@renderer/components/assistant-ui/title-bar";
 import {
@@ -44,11 +49,9 @@ import {
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
   RIGHT_PANEL_GAP_PX,
-  ROOT_UI_THEME_DATASET,
   SETTINGS_ROUTE_PREFIX,
   SIDEBAR_COLLAPSED_STORAGE_KEY,
   SIDEBAR_WIDTH_STORAGE_KEY,
-  applyCustomThemeVariables,
   clampRightPanelWidth,
   clampSidebarSize,
   getDefaultRightPanelWidth,
@@ -60,6 +63,7 @@ import {
   toSidebarPixelSize,
   type DeepPartialSettings,
 } from "@renderer/lib/app-shell";
+import { applyAppearance } from "@renderer/hooks/use-surface-theme";
 import { useAppBoot } from "@renderer/hooks/use-app-boot";
 import { useAppGitState } from "@renderer/hooks/use-app-git-state";
 import { useAppKeyboardShortcuts } from "@renderer/hooks/use-app-keyboard-shortcuts";
@@ -84,6 +88,10 @@ const TracePanel = lazy(() => import("@renderer/components/assistant-ui/trace-pa
     default: module.TracePanel,
   })),
 );
+
+const PlannerPanel = lazy(() => import("@renderer/components/planner-panel"));
+const ClipboardShelf = lazy(() => import("@renderer/components/clipboard-shelf"));
+const workspacePages = Object.keys(WORKSPACE_PAGES) as WorkspacePage[];
 
 export default function App() {
   const desktopApi = window.desktopApi;
@@ -179,14 +187,54 @@ export default function App() {
     removeAttachmentLinkedBrowserContext: state.removeAttachmentLinkedBrowserContext,
   })));
 
-  const settingsSection = useMemo(
-    () => resolveSettingsSectionFromPath(location.pathname) ?? "general",
-    [location.pathname],
-  );
-  const mainView: "thread" | "settings" =
-    resolveSettingsSectionFromPath(location.pathname) === null
-      ? "thread"
-      : "settings";
+  const activeSettingsSection = resolveSettingsSectionFromPath(location.pathname);
+  const settingsSection = activeSettingsSection ?? "general";
+  const workspacePage = workspacePages.find((page) => WORKSPACE_PAGES[page] === location.pathname) ?? null;
+  const plannerView = workspacePage !== "shelf" && workspacePage !== "terminal" ? workspacePage : null;
+  const mainView = activeSettingsSection ? "settings" : workspacePage ? "workspace" : "thread";
+  const [retainedPlannerView, setRetainedPlannerView] = useState<PlannerView | null>(null);
+  const [pendingComposerFocus, setPendingComposerFocus] = useState(false);
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
+  const chatPageRef = useRef<HTMLDivElement | null>(null);
+  const terminalWorkspaceRef = useRef<TerminalWorkspaceHandle>(null);
+  const mountedPlannerView = plannerView ?? retainedPlannerView;
+
+  useEffect(() => {
+    if (plannerView) setRetainedPlannerView(plannerView);
+  }, [plannerView]);
+
+  const openWorkspacePage = useCallback((page: WorkspacePage) => {
+    navigate(WORKSPACE_PAGES[page]);
+  }, [navigate]);
+
+  useEffect(() => desktopApi?.window.onWorkspacePageRequested(openWorkspacePage), [desktopApi, openWorkspacePage]);
+  useEffect(() => desktopApi?.window.onTaskFocusRequested((taskId) => {
+    setFocusedTaskId(taskId);
+    openWorkspacePage("board");
+  }), [desktopApi, openWorkspacePage]);
+  const openTaskTerminal = useCallback(async (item: PlannerItem, agent?: TerminalAgentId) => {
+    const terminalWorkspace = terminalWorkspaceRef.current;
+    if (!terminalWorkspace) throw new Error("终端工作区尚未就绪");
+    if (await terminalWorkspace.openTask(item, agent)) openWorkspacePage("terminal");
+  }, [openWorkspacePage]);
+  useEffect(() => desktopApi?.quickInvoke.onFocusComposer(() => {
+    navigate("/");
+    setPendingComposerFocus(true);
+  }), [desktopApi, navigate]);
+
+  useEffect(() => {
+    if (mainView !== "thread" || booting || !pendingComposerFocus) return;
+    const frame = requestAnimationFrame(() => {
+      const composer = Array.from(chatPageRef.current?.querySelectorAll<HTMLTextAreaElement>('textarea[aria-label="消息输入框"]') ?? [])
+        .find((input) => input.getClientRects().length > 0);
+      const target = composer ?? chatPageRef.current?.querySelector("button");
+      if (target) {
+        target.focus();
+        setPendingComposerFocus(false);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeSession?.id, booting, mainView, pendingComposerFocus]);
 
   const activeSessionId = activeSession?.id ?? null;
   const diffPanelOpen =
@@ -198,7 +246,7 @@ export default function App() {
   const rightPanelVisibleOrAnimating =
     mainView === "thread" &&
     (diffPanelOpen || tracePanelOpen || browserPanelOpen || rightPanelAnimating);
-  const threadTerminalOpen = terminalOpen && !rightPanelVisibleOrAnimating;
+  const threadTerminalOpen = terminalOpen && mainView === "thread";
   const resolvedRightPanelWidth = useMemo(() => {
     const containerWidth =
       threadWorkspaceWidth > 0
@@ -348,24 +396,7 @@ export default function App() {
       return;
     }
 
-    const root = document.documentElement;
-    root.dataset[ROOT_UI_THEME_DATASET] = settings.theme;
-    root.style.setProperty("--app-ui-font-family", settings.ui.fontFamily);
-    root.style.setProperty("--app-ui-font-size", `${settings.ui.fontSize}px`);
-    root.style.setProperty(
-      "--app-code-font-family",
-      settings.ui.codeFontFamily,
-    );
-    root.style.setProperty(
-      "--app-code-font-size",
-      `${settings.ui.codeFontSize}px`,
-    );
-
-    appliedCustomThemeKeysRef.current = applyCustomThemeVariables(
-      root,
-      appliedCustomThemeKeysRef.current,
-      settings.theme === "custom" ? settings.customTheme : null,
-    );
+    appliedCustomThemeKeysRef.current = applyAppearance(settings, appliedCustomThemeKeysRef.current);
   }, [settings]);
 
   const {
@@ -422,6 +453,7 @@ export default function App() {
     persistSession,
     refreshContextSummary,
     refreshInterruptedApprovalGroups,
+    refreshSessionLists,
     reloadSession,
     renameProject,
     renameSession,
@@ -774,13 +806,41 @@ export default function App() {
     appActions.bumpBrowserInteractionResetSignal();
   }, [appActions]);
 
+  const showThread = useCallback(() => {
+    if (mainView !== "thread") navigate("/");
+  }, [mainView, navigate]);
+
+  const showCompanion = useCallback(async () => {
+    if (!desktopApi) throw new Error("桌面助手不可用");
+    await desktopApi.window.showCompanion();
+  }, [desktopApi]);
+
+  const handleNewChat = useCallback(() => {
+    showThread();
+    return createNewSession();
+  }, [createNewSession, showThread]);
+
+  const handleSelectChat = useCallback((sessionId: string, reload = false) => {
+    showThread();
+    return selectSession(sessionId, reload);
+  }, [selectSession, showThread]);
+
+  useEffect(() => {
+    if (booting) return;
+    return desktopApi?.window.onSessionFocusRequested((sessionId) => {
+      void Promise.all([refreshSessionLists(), handleSelectChat(sessionId, true)])
+        .catch((error: unknown) => console.error("打开助手会话失败", error));
+    });
+  }, [booting, desktopApi, handleSelectChat, refreshSessionLists]);
+
   useAppKeyboardShortcuts({
     desktopApi,
     appActions,
     shortcutState: {
       mainView,
       terminalOpen,
-      createNewSession,
+      createNewSession: handleNewChat,
+      openTerminalWorkspace: () => openWorkspacePage("terminal"),
       closeSettingsView,
       openSettingsView,
       toggleSidebarCollapsed,
@@ -888,11 +948,18 @@ export default function App() {
     void handleCreateProject();
   }, [handleCreateProject]);
 
+  const handleCreateWorkspaceClick = useCallback(() => {
+    void handleCreateProject().then((created) => {
+      if (created) showThread();
+    });
+  }, [handleCreateProject, showThread]);
+
   const handleCreateProjectSession = useCallback(
     (groupId: string) => {
+      showThread();
       void createSessionInGroup(groupId);
     },
-    [createSessionInGroup],
+    [createSessionInGroup, showThread],
   );
 
   const handleSelectProjectClick = useCallback(
@@ -989,7 +1056,7 @@ export default function App() {
   }
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden rounded-[var(--radius-shell)] bg-[color:var(--chela-bg-primary)] text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+    <main className="flex h-screen flex-col overflow-hidden rounded-[var(--radius-shell)] bg-shell-window text-foreground">
       <TitleBar
         isMaximized={frameState.isMaximized}
         onMinimize={handleMinimizeWindow}
@@ -1027,11 +1094,16 @@ export default function App() {
                 summaries={summaries}
                 activeSessionId={activeSessionId}
                 runningSessionIds={runningSessionIds}
-                onCreateProject={handleCreateProjectClick}
+                onCreateProject={handleCreateWorkspaceClick}
+                activeWorkspacePage={workspacePage}
+                onOpenWorkspacePage={openWorkspacePage}
+                onOpenAssistant={showThread}
+                onShowCompanion={showCompanion}
+                assistantActive={mainView === "thread"}
                 onCreateProjectSession={handleCreateProjectSession}
                 onSelectProject={handleSelectProjectClick}
-                onSelectSession={selectSession}
-                onNewSession={createNewSession}
+                onSelectSession={handleSelectChat}
+                onNewSession={handleNewChat}
                 onOpenSettings={openGeneralSettings}
                 onRenameSession={handleRenameSession}
                 onRenameProject={handleRenameProject}
@@ -1057,24 +1129,24 @@ export default function App() {
               >
                 <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
                   <div
-                    className={`chela-main-content-surface flex min-h-0 flex-1 flex-col overflow-hidden bg-[color:var(--chela-bg-surface)] transition-[border-radius] duration-300 ease-out ${rightPanelVisibleOrAnimating
+                    className={`chela-main-content-surface flex min-h-0 flex-1 flex-col overflow-hidden bg-shell-panel transition-[border-radius] duration-300 ease-out ${rightPanelVisibleOrAnimating
                       ? "rounded-[var(--radius-shell)]"
                       : "rounded-l-[var(--radius-shell)]"
                       }`}
                   >
                     <div
-                      className={`flex items-center justify-end gap-2 px-5 transition-[min-height,padding,opacity] duration-200 ease-out ${mainView === "thread"
-                        ? "min-h-[52px] pb-3 pt-4 opacity-100"
-                        : "pointer-events-none min-h-0 overflow-hidden py-0 opacity-0"
+                      className={`flex items-center justify-end gap-1 px-4 transition-[min-height,padding,opacity] duration-200 ease-out ${mainView === "thread"
+                        ? "min-h-[52px] py-2 opacity-100"
+                        : "pointer-events-none h-0 min-h-0 overflow-hidden py-0 opacity-0"
                         }`}
-                      aria-hidden={mainView !== "thread"}
+                      inert={mainView !== "thread"}
                     >
                       <Button
                         type="button"
                         variant="ghost"
-                        size="icon"
+                        size="icon-sm"
                         onClick={toggleThreadTerminal}
-                        className={`h-9 w-9 cursor-pointer rounded-[var(--radius-shell)] border-none bg-transparent shadow-none ring-0 hover:bg-shell-toolbar-hover ${terminalOpen ? "bg-shell-toolbar-hover text-foreground" : "text-muted-foreground"}`}
+                        aria-pressed={terminalOpen}
                         aria-label={terminalOpen ? "收起终端" : "展开终端"}
                       >
                         <CommandLineIcon className="h-4 w-4" />
@@ -1084,9 +1156,10 @@ export default function App() {
                           <Button
                             type="button"
                             variant="ghost"
-                            size="icon"
+                            size="icon-sm"
                             onClick={toggleDiffPanel}
-                            className={`relative h-9 w-9 cursor-pointer rounded-[var(--radius-shell)] border-none bg-transparent shadow-none ring-0 transition-[background-color,color,opacity,transform] duration-200 ease-out hover:bg-shell-toolbar-hover ${diffPanelOpen ? "bg-shell-toolbar-hover text-foreground scale-[0.98]" : "text-muted-foreground hover:scale-[1.02]"}`}
+                            aria-pressed={diffPanelOpen}
+                            className="relative"
                             aria-label={diffPanelOpen ? "收起右侧边栏" : "展开变更面板"}
                           >
                             {diffPanelOpen ? (
@@ -1108,9 +1181,10 @@ export default function App() {
                           <Button
                             type="button"
                             variant="ghost"
-                            size="icon"
+                            size="icon-sm"
                             onClick={toggleBrowserPanel}
-                            className={`relative h-9 w-9 cursor-pointer rounded-[var(--radius-shell)] border-none bg-transparent shadow-none ring-0 transition-[background-color,color,opacity,transform] duration-200 ease-out hover:bg-shell-toolbar-hover ${browserPanelOpen ? "bg-shell-toolbar-hover text-foreground scale-[0.98]" : "text-muted-foreground hover:scale-[1.02]"}`}
+                            aria-pressed={browserPanelOpen}
+                            className="relative"
                             aria-label={browserPanelOpen ? "收起浏览器选择" : "展开浏览器选择"}
                           >
                             <Globe2Icon className="h-4 w-4" strokeWidth={1.9} />
@@ -1125,9 +1199,10 @@ export default function App() {
                           <Button
                             type="button"
                             variant="ghost"
-                            size="icon"
+                            size="icon-sm"
                             onClick={toggleTracePanel}
-                            className={`relative h-9 w-9 cursor-pointer rounded-[var(--radius-shell)] border-none bg-transparent shadow-none ring-0 transition-[background-color,color,opacity,transform] duration-200 ease-out hover:bg-shell-toolbar-hover ${tracePanelOpen ? "bg-shell-toolbar-hover text-foreground scale-[0.98]" : "text-muted-foreground hover:scale-[1.02]"}`}
+                            aria-pressed={tracePanelOpen}
+                            className="relative"
                             aria-label={tracePanelOpen ? "收起运行追踪" : "展开运行追踪"}
                           >
                             <ActivityIcon className="h-4 w-4" strokeWidth={1.9} />
@@ -1141,6 +1216,7 @@ export default function App() {
 
                     <div className="relative min-h-0 flex-1 bg-[color:var(--chela-bg-surface)]">
                       <div
+                        ref={chatPageRef}
                         className={mainView === "thread" ? "h-full min-h-0" : "hidden"}
                         aria-hidden={mainView !== "thread"}
                       >
@@ -1183,9 +1259,30 @@ export default function App() {
                       >
                         {settingsContent}
                       </div>
+                      {mountedPlannerView && (
+                        <div className={plannerView ? "h-full min-h-0" : "hidden"}>
+                          <Suspense fallback={<p role="status" className="p-4 text-muted-foreground">正在加载计划…</p>}>
+                            <PlannerPanel
+                              view={mountedPlannerView}
+                              onViewChange={openWorkspacePage}
+                              onOpenTaskTerminal={openTaskTerminal}
+                              focusedTaskId={focusedTaskId}
+                              onFocusedTask={() => setFocusedTaskId(null)}
+                            />
+                          </Suspense>
+                        </div>
+                      )}
+                      {workspacePage === "shelf" && (
+                        <Suspense fallback={<p role="status" className="p-4 text-muted-foreground">正在加载随手…</p>}>
+                          <ClipboardShelf />
+                        </Suspense>
+                      )}
+                      <div className={workspacePage === "terminal" ? "h-full min-h-0" : "hidden"}>
+                        <TerminalWorkspace ref={terminalWorkspaceRef} visible={workspacePage === "terminal"} settings={settings} />
+                      </div>
                     </div>
 
-                    <div className={mainView === "thread" && !rightPanelVisibleOrAnimating ? "" : "hidden"}>
+                    <div className={mainView === "thread" ? "" : "hidden"}>
                       <TerminalDrawer
                         open={threadTerminalOpen}
                         onToggle={toggleThreadTerminal}
@@ -1250,12 +1347,6 @@ export default function App() {
                             />
                           </div>
                         )}
-
-                        <TerminalDrawer
-                          open={terminalOpen}
-                          onToggle={toggleThreadTerminal}
-                          settings={settings}
-                        />
                       </Suspense>
                     ) : null}
                   </div>

@@ -158,15 +158,20 @@ export function resumeInterruptedApproval(runId: string): string {
     .find((record) => record.runId === runId);
   const resumedRunId = harnessRuntime.resumeInterruptedRun(runId);
   if (approval) {
-    appendRunRecoveryRequestedEvent({
-      sessionId: approval.sessionId,
-      runId: approval.runId,
-      resumedRunId,
-      recoveryPrompt: buildInterruptedApprovalRecoveryPrompt(
-        toInterruptedApprovalPromptInput(approval),
-      ),
-      source: "interrupted_approval",
-    });
+    try {
+      appendRunRecoveryRequestedEvent({
+        sessionId: approval.sessionId,
+        runId: approval.runId,
+        resumedRunId,
+        recoveryPrompt: buildInterruptedApprovalRecoveryPrompt(
+          toInterruptedApprovalPromptInput(approval),
+        ),
+        source: "interrupted_approval",
+      });
+    } catch (error) {
+      harnessRuntime.discardPendingResume(resumedRunId);
+      throw error;
+    }
   }
   return resumedRunId;
 }

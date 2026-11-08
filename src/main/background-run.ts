@@ -62,17 +62,19 @@ export async function executeScheduledRun<T>(
     metadata: input.metadata,
   });
 
-  appendRunStartedEvent({
-    sessionId: input.sessionId,
-    runId,
-    ownerId,
-    runKind: input.runKind,
-    modelEntryId: input.modelEntryId,
-    thinkingLevel: input.thinkingLevel,
-    metadata: input.metadata,
-  });
-
+  let finalState: "completed" | "failed" = "failed";
+  let failure: unknown;
+  let failureReason: string | undefined;
   try {
+    appendRunStartedEvent({
+      sessionId: input.sessionId,
+      runId,
+      ownerId,
+      runKind: input.runKind,
+      modelEntryId: input.modelEntryId,
+      thinkingLevel: input.thinkingLevel,
+      metadata: input.metadata,
+    });
     const result = await input.execute({
       runScope,
       lane: input.lane,
@@ -86,21 +88,39 @@ export async function executeScheduledRun<T>(
       ownerId,
       finalState: "completed",
     });
-    harnessRuntime.finishRun(runScope, "completed");
+    finalState = "completed";
     return result;
   } catch (error) {
+    failure = error;
     const reason = error instanceof Error ? error.message : `${input.runKind} 失败`;
-    appendRunFinishedEvent({
-      sessionId: input.sessionId,
-      runId,
-      ownerId,
-      finalState: "failed",
-      reason,
-    });
-    harnessRuntime.finishRun(runScope, "failed", {
-      reason,
-    });
-    throw error;
+    failureReason = reason;
+    try {
+      appendRunFinishedEvent({
+        sessionId: input.sessionId,
+        runId,
+        ownerId,
+        finalState: "failed",
+        reason,
+      });
+    } catch (persistenceError) {
+      failure = new AggregateError([error, persistenceError], reason, { cause: error });
+    }
+    throw failure;
+  } finally {
+    try {
+      harnessRuntime.finishRun(runScope, finalState, {
+        reason: failureReason,
+      });
+    } catch (finishError) {
+      if (finalState === "failed") {
+        throw new AggregateError(
+          [failure, finishError],
+          `${input.runKind} 失败且运行清理失败`,
+          { cause: failure },
+        );
+      }
+      throw finishError;
+    }
   }
 }
 

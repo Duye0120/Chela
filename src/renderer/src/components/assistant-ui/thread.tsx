@@ -3,12 +3,14 @@ import {
   useContext,
   useCallback,
   useEffect,
+  useLayoutEffect,
   memo,
   useMemo,
   useRef,
   useState,
   type ClipboardEvent,
   type FC,
+  type RefObject,
 } from "react";
 import { useShallow } from "zustand/shallow";
 import {
@@ -297,28 +299,8 @@ const ThreadImpl: FC<ThreadProps> = ({
   onComposerFocus = () => undefined,
   disableGlobalSideEffects = false,
 }) => {
-  const aui = useAui();
-  const composerText = useAuiState((state) => state.composer.text);
   const viewportRef = useRef<HTMLDivElement>(null);
   const visibleRef = useRef(visible);
-  const hydratedDraftSessionIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (hydratedDraftSessionIdRef.current === sessionId) {
-      return;
-    }
-
-    hydratedDraftSessionIdRef.current = sessionId;
-    aui.composer().setText(draft);
-  }, [aui, draft, sessionId]);
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-
-    onDraftChange(composerText);
-  }, [composerText, onDraftChange, visible]);
 
   useEffect(() => {
     visibleRef.current = visible;
@@ -441,10 +423,13 @@ const ThreadImpl: FC<ThreadProps> = ({
     [currentModelId, entries],
   );
 
+  const runStatus = useMemo(
+    () => ({ runStage, runStatusLabel, isCancelling }),
+    [runStage, runStatusLabel, isCancelling],
+  );
+
   return (
-    <ThreadRunStatusContext.Provider
-      value={{ runStage, runStatusLabel, isCancelling }}
-    >
+    <ThreadRunStatusContext.Provider value={runStatus}>
       <ThreadPrimitive.Root
         className="@container flex h-full min-h-0 flex-col bg-shell-panel"
         style={{
@@ -453,9 +438,18 @@ const ThreadImpl: FC<ThreadProps> = ({
           ["--composer-padding" as string]: "12px",
         }}
       >
+        <ThreadDraft
+          sessionId={sessionId}
+          draft={draft}
+          visible={visible}
+          onDraftChange={onDraftChange}
+        />
         <div className="relative flex min-h-0 flex-1 flex-col">
           <ThreadPrimitive.Viewport
             ref={viewportRef}
+            tabIndex={-1}
+            role="region"
+            aria-label="聊天消息"
             turnAnchor="bottom"
             autoScroll
             scrollToBottomOnInitialize
@@ -466,9 +460,7 @@ const ThreadImpl: FC<ThreadProps> = ({
               <ThreadWelcome />
             </AuiIf>
 
-            <ThreadPrimitive.Messages>
-              {() => <ThreadMessage />}
-            </ThreadPrimitive.Messages>
+            <ThreadMessages key={sessionId} viewportRef={viewportRef} />
           </ThreadPrimitive.Viewport>
 
           <div
@@ -526,10 +518,101 @@ const ThreadImpl: FC<ThreadProps> = ({
 
 export const Thread = memo(ThreadImpl);
 
+function ThreadDraft({
+  sessionId,
+  draft,
+  visible,
+  onDraftChange,
+}: Pick<Required<ThreadProps>, "sessionId" | "draft" | "visible" | "onDraftChange">) {
+  const aui = useAui();
+  const composerText = useAuiState((state) => state.composer.text);
+  const hydratedSessionId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (hydratedSessionId.current !== sessionId) {
+      hydratedSessionId.current = sessionId;
+      aui.composer().setText(draft);
+    }
+  }, [aui, draft, sessionId]);
+
+  useEffect(() => {
+    if (visible) {
+      onDraftChange(composerText);
+    }
+  }, [composerText, onDraftChange, visible]);
+
+  return null;
+}
+
 const ThreadMessage: FC = () => {
   const role = useAuiState((s) => s.message.role);
   return role === "user" ? <UserMessage /> : <AssistantMessage />;
 };
+
+const THREAD_HISTORY_PAGE_SIZE = 40;
+const threadMessageComponents = { Message: ThreadMessage };
+
+const ThreadMessages = memo(function ThreadMessages({
+  viewportRef,
+}: {
+  viewportRef: RefObject<HTMLDivElement | null>;
+}) {
+  const messageCount = useAuiState((state) => state.thread.messages.length);
+  const recentStart = Math.max(0, messageCount - THREAD_HISTORY_PAGE_SIZE);
+  const [historyStart, setHistoryStart] = useState<number | null>(null);
+  // The local runtime can report an empty thread until it hydrates the saved messages.
+  if (historyStart === null && messageCount > 0) {
+    setHistoryStart(recentStart);
+  }
+  const start = Math.min(historyStart ?? recentStart, recentStart);
+  const historyAnchor = useRef<{ element: HTMLElement; top: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const anchor = historyAnchor.current;
+    historyAnchor.current = null;
+    if (anchor && viewportRef.current?.contains(anchor.element)) {
+      viewportRef.current.scrollBy({
+        top: anchor.element.getBoundingClientRect().top - anchor.top,
+        behavior: "instant",
+      });
+    }
+  }, [start, viewportRef]);
+
+  const loadEarlier = () => {
+    const viewport = viewportRef.current;
+    const firstMessage = viewport?.querySelector<HTMLElement>("[data-role]");
+    if (viewport && firstMessage) {
+      historyAnchor.current = {
+        element: firstMessage,
+        top: firstMessage.getBoundingClientRect().top,
+      };
+      viewport.focus({ preventScroll: true });
+    }
+    setHistoryStart(Math.max(0, start - THREAD_HISTORY_PAGE_SIZE));
+  };
+
+  return (
+    <>
+      {start > 0 ? (
+        <div className="flex justify-center py-2">
+          <Button type="button" variant="ghost" size="sm" onClick={loadEarlier}>
+            加载更早消息（还有 {start} 条）
+          </Button>
+        </div>
+      ) : null}
+      {Array.from({ length: messageCount - start }, (_, offset) => {
+        const index = start + offset;
+        return (
+          <ThreadPrimitive.MessageByIndex
+            key={index}
+            index={index}
+            components={threadMessageComponents}
+          />
+        );
+      })}
+    </>
+  );
+});
 
 const ThreadScrollToBottom: FC = () => {
   return (
@@ -933,7 +1016,7 @@ const Composer: FC<ThreadResolvedProps> = ({
           onRemove={async () => onRemoveQueuedMessage(queuedHeadMessage.id)}
         />
       ) : null}
-      <div className="flex w-full flex-col gap-2 rounded-[var(--radius-shell)] bg-[color:var(--color-composer-surface)] p-3 shadow-[0_12px_32px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.05)] transition-shadow focus-within:ring-2 focus-within:ring-ring/12">
+      <div className="flex w-full flex-col gap-2 rounded-[var(--radius-panel)] bg-[color:var(--color-composer-surface)] p-2.5 ring-1 ring-inset ring-[color:var(--color-control-border)] focus-within:ring-[color:var(--color-control-focus-ring)]">
         {showComposerMetaRow ? (
           <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto">
             {attachments.length > 0 ? <ComposerAttachments inline /> : null}
@@ -950,9 +1033,9 @@ const Composer: FC<ThreadResolvedProps> = ({
         <ComposerPrimitive.Input
           placeholder="输入指令、询问 Chela，或描述附件要处理什么..."
           ref={composerInputRef}
-          className={`min-h-[88px] w-full resize-none bg-transparent px-1 py-2 text-[15px] leading-6 text-foreground outline-none placeholder:text-[color:var(--color-text-secondary)]/75 ${inputScrollable ? "overflow-y-auto pr-2" : "overflow-y-hidden"
+          className={`min-h-[72px] w-full resize-none bg-transparent px-1.5 py-2 text-[15px] leading-6 text-foreground outline-none placeholder:text-[color:var(--color-text-secondary)]/75 ${inputScrollable ? "overflow-y-auto pr-2" : "overflow-y-hidden"
             }`}
-          minRows={3}
+          minRows={2}
           maxRows={7}
           autoFocus={visible}
           onChange={() => {
@@ -1284,8 +1367,8 @@ const ComposerAction: FC<
     };
 
     return (
-      <div className="relative flex items-center justify-between pt-1">
-        <div className="flex items-center gap-1.5">
+      <div className="relative flex flex-wrap items-center justify-between gap-1">
+        <div className="flex items-center gap-1">
           <DesktopComposerAddAttachment
             isPickingFiles={isPickingFiles}
             onAttachFiles={onAttachFiles}
@@ -1300,7 +1383,6 @@ const ComposerAction: FC<
               size="sm"
               title={currentModel?.name ?? "选择模型"}
               aria-label={currentModel?.name ? `当前模型：${currentModel.name}` : "选择模型"}
-              className="h-8 rounded-[var(--radius-shell)] bg-transparent px-2 text-[12px] text-[color:var(--color-text-secondary)] shadow-none ring-0 hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground hover:ring-0"
             >
               <BotIcon className="size-4 shrink-0" />
             </ModelSelector.Trigger>
@@ -1323,8 +1405,7 @@ const ComposerAction: FC<
                 size="sm"
                 title={thinkingTitle}
                 aria-label={`当前思考强度：${thinkingTitle}`}
-                className="h-8 rounded-[var(--radius-shell)] bg-transparent px-2 text-[12px] text-[color:var(--color-text-secondary)] shadow-none ring-0 hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground hover:ring-0"
-              >
+                >
                 <BrainCircuitIcon className="size-4 shrink-0" />
               </SelectTrigger>
               <SelectContent side="top" align="start" sideOffset={8}>
@@ -1346,7 +1427,7 @@ const ComposerAction: FC<
             <div
               title={thinkingTitle}
               aria-label={thinkingTitle}
-              className="flex h-8 items-center justify-center rounded-[var(--radius-shell)] bg-transparent px-2 text-[color:var(--color-text-secondary)]"
+              className="flex size-[var(--control-size-sm)] items-center justify-center text-[color:var(--color-text-secondary)]"
             >
               <BrainCircuitIcon className="size-4 shrink-0 opacity-55" />
             </div>
@@ -1359,7 +1440,7 @@ const ComposerAction: FC<
               side="bottom"
               type="button"
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               disabled={(!composerHasText && !hasBrowserContext) || isCancelling}
               onClick={() => {
                 const draft = composerText.trim();
@@ -1372,7 +1453,7 @@ const ComposerAction: FC<
                   onAfterComposerEnqueue?.();
                 });
               }}
-              className="size-8 rounded-[var(--radius-shell)] text-[color:var(--color-text-secondary)] hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground disabled:opacity-40"
+              className="disabled:opacity-40"
               aria-label="发送：当前回复结束后再发送"
             >
               <SendHorizonalIcon className="size-4" />
@@ -1382,7 +1463,7 @@ const ComposerAction: FC<
               side="bottom"
               type="button"
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               disabled={(!composerHasText && !hasBrowserContext) || isCancelling}
               onClick={() => {
                 const draft = composerText.trim();
@@ -1395,7 +1476,7 @@ const ComposerAction: FC<
                   onAfterComposerEnqueue?.();
                 });
               }}
-              className="size-8 rounded-[var(--radius-shell)] text-[color:var(--color-accent)] hover:bg-[color:var(--color-accent)]/12 hover:text-[color:var(--color-accent)] disabled:opacity-40"
+              className="text-[color:var(--color-accent)] hover:bg-[color:var(--color-accent-subtle)] hover:text-[color:var(--color-accent)] disabled:opacity-40"
               aria-label="引导：停止当前回复并立即接着说"
             >
               <Wand2Icon className="size-4" />
@@ -1409,7 +1490,8 @@ const ComposerAction: FC<
                 }
               }}
               disabled={isCancelling}
-              className="flex h-8 items-center gap-1.5 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)]/12 px-2.5 text-[color:var(--color-accent)] shadow-none hover:bg-[color:var(--color-accent)]/18 disabled:cursor-not-allowed disabled:opacity-100"
+              size="sm"
+              className="bg-[color:var(--color-accent-subtle)] text-[color:var(--color-accent)] hover:bg-selection-bg disabled:opacity-100"
               aria-label={isCancelling ? runStatusLabel || "正在停止…" : "停止生成"}
             >
               {isCancelling ? (
@@ -1434,9 +1516,8 @@ const ComposerAction: FC<
                 side="bottom"
                 type="button"
                 variant="default"
-                size="icon"
+                size="icon-sm"
                 disabled
-                className="size-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-[color:var(--chela-text-inverse)] shadow-none hover:bg-[color:var(--color-accent-hover)]"
                 aria-label="Send message"
               >
                 <ArrowUpIcon className="size-4" />
@@ -1448,9 +1529,8 @@ const ComposerAction: FC<
                   side="bottom"
                   type="button"
                   variant="default"
-                  size="icon"
+                  size="icon-sm"
                   onClick={sendComposerWithBrowserFallback}
-                  className="size-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-[color:var(--chela-text-inverse)] shadow-none hover:bg-[color:var(--color-accent-hover)]"
                   aria-label="Send message"
                 >
                   <ArrowUpIcon className="size-4" />
@@ -1462,8 +1542,7 @@ const ComposerAction: FC<
                     side="bottom"
                     type="button"
                     variant="default"
-                    size="icon"
-                    className="size-8 rounded-[var(--radius-shell)] bg-[color:var(--color-accent)] text-[color:var(--chela-text-inverse)] shadow-none hover:bg-[color:var(--color-accent-hover)]"
+                    size="icon-sm"
                     aria-label="Send message"
                   >
                     <ArrowUpIcon className="size-4" />

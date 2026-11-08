@@ -17,13 +17,40 @@ import type {
   TrimSessionMessagesInput,
 } from "../shared/contracts.ts";
 import type { AgentEvent, ConfirmationResponse } from "../shared/agent-events.ts";
+import type { ClipboardShelfState } from "../shared/clipboard-shelf.ts";
+import type { PlannerItem } from "../shared/planner.ts";
 import {
   IPC_CHANNELS,
   IPC_ERROR_MESSAGE_PREFIX,
+  WORKSPACE_PAGES,
   type IpcErrorPayload,
+  type WorkspacePage,
 } from "../shared/ipc.ts";
 
 type DesktopIpcError = Error & IpcErrorPayload;
+
+let pendingWorkspacePage: WorkspacePage | undefined;
+let pendingTaskFocus: string | undefined;
+let pendingSessionFocus: string | undefined;
+let sessionFocusListener: ((sessionId: string) => void) | undefined;
+ipcRenderer.on(IPC_CHANNELS.windowFocusSession, (_event, value: unknown) => {
+  if (typeof value !== "string" || !value || value.length > 128) return;
+  if (sessionFocusListener) sessionFocusListener(value);
+  else pendingSessionFocus = value;
+});
+let taskFocusListener: ((taskId: string) => void) | undefined;
+ipcRenderer.on(IPC_CHANNELS.windowFocusTask, (_event, value: unknown) => {
+  if (typeof value !== "string" || !value || value.length > 128) return;
+  if (taskFocusListener) taskFocusListener(value);
+  else pendingTaskFocus = value;
+});
+let workspacePageListener: ((page: WorkspacePage) => void) | undefined;
+ipcRenderer.on(IPC_CHANNELS.windowWorkspacePageRequested, (_event, value: unknown) => {
+  if (typeof value !== "string" || !Object.hasOwn(WORKSPACE_PAGES, value)) return;
+  const page = value as WorkspacePage;
+  if (workspacePageListener) workspacePageListener(page);
+  else pendingWorkspacePage = page;
+});
 
 function isIpcErrorPayload(value: unknown): value is IpcErrorPayload {
   return (
@@ -237,6 +264,8 @@ const desktopApi: DesktopApi = {
   // ── Terminal (wired in Phase 7) ───────────────────────────
   terminal: {
     create: (options) => invokeIpc(IPC_CHANNELS.terminalCreate, options),
+    attach: (id) => invokeIpc(IPC_CHANNELS.terminalAttach, id),
+    list: () => invokeIpc(IPC_CHANNELS.terminalList),
     write: (id, data) => invokeIpc(IPC_CHANNELS.terminalWrite, id, data),
     resize: (id, cols, rows) => invokeIpc(IPC_CHANNELS.terminalResize, id, cols, rows),
     destroy: (id) => invokeIpc(IPC_CHANNELS.terminalDestroy, id),
@@ -252,6 +281,7 @@ const desktopApi: DesktopApi = {
     },
   },
   git: {
+    getSnapshotForDirectory: (directory) => invokeIpc(IPC_CHANNELS.gitTaskSnapshot, directory),
     getSummary: () => invokeIpc(IPC_CHANNELS.gitSummary),
     getSnapshot: () => invokeIpc(IPC_CHANNELS.gitStatus),
     listBranches: () => invokeIpc(IPC_CHANNELS.gitListBranches),
@@ -278,6 +308,36 @@ const desktopApi: DesktopApi = {
     setRightPanelState: (partial) => invokeIpc(IPC_CHANNELS.uiSetRightPanelState, partial),
   },
   window: {
+    showCompanion: () => invokeIpc(IPC_CHANNELS.windowShowCompanion),
+    onSessionFocusRequested: (listener) => {
+      sessionFocusListener = listener;
+      if (pendingSessionFocus) {
+        const sessionId = pendingSessionFocus;
+        pendingSessionFocus = undefined;
+        listener(sessionId);
+      }
+      return () => { if (sessionFocusListener === listener) sessionFocusListener = undefined; };
+    },
+    onTaskFocusRequested: (listener) => {
+      taskFocusListener = listener;
+      if (pendingTaskFocus) {
+        const taskId = pendingTaskFocus;
+        pendingTaskFocus = undefined;
+        listener(taskId);
+      }
+      return () => { if (taskFocusListener === listener) taskFocusListener = undefined; };
+    },
+    onWorkspacePageRequested: (listener) => {
+      workspacePageListener = listener;
+      if (pendingWorkspacePage !== undefined) {
+        const page = pendingWorkspacePage;
+        pendingWorkspacePage = undefined;
+        listener(page);
+      }
+      return () => {
+        if (workspacePageListener === listener) workspacePageListener = undefined;
+      };
+    },
     getState: () => invokeIpc(IPC_CHANNELS.windowGetState),
     getBounds: () => invokeIpc(IPC_CHANNELS.windowGetBounds),
     setBounds: (bounds) => invokeIpc(IPC_CHANNELS.windowSetBounds, bounds),
@@ -297,6 +357,34 @@ const desktopApi: DesktopApi = {
       const handler = () => listener();
       ipcRenderer.on("quick-invoke:focus-composer", handler);
       return () => { ipcRenderer.removeListener("quick-invoke:focus-composer", handler); };
+    },
+  },
+  clipboardShelf: {
+    show: () => invokeIpc(IPC_CHANNELS.clipboardShelfShow),
+    getState: () => invokeIpc(IPC_CHANNELS.clipboardShelfGetState),
+    setPaused: (paused) => invokeIpc(IPC_CHANNELS.clipboardShelfSetPaused, paused),
+    copy: (id) => invokeIpc(IPC_CHANNELS.clipboardShelfCopy, id),
+    remove: (id) => invokeIpc(IPC_CHANNELS.clipboardShelfRemove, id),
+    clear: () => invokeIpc(IPC_CHANNELS.clipboardShelfClear),
+    onChange: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, snapshot: ClipboardShelfState) => listener(snapshot);
+      ipcRenderer.on(IPC_CHANNELS.clipboardShelfChanged, handler);
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.clipboardShelfChanged, handler); };
+    },
+  },
+  planner: {
+    startCodex: (id, updatedAt) => invokeIpc(IPC_CHANNELS.plannerStartCodex, id, updatedAt),
+    cancelCodex: (taskId, executionId) => invokeIpc(IPC_CHANNELS.plannerCancelCodex, taskId, executionId),
+    discuss: (id, updatedAt) => invokeIpc(IPC_CHANNELS.plannerDiscuss, id, updatedAt),
+    recordExecution: (taskId, update) => invokeIpc(IPC_CHANNELS.plannerRecordExecution, taskId, update),
+    list: () => invokeIpc(IPC_CHANNELS.plannerList),
+    save: (input, expectedUpdatedAt) => invokeIpc(IPC_CHANNELS.plannerSave, input, expectedUpdatedAt),
+    remove: (id, expectedUpdatedAt) => invokeIpc(IPC_CHANNELS.plannerRemove, id, expectedUpdatedAt),
+    show: (taskId) => invokeIpc(IPC_CHANNELS.plannerShow, taskId),
+    onChange: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, items: PlannerItem[]) => listener(items);
+      ipcRenderer.on(IPC_CHANNELS.plannerChanged, handler);
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.plannerChanged, handler); };
     },
   },
 };

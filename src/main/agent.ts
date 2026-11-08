@@ -17,6 +17,7 @@ import { loadMcpConfig, getActiveServers } from "../mcp/config.ts";
 import { McpConnectionManager } from "../mcp/client.ts";
 import { wrapToolsWithHarness } from "./harness/tool-execution.ts";
 import { harnessRuntime } from "./harness/singleton.ts";
+import type { HarnessRunScope } from "./harness/types.ts";
 import {
   parallelManager,
   setParallelToolsDebugLogger,
@@ -349,10 +350,11 @@ export function bindHandleToRun(
  */
 export async function promptAgent(
   handle: AgentHandle,
+  runScope: HarnessRunScope,
   text: string,
   attachments: SelectedFile[],
 ): Promise<void> {
-  handle.agent.state.systemPrompt = await buildSystemPrompt({
+  const systemPrompt = await buildSystemPrompt({
     workspacePath: handle.workspacePath,
     sessionId: handle.sessionId,
     latestUserText: text,
@@ -360,13 +362,17 @@ export async function promptAgent(
     thinkingLevel: handle.thinkingLevel,
     promptRuntime: handle.promptRuntime,
   });
-  await handle.agent.prompt(
-    await buildUserPromptMessage(
-      text,
-      attachments,
-      handle.agent.state.model.input.includes("image"),
-    ),
+  const userMessage = await buildUserPromptMessage(
+    text,
+    attachments,
+    handle.agent.state.model.input.includes("image"),
   );
+  harnessRuntime.assertRunActive(runScope);
+  if (handle.activeRunId !== runScope.runId) {
+    throw new Error("Agent 已与本轮运行解绑。");
+  }
+  handle.agent.state.systemPrompt = systemPrompt;
+  await handle.agent.prompt(userMessage);
 }
 
 /**

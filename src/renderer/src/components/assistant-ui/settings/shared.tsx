@@ -5,6 +5,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { Badge } from "@renderer/components/assistant-ui/badge";
 import { Select } from "@renderer/components/assistant-ui/select";
+import { surfaceVariants } from "@renderer/components/assistant-ui/surface";
 import { cn } from "@renderer/lib/utils";
 
 export function SettingsCard({
@@ -25,27 +26,22 @@ export function SettingsCard({
   headerAction?: ReactNode;
 }) {
   return (
-    <section
-      className={cn(
-        "chela-panel-surface overflow-hidden rounded-[var(--radius-panel)]",
-        className,
-      )}
-    >
+    <section className={cn(surfaceVariants({ tone: "panel" }), "overflow-hidden bg-shell-panel-muted", className)}>
       {title || description ? (
         <div
           className={cn(
-            "flex items-start justify-between gap-3 px-6 py-5",
+            "flex flex-wrap items-start justify-between gap-3 px-4 py-4 sm:px-5",
             headerClassName,
           )}
         >
           <div className="min-w-0 flex-1">
             {title ? (
-              <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-foreground">
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">
                 {title}
               </h2>
             ) : null}
             {description ? (
-              <p className="mt-1.5 text-[12px] leading-6 text-muted-foreground">
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                 {description}
               </p>
             ) : null}
@@ -70,7 +66,7 @@ export function SettingsBlock({
   children: ReactNode;
 }) {
   return (
-    <div className="px-6 py-4">
+    <div className="px-4 py-4 sm:px-5">
       <div className="mb-3">
         <p className="text-[13px] font-semibold tracking-[-0.01em] text-foreground">{label}</p>
         {hint ? (
@@ -92,7 +88,7 @@ export function SettingsRow({
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-4 border-t border-[color:var(--color-control-border)] px-6 py-4 first:border-t-0 md:flex-row md:items-start md:justify-between md:gap-8">
+    <div className="flex flex-col gap-3 border-t border-[color:var(--color-control-border)] px-4 py-3.5 first:border-t-0 sm:px-5 md:flex-row md:items-center md:justify-between md:gap-6">
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-medium tracking-[-0.01em] text-foreground">{label}</p>
         {hint ? (
@@ -116,7 +112,7 @@ export function FieldInput(
   return (
     <input
       {...rest}
-      className={`h-9 w-full rounded-[var(--radius-control)] border-none bg-[color:var(--color-control-bg)] px-3 text-[13px] text-foreground shadow-[var(--color-control-shadow)] ring-1 ring-[color:var(--color-control-border)] transition-[background-color,color,box-shadow] outline-none placeholder:text-[color:var(--color-text-tertiary)] hover:bg-[color:var(--color-control-bg-hover)] focus-visible:bg-[color:var(--color-control-bg-active)] focus-visible:ring-2 focus-visible:ring-[color:var(--color-control-focus-ring)] ${mono ? "font-mono text-[12px]" : ""} ${className}`}
+      className={cn("chela-field w-full text-sm placeholder:text-muted-foreground", mono && "font-mono", className)}
     />
   );
 }
@@ -141,7 +137,7 @@ export function FieldSelect(props: {
         textValue: option.label,
         disabled: option.disabled,
       }))}
-      className={`h-9 w-full justify-between px-3 text-[13px] ${className}`}
+      className={cn("w-full", className)}
     />
   );
 }

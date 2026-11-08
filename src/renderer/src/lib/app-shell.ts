@@ -16,7 +16,6 @@ export const MIN_RIGHT_PANEL_WIDTH = 480;
 export const FALLBACK_RIGHT_PANEL_WIDTH = 920;
 export const MIN_THREAD_CONTENT_WIDTH = 600;
 export const RIGHT_PANEL_GAP_PX = 8;
-export const ROOT_UI_THEME_DATASET = "theme";
 export const SETTINGS_ROUTE_PREFIX = "/settings";
 
 const MIN_SIDEBAR_SIZE = 4;
@@ -156,27 +155,6 @@ export function clearStoredStrings(keys: string[]) {
 
 export function getProjectNameFromPath(projectPath: string) {
   return projectPath.split(/[\\/]/).filter(Boolean).at(-1) ?? projectPath;
-}
-
-export function applyCustomThemeVariables(
-  root: HTMLElement,
-  previousKeys: string[],
-  nextTheme: Settings["customTheme"],
-) {
-  previousKeys.forEach((key) => root.style.removeProperty(key));
-
-  const appliedKeys: string[] = [];
-  if (!nextTheme) {
-    return appliedKeys;
-  }
-
-  Object.entries(nextTheme).forEach(([rawKey, value]) => {
-    const key = rawKey.startsWith("--") ? rawKey : `--${rawKey}`;
-    root.style.setProperty(key, value ?? null);
-    appliedKeys.push(key);
-  });
-
-  return appliedKeys;
 }
 
 export function mergeSettingsState(

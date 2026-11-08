@@ -381,8 +381,8 @@ export function createMemoryPipeline(deps: MemoryPipelineDeps) {
     }
     const limit = input.limit ?? 8;
     const [vectorResult, memdirResult] = await Promise.allSettled([
-      deps.searchVector(rewrittenQuery, limit),
-      Promise.resolve(deps.searchMemdir(rewrittenQuery, limit)),
+      Promise.resolve().then(() => deps.searchVector(rewrittenQuery, limit)),
+      Promise.resolve().then(() => deps.searchMemdir(rewrittenQuery, limit)),
     ]);
     const vectorResults =
       vectorResult.status === "fulfilled" ? vectorResult.value : [];
@@ -453,41 +453,31 @@ export function createMemoryPipeline(deps: MemoryPipelineDeps) {
     input: MemoryRefreshInput,
   ): Promise<MemoryRefreshReport> {
     const now = deps.now ?? (() => new Date().toISOString());
+    const report: MemoryRefreshReport = {
+      ...input,
+      status: "completed",
+      extractedCount: 0,
+      acceptedCount: 0,
+      savedCount: 0,
+      duplicateCount: 0,
+      mergedCount: 0,
+      conflictCount: 0,
+      vectorWrittenCount: 0,
+      vectorFailedCount: 0,
+      completedAt: now(),
+    };
     if (!deps.extractCandidates) {
-      const report: MemoryRefreshReport = {
-        ...input,
-        status: "skipped",
-        extractedCount: 0,
-        acceptedCount: 0,
-        savedCount: 0,
-        duplicateCount: 0,
-        mergedCount: 0,
-        conflictCount: 0,
-        vectorWrittenCount: 0,
-        vectorFailedCount: 0,
-        completedAt: now(),
-        failureReason: "extractor-missing",
-      };
+      report.status = "skipped";
+      report.failureReason = "extractor-missing";
       deps.appendRefreshEvent?.(report);
       return report;
     }
 
     try {
       const extracted = await deps.extractCandidates(input);
+      report.extractedCount = extracted.length;
       const accepted = filterMemoryCandidates(extracted);
-      const report: MemoryRefreshReport = {
-        ...input,
-        status: "completed",
-        extractedCount: extracted.length,
-        acceptedCount: accepted.length,
-        savedCount: 0,
-        duplicateCount: 0,
-        mergedCount: 0,
-        conflictCount: 0,
-        vectorWrittenCount: 0,
-        vectorFailedCount: 0,
-        completedAt: now(),
-      };
+      report.acceptedCount = accepted.length;
 
       for (const candidate of accepted) {
         const result = await saveCandidate(
@@ -520,27 +510,13 @@ export function createMemoryPipeline(deps: MemoryPipelineDeps) {
           report.failureReason = result.vector.error;
         }
       }
-
-      deps.appendRefreshEvent?.(report);
-      return report;
     } catch (error) {
-      const report: MemoryRefreshReport = {
-        ...input,
-        status: "failed",
-        extractedCount: 0,
-        acceptedCount: 0,
-        savedCount: 0,
-        duplicateCount: 0,
-        mergedCount: 0,
-        conflictCount: 0,
-        vectorWrittenCount: 0,
-        vectorFailedCount: 0,
-        completedAt: now(),
-        failureReason: error instanceof Error ? error.message : String(error),
-      };
-      deps.appendRefreshEvent?.(report);
-      return report;
+      report.status = "failed";
+      report.failureReason = error instanceof Error ? error.message : String(error);
     }
+    report.completedAt = now();
+    deps.appendRefreshEvent?.(report);
+    return report;
   }
 
   return {

@@ -28,15 +28,11 @@ function atomicWrite(filePath: string, data: string): void {
 
 export function loadPersistedHarnessRuns(): HarnessRunSnapshot[] {
   const filePath = getHarnessRunsPath();
-  if (!existsSync(filePath)) {
-    return [];
-  }
-
   try {
     const raw = readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(raw) as Partial<PersistedHarnessRuns>;
-    return Array.isArray(parsed.runs)
-      ? parsed.runs.map((run) => ({
+    if (!parsed || !Array.isArray(parsed.runs)) throw new Error("运行记录格式无效。");
+    return parsed.runs.map((run) => ({
           ...run,
           ownerId: typeof run.ownerId === "string" && run.ownerId.trim()
             ? run.ownerId
@@ -75,10 +71,10 @@ export function loadPersistedHarnessRuns(): HarnessRunSnapshot[] {
                     : undefined,
               }
             : undefined,
-        }))
-      : [];
-  } catch {
-    return [];
+        }));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw new Error("无法读取运行恢复记录，已保留原文件。", { cause: error });
   }
 }
 

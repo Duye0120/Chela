@@ -1,10 +1,20 @@
 import { Button } from "@renderer/components/assistant-ui/button";
-import { ChelaAsciiBoot } from "@renderer/components/assistant-ui/chela-ascii-boot";
 
 export function AppBootingScreen() {
   return (
-    <main className="chela-ascii-boot-screen">
-      <ChelaAsciiBoot />
+    <main
+      className="grid h-screen place-items-center bg-shell-window text-foreground"
+      data-app-booting
+    >
+      <div className="space-y-2 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">Chela</h1>
+        <p
+          className="text-sm text-[color:var(--color-text-secondary)] motion-safe:animate-pulse"
+          role="status"
+        >
+          正在启动…
+        </p>
+      </div>
     </main>
   );
 }

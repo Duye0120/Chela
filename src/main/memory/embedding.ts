@@ -28,6 +28,8 @@ type PendingRequest<T> = {
   reject: (reason?: unknown) => void;
 };
 
+const MEMORY_WORKER_IDLE_TIMEOUT_MS = 60_000;
+
 function isReadyMessage(message: MemoryWorkerResponse): message is ReadyMessage {
   return "type" in message && (message as { type?: unknown }).type === "ready";
 }
@@ -39,6 +41,8 @@ function isBootstrapErrorMessage(message: MemoryWorkerResponse): message is Erro
 export class MemoryWorkerClient {
   private worker: Worker | null = null;
   private readyPromise: Promise<void> | null = null;
+  private stoppingWorker: Promise<number | void> | null = null;
+  private idleTimer: ReturnType<typeof setTimeout> | undefined;
   private state: WorkerState = "idle";
   private readonly pending = new Map<string, PendingRequest<unknown>>();
 
@@ -122,6 +126,8 @@ export class MemoryWorkerClient {
   }
 
   private async ensureWorker(): Promise<Worker> {
+    if (this.stoppingWorker) await this.stoppingWorker;
+
     if (this.worker && this.readyPromise) {
       await this.readyPromise;
       return this.worker;
@@ -132,7 +138,7 @@ export class MemoryWorkerClient {
     // `electron.vite.config.ts`); resolving relative to the current bundle URL
     // so the worker thread does NOT load the main bundle (which imports
     // `electron` and would crash inside `worker_threads`).
-    const workerUrl = new URL("./embedding-worker.ts", import.meta.url);
+    const workerUrl = new URL("./embedding-worker.js", import.meta.url);
     const worker = new Worker(workerUrl, {
       workerData: this.initData,
       stderr: true,
@@ -179,7 +185,7 @@ export class MemoryWorkerClient {
         reject(error);
       });
       worker.once("exit", (code) => {
-        if (code !== 0) {
+        if (code !== 0 && !this.stoppingWorker) {
           worker.off("message", handleMessage);
           this.state = "error";
           reject(createMemoryWorkerExitError(code, bootstrapError));
@@ -210,8 +216,6 @@ export class MemoryWorkerClient {
         return;
       }
 
-      this.pending.delete(message.id);
-
       if (message.ok) {
         pending.resolve(message.result);
         return;
@@ -231,7 +235,7 @@ export class MemoryWorkerClient {
     });
 
     worker.on("exit", (code) => {
-      if (code !== 0) {
+      if (code !== 0 && !this.stoppingWorker) {
         this.state = "error";
         this.rejectPending(createMemoryWorkerExitError(code, bootstrapError));
       } else if (this.state !== "error") {
@@ -247,15 +251,29 @@ export class MemoryWorkerClient {
   }
 
   private async call<T>(request: MemoryWorkerRequest): Promise<T> {
+    clearTimeout(this.idleTimer);
     const worker = await this.ensureWorker();
 
-    return new Promise<T>((resolve, reject) => {
-      this.pending.set(request.id, {
-        resolve: resolve as PendingRequest<unknown>["resolve"],
-        reject,
+    try {
+      return await new Promise<T>((resolve, reject) => {
+        this.pending.set(request.id, {
+          resolve: resolve as PendingRequest<unknown>["resolve"],
+          reject,
+        });
+        worker.postMessage(request);
       });
-      worker.postMessage(request);
-    });
+    } finally {
+      this.pending.delete(request.id);
+      if (this.pending.size === 0 && this.worker === worker && this.state === "ready") {
+        clearTimeout(this.idleTimer);
+        this.idleTimer = setTimeout(() => {
+          if (this.worker !== worker || this.pending.size > 0) return;
+          this.stoppingWorker = worker.terminate().catch((error) => {
+            appLogger.warn({ scope: "memory.worker", message: "Memory worker idle shutdown failed", error });
+          }).finally(() => { this.stoppingWorker = null; });
+        }, MEMORY_WORKER_IDLE_TIMEOUT_MS).unref();
+      }
+    }
   }
 
   private rejectPending(error: unknown): void {

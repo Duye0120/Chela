@@ -1596,6 +1596,31 @@ function SessionRuntime({
     initialMessages,
   });
 
+  useEffect(() => {
+    let disposed = false;
+    const unsubscribe = desktopApi.agent.onEvent((event) => {
+      if (event.sessionId !== session.id || activeRunScopeRef.current?.runId === event.runId) return;
+      if (event.type === "confirmation_request" || event.type === "run_state_changed") {
+        scheduleApprovalRefresh(session.id);
+      }
+      if (event.type !== "agent_end" && event.type !== "agent_error") return;
+      scheduleApprovalRefresh(session.id);
+      // Replace only the transcript. Resetting the session runtime would also lose the composer draft.
+      void desktopApi.sessions.load(session.id).then((updatedSession) => {
+        if (disposed || !updatedSession || runtime.thread.getState().isRunning) return;
+        runtime.thread.reset(updatedSession.messages.flatMap((message) => {
+          const threadMessage = toThreadMessage(message);
+          return threadMessage ? [threadMessage] : [];
+        }));
+        return latestReloadSessionRef.current(session.id);
+      }).catch((error: unknown) => console.warn("同步外部对话结果失败", error));
+    });
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [desktopApi, runtime, scheduleApprovalRefresh, session.id]);
+
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <Thread

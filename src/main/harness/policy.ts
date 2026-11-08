@@ -8,11 +8,13 @@ import {
   isWritePathForbidden,
 } from "../security.ts";
 import type { HarnessPolicyEvaluation, HarnessRiskLevel } from "./types.ts";
+import { normalizePlannerAddArgs } from "../tools/planner.ts";
 
 type ToolPolicyContext = {
   workspacePath: string;
   toolName: string;
   args: Record<string, unknown>;
+  plannerAllowed?: boolean;
 };
 
 const MCP_NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,96}$/;
@@ -64,6 +66,7 @@ function getRiskLevel(toolName: string): HarnessRiskLevel {
     toolName === "file_edit" ||
     toolName === "edit_file" ||
     toolName === "file_write" ||
+    toolName === "planner_add_todo" ||
     toolName === "shell_exec"
   ) {
     return "guarded";
@@ -82,8 +85,27 @@ export function evaluateToolPolicy({
   workspacePath,
   toolName,
   args,
+  plannerAllowed,
 }: ToolPolicyContext): HarnessPolicyEvaluation {
   const riskLevel = getRiskLevel(toolName);
+
+  if (toolName === "planner_today" || toolName === "planner_add_todo") {
+    if (!plannerAllowed) {
+      return { toolName, riskLevel, decision: { type: "deny", reason: "个人计划只允许在桌面助手的前台聊天中使用。" } };
+    }
+    if (toolName === "planner_today") {
+      if (Object.keys(args).length) {
+        return { toolName, riskLevel, decision: { type: "deny", reason: "查看今日安排不需要参数。" } };
+      }
+      return { toolName, riskLevel, decision: { type: "allow" } };
+    }
+    try {
+      const normalizedArgs = normalizePlannerAddArgs(args);
+      return { toolName, riskLevel, decision: { type: "confirm", reason: "新增事项会写入本机个人看板。" }, normalizedArgs };
+    } catch (error) {
+      return { toolName, riskLevel, decision: { type: "deny", reason: error instanceof Error ? error.message : "新增待办参数无效。" } };
+    }
+  }
 
   if (toolName === "shell_exec") {
     const command = typeof args.command === "string" ? args.command : "";

@@ -10,8 +10,7 @@ import type {
 import { appendLine } from "./io.ts";
 import {
   readMeta,
-  updateIndexWithMeta,
-  updateMeta,
+  reconcileTranscriptProjection,
   writeMeta,
   type PersistedSessionMeta,
 } from "./meta.ts";
@@ -45,15 +44,23 @@ export function appendTranscriptEvent(
       throw new Error(`会话不存在：${sessionId}`);
     }
 
-    const lastTranscriptSeq = loadTranscript(sessionId).at(-1)?.seq ?? 0;
+    const transcript = loadTranscript(sessionId);
+    const lastTranscriptSeq = transcript.at(-1)?.seq ?? 0;
     const nextSeq = Math.max(meta.transcriptSeq, lastTranscriptSeq) + 1;
     const event = buildEvent(nextSeq, meta);
 
+    if (event.type === "assistant_message" || event.type === "run_finished") {
+      const committed = transcript.find(
+        (record) => record.type === event.type && record.runId === event.runId &&
+          (event.type === "run_finished" ||
+            (record.type === "assistant_message" && record.message.id === event.message.id)),
+      );
+      if (committed) return committed;
+    }
+
     appendLine(getTranscriptPath(sessionId), JSON.stringify(event));
-    meta.transcriptSeq = nextSeq;
-    meta.updatedAt = event.timestamp;
-    writeMeta(meta);
-    updateIndexWithMeta(meta);
+    transcript.push(event);
+    reconcileTranscriptProjection(meta, transcript);
     return event;
   });
 }
@@ -120,7 +127,7 @@ export function appendRunStartedEvent(input: {
   thinkingLevel: string;
   metadata?: Record<string, unknown>;
 }): SessionTranscriptEvent {
-  const event = appendTranscriptEvent(input.sessionId, (nextSeq) => ({
+  return appendTranscriptEvent(input.sessionId, (nextSeq) => ({
     seq: nextSeq,
     sessionId: input.sessionId,
     runId: input.runId,
@@ -132,14 +139,6 @@ export function appendRunStartedEvent(input: {
     thinkingLevel: input.thinkingLevel,
     metadata: input.metadata,
   }));
-
-  updateMeta(input.sessionId, (meta) => {
-    meta.lastRunId = input.runId;
-    meta.lastModelEntryId = input.modelEntryId;
-    meta.lastRunState = "running";
-  });
-
-  return event;
 }
 
 export function appendRunStateChangedEvent(input: {
@@ -149,7 +148,7 @@ export function appendRunStateChangedEvent(input: {
   reason?: string;
   currentStepId?: string;
 }): SessionTranscriptEvent {
-  const event = appendTranscriptEvent(input.sessionId, (nextSeq) => ({
+  return appendTranscriptEvent(input.sessionId, (nextSeq) => ({
     seq: nextSeq,
     sessionId: input.sessionId,
     runId: input.runId,
@@ -159,16 +158,6 @@ export function appendRunStateChangedEvent(input: {
     reason: input.reason,
     currentStepId: input.currentStepId,
   }));
-
-  updateMeta(input.sessionId, (meta) => {
-    meta.lastRunId = input.runId;
-    meta.lastRunState =
-      input.state === "awaiting_confirmation"
-        ? "awaiting_confirmation"
-        : "running";
-  });
-
-  return event;
 }
 
 export function appendToolStartedEvent(input: {
@@ -319,7 +308,7 @@ export function appendRunFinishedEvent(input: {
   reason?: string;
   metadata?: Record<string, unknown>;
 }): SessionTranscriptEvent {
-  const event = appendTranscriptEvent(input.sessionId, (nextSeq) => ({
+  return appendTranscriptEvent(input.sessionId, (nextSeq) => ({
     seq: nextSeq,
     sessionId: input.sessionId,
     runId: input.runId,
@@ -330,18 +319,6 @@ export function appendRunFinishedEvent(input: {
     reason: input.reason,
     metadata: input.metadata,
   }));
-
-  updateMeta(input.sessionId, (meta) => {
-    meta.lastRunId = input.runId;
-    meta.lastRunState =
-      input.finalState === "completed"
-        ? "completed"
-        : input.finalState === "aborted"
-          ? "cancelled"
-          : "error";
-  });
-
-  return event;
 }
 
 export function appendRunRecoveryRequestedEvent(input: {

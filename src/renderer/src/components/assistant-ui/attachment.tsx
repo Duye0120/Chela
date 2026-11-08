@@ -431,7 +431,7 @@ export const DesktopComposerAddAttachment: FC<{
       type="button"
       onClick={onAttachFiles}
       disabled={isPickingFiles}
-      className="h-8 w-8 rounded-[var(--radius-shell)] bg-transparent p-0 text-[color:var(--color-text-secondary)] shadow-none ring-0 transition hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+      size="icon-sm"
       aria-label="Add Attachment"
     >
       <PaperclipIcon className="size-4" />

@@ -16,12 +16,14 @@ import {
   SwatchIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
-import { Loader2, SquarePen } from "lucide-react";
+import { Bot, CalendarDays, Clipboard, Kanban, Loader2, MessageSquare, SquarePen, Terminal } from "lucide-react";
 import type {
   ChatSessionSummary,
   SessionGroup,
 } from "@shared/contracts";
 
+import type { WorkspacePage } from "@shared/ipc";
+import { Button } from "@renderer/components/assistant-ui/button";
 import { formatRelativeTime } from "@renderer/lib/session";
 import type { SettingsSection } from "@renderer/components/assistant-ui/settings/types";
 import {
@@ -38,6 +40,11 @@ type SidebarProps = {
   runningSessionIds: string[];
   onNewSession: () => void;
   onCreateProject: () => void;
+  activeWorkspacePage: WorkspacePage | null;
+  onOpenWorkspacePage: (page: WorkspacePage) => void;
+  onOpenAssistant: () => void;
+  onShowCompanion: () => Promise<void>;
+  assistantActive: boolean;
   onCreateProjectSession: (projectId: string) => void;
   onSelectProject: (projectId: string) => void;
   onSelectSession: (sessionId: string) => void;
@@ -86,6 +93,12 @@ const settingsItems: {
     { id: "system", label: "系统", icon: Cog6ToothIcon },
   ];
 
+const workspaceLinks = [
+  { page: "board", label: "看板", icon: Kanban },
+  { page: "calendar", label: "日历", icon: CalendarDays },
+  { page: "terminal", label: "终端", icon: Terminal },
+] as const;
+
 function SidebarFooterAction({
   icon: Icon,
   label,
@@ -96,14 +109,10 @@ function SidebarFooterAction({
   onClick?: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="chela-list-item flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2 text-[12px] text-[color:var(--chela-text-secondary)] transition hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
-    >
-      <Icon className="h-4 w-4 shrink-0" />
+    <Button type="button" variant="ghost" size="sm" onClick={onClick} className="w-full justify-start gap-2">
+      <Icon />
       <span className="truncate">{label}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -115,6 +124,11 @@ function SidebarImpl({
   runningSessionIds,
   onNewSession,
   onCreateProject,
+  activeWorkspacePage,
+  onOpenWorkspacePage,
+  onOpenAssistant,
+  onShowCompanion,
+  assistantActive,
   onCreateProjectSession,
   onSelectProject,
   onSelectSession,
@@ -133,6 +147,7 @@ function SidebarImpl({
 }: SidebarProps) {
   const isSettings = viewMode === "settings";
   const [showArchived, setShowArchived] = useState(false);
+  const [companionError, setCompanionError] = useState(false);
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(
     new Set(),
   );
@@ -343,14 +358,14 @@ function SidebarImpl({
               : null,
           ].filter(Boolean) as SidebarContextMenuAction[])
         }
-        className={`group relative flex items-center gap-2 rounded-[var(--radius-shell)] px-2 py-1.5 transition ${active
-            ? "bg-[color:var(--color-control-selected-bg)]"
-            : "hover:bg-[color:var(--color-control-bg-hover)]"
+        className={`chela-list-item group relative flex min-h-[var(--control-size-sm)] items-center gap-1.5 px-1.5 ${active
+            ? "chela-list-item-active"
+            : ""
           }`}
       >
         {/* 左侧固定占位：running 显示 spinner；否则 pin 按钮（pinned 常显，未 pinned 时 hover 显示） */}
         {isRunning ? (
-          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+          <span className="flex w-6 shrink-0 items-center justify-center">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--chela-accent)]" />
           </span>
         ) : !archived ? (
@@ -360,16 +375,16 @@ function SidebarImpl({
               e.stopPropagation();
               onToggleSessionPinned(summary.id, !summary.pinned);
             }}
-            className={`flex h-3.5 w-3.5 shrink-0 cursor-pointer items-center justify-center rounded transition ${summary.pinned
+            className={`flex size-6 shrink-0 items-center justify-center rounded-[var(--radius-control)] transition-colors ${summary.pinned
                 ? "text-[color:var(--chela-text-tertiary)]"
-                : "text-transparent group-hover:text-[color:var(--chela-text-tertiary)]"
+                : "text-transparent group-hover:text-[color:var(--chela-text-tertiary)] focus-visible:text-[color:var(--chela-text-tertiary)]"
               }`}
             aria-label={summary.pinned ? "取消置顶" : "置顶聊天"}
           >
             <MapPinIcon className="h-3.5 w-3.5" />
           </button>
         ) : (
-          <span className="h-3.5 w-3.5 shrink-0" />
+          <span className="w-6 shrink-0" />
         )}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -382,8 +397,9 @@ function SidebarImpl({
                   setShowArchived(false);
                 }
               }}
-              className="min-w-0 flex-1 cursor-pointer text-left"
+              className="min-w-0 flex-1 self-stretch rounded-[var(--radius-control)] text-left"
               aria-label={summary.title}
+              aria-current={active ? "page" : undefined}
             >
               <span
                 className={`block min-w-0 truncate text-[12px] ${active
@@ -481,8 +497,8 @@ function SidebarImpl({
 
   const settingsSidebar = (
     <aside className="flex h-full flex-col bg-transparent text-[13px] text-[color:var(--chela-text-primary)] min-w-[200px]">
-      <div className="px-4 pb-2 pt-4">
-        <p className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--chela-text-tertiary)]">
+      <div className="px-4 pb-3 pt-3">
+        <p className="text-xs font-medium text-[color:var(--chela-text-secondary)]">
           设置
         </p>
       </div>
@@ -492,18 +508,18 @@ function SidebarImpl({
           {settingsItems.map(({ id, label, icon: Icon }) => {
             const active = activeSettingsSection === id;
             return (
-              <button
+              <Button
                 key={id}
                 type="button"
+                variant="ghost"
+                size="sm"
+                aria-current={active ? "page" : undefined}
                 onClick={() => onSelectSettingsSection?.(id)}
-                className={`chela-list-item flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-shell)] px-3 py-2 text-left text-[12px] transition ${active
-                    ? "chela-list-item-active bg-[color:var(--color-control-bg-hover)] font-medium"
-                    : "text-[color:var(--chela-text-secondary)] hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
-                  }`}
+                className="w-full justify-start gap-2 aria-[current=page]:bg-selection-bg aria-[current=page]:text-selection-fg"
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                <Icon />
                 <span className="truncate">{label}</span>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -522,6 +538,53 @@ function SidebarImpl({
   const threadsSidebar = (
     <aside className="flex h-full min-h-0 flex-col bg-transparent text-[13px] text-[color:var(--chela-text-primary)] min-w-[200px]">
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2 pt-3">
+        <nav className="mb-3 grid gap-1" aria-label="工作区导航">
+          {workspaceLinks.map(({ page, label, icon: Icon }) => (
+            <Button
+              key={page}
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start gap-2 aria-[current=page]:bg-selection-bg aria-[current=page]:text-selection-fg"
+              aria-current={activeWorkspacePage === page ? "page" : undefined}
+              onClick={() => onOpenWorkspacePage(page)}
+            >
+              <Icon />{label}
+            </Button>
+          ))}
+        </nav>
+        <nav className="mb-4 grid gap-1" aria-label="助手与随手">
+          <Button
+            type="button" variant="ghost" size="sm"
+            className="w-full justify-start gap-2 aria-[current=page]:bg-selection-bg aria-[current=page]:text-selection-fg"
+            aria-current={assistantActive ? "page" : undefined}
+            onClick={onOpenAssistant}
+          >
+            <MessageSquare />助手
+          </Button>
+          <Button
+            type="button" variant="ghost" size="sm"
+            className="w-full justify-start gap-2"
+            onClick={() => {
+              setCompanionError(false);
+              void onShowCompanion().catch((error: unknown) => {
+                console.error("打开桌面助手失败", error);
+                setCompanionError(true);
+              });
+            }}
+          >
+            <Bot />桌面助手
+          </Button>
+          {companionError && <p role="alert" className="px-2 text-xs text-[color:var(--chela-status-error-text)]">暂时无法打开桌面助手，请稍后重试。</p>}
+          <Button
+            type="button" variant="ghost" size="sm"
+            className="w-full justify-start gap-2 aria-[current=page]:bg-selection-bg aria-[current=page]:text-selection-fg"
+            aria-current={activeWorkspacePage === "shelf" ? "page" : undefined}
+            onClick={() => onOpenWorkspacePage("shelf")}
+          >
+            <Clipboard />随手
+          </Button>
+        </nav>
         {showArchived ? (
           <div className="space-y-3">
             <button
@@ -535,7 +598,7 @@ function SidebarImpl({
 
             <section className="space-y-2">
               <div className="px-1">
-                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[color:var(--chela-text-tertiary)]">
+                <p className="text-xs font-medium text-[color:var(--chela-text-secondary)]">
                   已归档聊天
                 </p>
               </div>
@@ -554,36 +617,25 @@ function SidebarImpl({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex gap-1">
-              <button
-                type="button"
-                onClick={onNewSession}
-                className="chela-list-item flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[var(--radius-shell)] px-3 py-2 text-left text-[12px] font-medium text-[color:var(--chela-text-secondary)] transition hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
-              >
-                <SquarePen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
-                <span className="whitespace-nowrap">新建聊天</span>
-              </button>
-              <button
-                type="button"
-                onClick={onCreateProject}
-                className="chela-list-item flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[var(--radius-shell)] px-3 py-2 text-left text-[12px] font-medium text-[color:var(--chela-text-secondary)] transition hover:bg-[color:var(--color-control-bg-hover)] hover:text-[color:var(--chela-text-primary)]"
-              >
-                <FolderIcon className="h-3.5 w-3.5 shrink-0" />
-                <span className="whitespace-nowrap">新建项目</span>
-              </button>
-            </div>
-
             <section className="space-y-2">
-              <div className="px-1">
-                <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[color:var(--chela-text-tertiary)]">
-                  项目
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-medium text-[color:var(--chela-text-secondary)]">
+                  工作区
                 </span>
+                <div className="flex gap-0.5">
+                  <Button type="button" variant="ghost" size="icon-sm" title="新建聊天" aria-label="新建聊天" onClick={onNewSession}>
+                    <SquarePen />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon-sm" title="新建工作区" aria-label="新建工作区" onClick={onCreateProject}>
+                    <FolderIcon />
+                  </Button>
+                </div>
               </div>
 
               <div className="space-y-1">
                 {groups.length === 0 ? (
                   <p className="px-2 py-2 text-[11px] text-[color:var(--chela-text-tertiary)]">
-                    还没有项目，先选择一个文件夹。
+                    还没有工作区，先选择一个文件夹。
                   </p>
                 ) : (
                   groups.map((group) => {
@@ -704,7 +756,7 @@ function SidebarImpl({
 
             <section className="space-y-2">
               <div className="px-1">
-                <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[color:var(--chela-text-tertiary)]">
+                <span className="text-xs font-medium text-[color:var(--chela-text-secondary)]">
                   聊天
                 </span>
               </div>
@@ -737,6 +789,7 @@ function SidebarImpl({
   return (
     <div className="relative h-full overflow-hidden">
       <div
+        inert={!isSettings}
         className={`absolute inset-0 will-change-[opacity,transform] transition-[opacity,transform] duration-200 ease-out ${isSettings
             ? "pointer-events-auto translate-x-0 opacity-100"
             : "pointer-events-none -translate-x-2 opacity-0"
@@ -745,6 +798,7 @@ function SidebarImpl({
         {settingsSidebar}
       </div>
       <div
+        inert={isSettings}
         className={`absolute inset-0 will-change-[opacity,transform] transition-[opacity,transform] duration-200 ease-out ${!isSettings
             ? "pointer-events-auto translate-x-0 opacity-100"
             : "pointer-events-none translate-x-2 opacity-0"

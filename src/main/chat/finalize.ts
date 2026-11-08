@@ -1,4 +1,4 @@
-import { completeRun, destroyAgent } from "../agent.ts";
+import { completeRun, destroyAgent, getHandle } from "../agent.ts";
 import { PRIMARY_AGENT_OWNER } from "../agent-owners.ts";
 import { getGitDiffSnapshot } from "../git.ts";
 import { HarnessRunCancelledError } from "../harness/runtime.ts";
@@ -50,25 +50,12 @@ async function maybeAutoRenameSessionTitle(
     return;
   }
 
-  try {
-    const title = await WorkerService.generateSessionTitle({
-      userText,
-      assistantText: normalizedAssistantText,
-    });
-    if (!title || title === meta.title) {
-      return;
-    }
-
+  const title = await WorkerService.generateSessionTitle({
+    userText,
+    assistantText: normalizedAssistantText,
+  });
+  if (title && title !== meta.title) {
     renamePersistedSession(sessionId, title, { manual: false });
-  } catch (error) {
-    appLogger.warn({
-      scope: "chat.send",
-      message: "自动标题生成失败",
-      data: {
-        sessionId,
-      },
-      error,
-    });
   }
 }
 
@@ -136,6 +123,7 @@ export async function finalizeCompletedChatRun(
     undefined,
   );
   const runChangeSummary = await resolveRunChangeSummary(context, assistantMessage);
+  harnessRuntime.assertRunActive(context.runScope);
   attachRunChangeSummary(assistantMessage, runChangeSummary);
   attachSendOrigin(context, assistantMessage);
   if (assistantMessage) {
@@ -143,10 +131,6 @@ export async function finalizeCompletedChatRun(
       sessionId: context.input.sessionId,
       runId: context.input.runId,
       message: assistantMessage,
-    });
-    bus.emit(BUS_EVENTS.MESSAGE_ASSISTANT, {
-      sessionId: context.input.sessionId,
-      runId: context.input.runId,
     });
   }
   appendRunFinishedEvent({
@@ -163,140 +147,116 @@ export async function finalizeCompletedChatRun(
       ...(runChangeSummary ? { runChangeSummary } : {}),
     },
   });
-  harnessRuntime.finishRun(context.runScope, "completed");
-  scheduleAutoMemorySummarize({
-    sessionId: context.input.sessionId,
-    sourceRunId: context.input.runId,
-  });
-  indexSessionSearchDocument(context.input.sessionId);
-  if (assistantMessage?.content) {
-    await maybeAutoRenameSessionTitle(
-      context.input.sessionId,
-      assistantMessage.content,
-    );
-    indexSessionSearchDocument(context.input.sessionId);
+
+  // The transcript has committed completion. A follow-up failure cannot change its state.
+  const { sessionId, runId } = context.input;
+  for (const [message, task] of [
+    ["通知会话回复失败", () => assistantMessage && bus.emit(BUS_EVENTS.MESSAGE_ASSISTANT, { sessionId, runId })],
+    ["清理已完成的运行失败", () => harnessRuntime.finishRun(context.runScope, "completed")],
+    ["自动记忆调度失败", () => scheduleAutoMemorySummarize({ sessionId, sourceRunId: runId })],
+    ["更新会话搜索索引失败", () => indexSessionSearchDocument(sessionId)],
+    ["自动标题生成失败", () => assistantMessage?.content && maybeAutoRenameSessionTitle(sessionId, assistantMessage.content)],
+    ["记录完成日志失败", () => appLogger.info({ scope: "chat.send", message: "消息发送完成", data: { sessionId, runId } })],
+    ["通知渲染进程完成失败", () => {
+      context.adapter.queueTerminalEnd(runChangeSummary);
+      context.adapter.flushTerminalEvent({ type: "agent_end", runChangeSummary });
+    }],
+  ] as const) {
+    try {
+      await task();
+    } catch (error) {
+      try {
+        appLogger.warn({ scope: "chat.send", message, data: { sessionId, runId }, error });
+      } catch (loggingError) {
+        console.warn(message, { sessionId, runId, error, loggingError });
+      }
+    }
   }
-  appLogger.info({
-    scope: "chat.send",
-    message: "消息发送完成",
-    data: {
-      sessionId: context.input.sessionId,
-      runId: context.input.runId,
-    },
-  });
-  context.adapter.queueTerminalEnd(runChangeSummary);
-  context.adapter.flushTerminalEvent({
-    type: "agent_end",
-    runChangeSummary,
-  });
 }
 
 export async function finalizeFailedChatRun(
   context: ChatRunContext,
   err: unknown,
 ): Promise<void> {
-  if (
-    err instanceof HarnessRunCancelledError ||
-    harnessRuntime.isCancelRequested(context.runScope)
-  ) {
-    const cancelledMessage = context.adapter.buildAssistantMessage(
-      "cancelled",
-      undefined,
-    );
-    const runChangeSummary = await resolveRunChangeSummary(context, cancelledMessage);
-    attachRunChangeSummary(cancelledMessage, runChangeSummary);
-    attachSendOrigin(context, cancelledMessage);
-    if (cancelledMessage && context.transcriptStarted) {
+  const cancelled = err instanceof HarnessRunCancelledError ||
+    harnessRuntime.isCancelRequested(context.runScope);
+  const rawErrorMessage = cancelled
+    ? "用户取消了当前 run。"
+    : err instanceof Error ? err.message : "Agent 执行失败";
+  const errorMessage = formatChatRuntimeErrorMessage(err);
+  const assistantMessage = context.adapter.buildAssistantMessage(
+    cancelled ? "cancelled" : "error",
+    cancelled ? undefined : errorMessage,
+  );
+  const runChangeSummary = await resolveRunChangeSummary(context, assistantMessage);
+  attachRunChangeSummary(assistantMessage, runChangeSummary);
+  attachSendOrigin(context, assistantMessage);
+  const cleanupErrors: unknown[] = [];
+
+  try {
+    if (assistantMessage && context.transcriptStarted) {
       appendAssistantMessageEvent({
         sessionId: context.input.sessionId,
         runId: context.input.runId,
-        message: cancelledMessage,
+        message: assistantMessage,
       });
     }
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+  try {
     if (context.transcriptStarted) {
       appendRunFinishedEvent({
         sessionId: context.input.sessionId,
         runId: context.input.runId,
         ownerId: PRIMARY_AGENT_OWNER,
-        finalState: "aborted",
-        reason: "用户取消了当前 run。",
+        finalState: cancelled ? "aborted" : "failed",
+        reason: rawErrorMessage,
         metadata: {
           requestedModelEntryId: context.requestedModelEntryId,
           resolvedModelEntryId:
             context.handle?.modelEntryId ?? context.resolvedModel.entry.id,
           executeAttemptedEntryIds: context.failover.execute.attemptedEntryIds,
+          ...(!cancelled ? {
+            prepareFailedEntries: context.failover.prepare.failedEntries,
+            lastExecuteFailoverError: context.failover.execute.lastError,
+            userVisibleErrorMessage: errorMessage,
+          } : {}),
           ...(runChangeSummary ? { runChangeSummary } : {}),
         },
       });
     }
-    if (context.createdHandle && context.handle) {
-      await destroyAgent(context.handle);
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+  try {
+    const { handle } = context;
+    if (
+      cancelled && context.createdHandle && handle &&
+      (handle.activeRunId === null || handle.activeRunId === context.input.runId) &&
+      getHandle(handle.sessionId, handle.ownerId) === handle
+    ) {
+      await destroyAgent(handle);
     }
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+  try {
     if (context.runCreated) {
-      harnessRuntime.finishRun(context.runScope, "aborted", {
-        reason: "用户取消了当前 run。",
+      harnessRuntime.finishRun(context.runScope, cancelled ? "aborted" : "failed", {
+        reason: rawErrorMessage,
       });
     }
-    appLogger.warn({
-      scope: "chat.send",
-      message: "消息发送被取消",
-      data: {
-        sessionId: context.input.sessionId,
-        runId: context.input.runId,
-      },
-    });
-    context.adapter.queueTerminalEnd(runChangeSummary);
-    context.adapter.flushTerminalEvent({
-      type: "agent_end",
-      runChangeSummary,
-    });
-    return;
+  } catch (error) {
+    cleanupErrors.push(error);
   }
 
-  const rawErrorMessage =
-    err instanceof Error ? err.message : "Agent 执行失败";
-  const errorMessage = formatChatRuntimeErrorMessage(err);
-  const failedMessage = context.adapter.buildAssistantMessage(
-    "error",
-    errorMessage,
-  );
-  const runChangeSummary = await resolveRunChangeSummary(context, failedMessage);
-  attachRunChangeSummary(failedMessage, runChangeSummary);
-  attachSendOrigin(context, failedMessage);
-  if (failedMessage && context.transcriptStarted) {
-    appendAssistantMessageEvent({
-      sessionId: context.input.sessionId,
-      runId: context.input.runId,
-      message: failedMessage,
-    });
-  }
-  if (context.transcriptStarted) {
-    appendRunFinishedEvent({
-      sessionId: context.input.sessionId,
-      runId: context.input.runId,
-      ownerId: PRIMARY_AGENT_OWNER,
-      finalState: "failed",
-      reason: rawErrorMessage,
-      metadata: {
-        requestedModelEntryId: context.requestedModelEntryId,
-        resolvedModelEntryId:
-          context.handle?.modelEntryId ?? context.resolvedModel.entry.id,
-        prepareFailedEntries: context.failover.prepare.failedEntries,
-        executeAttemptedEntryIds: context.failover.execute.attemptedEntryIds,
-        lastExecuteFailoverError: context.failover.execute.lastError,
-        userVisibleErrorMessage: errorMessage,
-        ...(runChangeSummary ? { runChangeSummary } : {}),
-      },
-    });
-  }
-  if (context.runCreated) {
-    harnessRuntime.finishRun(context.runScope, "failed", {
-      reason: rawErrorMessage,
-    });
-  }
-  appLogger.error({
+  const cleanupError = cleanupErrors.length > 0
+    ? new AggregateError([err, ...cleanupErrors], "运行已停止，但会话保存或清理失败。", { cause: err })
+    : null;
+  appLogger[cancelled && !cleanupError ? "warn" : "error"]({
     scope: "chat.send",
-    message: "消息发送失败",
+    message: cancelled ? "消息发送被取消" : "消息发送失败",
     data: {
       sessionId: context.input.sessionId,
       runId: context.input.runId,
@@ -304,13 +264,21 @@ export async function finalizeFailedChatRun(
       runCreated: context.runCreated,
       transcriptStarted: context.transcriptStarted,
     },
-    error: err,
+    error: cleanupError ?? err,
   });
-  context.adapter.queueTerminalError(errorMessage);
-  context.adapter.flushTerminalEvent({
-    type: "agent_error",
-    message: errorMessage,
-  });
+  if (cancelled && !cleanupError) {
+    context.adapter.queueTerminalEnd(runChangeSummary);
+    context.adapter.flushTerminalEvent({ type: "agent_end", runChangeSummary });
+  } else {
+    const terminalMessage = cleanupError
+      ? `${errorMessage}\n${cleanupError.message}`
+      : errorMessage;
+    context.adapter.queueTerminalError(terminalMessage);
+    context.adapter.flushTerminalEvent({ type: "agent_error", message: terminalMessage });
+  }
+  if (cleanupError) {
+    throw cleanupError;
+  }
 }
 
 export function completeChatRun(context: ChatRunContext): void {

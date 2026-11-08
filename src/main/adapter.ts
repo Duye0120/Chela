@@ -34,6 +34,7 @@ type RunBuffer = {
   finalText: string;
   usage?: { inputTokens: number; outputTokens: number };
   steps: AgentStep[];
+  currentThinkingStep?: AgentStep;
   skillUsages: RuntimeSkillUsage[];
   lastStopReason?: string;
 };
@@ -93,16 +94,6 @@ function getAssistantFinalThinking(
   return thinking || undefined;
 }
 
-function getLatestThinkingStep(steps: AgentStep[]) {
-  for (let index = steps.length - 1; index >= 0; index -= 1) {
-    const step = steps[index];
-    if (step.kind === "thinking") {
-      return step;
-    }
-  }
-  return undefined;
-}
-
 function mergeRuntimeSkillUsages(
   current: RuntimeSkillUsage[],
   next: RuntimeSkillUsage[],
@@ -127,6 +118,15 @@ function hasRenderableAssistantSteps(steps: AgentStep[]): boolean {
   });
 }
 
+const sessionAgentListeners = new Map<string, (event: AgentEvent) => void>();
+
+export function observeSessionAgentEvents(sessionId: string, listener: (event: AgentEvent) => void): () => void {
+  sessionAgentListeners.set(sessionId, listener);
+  return () => {
+    if (sessionAgentListeners.get(sessionId) === listener) sessionAgentListeners.delete(sessionId);
+  };
+}
+
 export class ElectronAdapter {
   private readonly window: BrowserWindow;
   private readonly scope: AgentEventScope;
@@ -146,6 +146,11 @@ export class ElectronAdapter {
   }
 
   send(event: AgentEvent): boolean {
+    try {
+      sessionAgentListeners.get(event.sessionId)?.(event);
+    } catch (error) {
+      appLogger.warn({ scope: "agent.runtime", message: "会话事件订阅回调失败", error });
+    }
     if (this.window.isDestroyed()) {
       return false;
     }
@@ -311,6 +316,7 @@ export class ElectronAdapter {
         if (event.message.role !== "assistant") {
           break;
         }
+        this.buffer.currentThinkingStep = undefined;
         this.send({
           type: "message_start",
           sessionId,
@@ -338,12 +344,14 @@ export class ElectronAdapter {
         this.buffer.usage = usage;
 
         const finalThinking = getAssistantFinalThinking(event);
+        const thinkingStep = this.buffer.currentThinkingStep;
+        if (thinkingStep?.status === "executing") {
+          thinkingStep.status = "success";
+          thinkingStep.endedAt = now;
+        }
         if (finalThinking?.trim()) {
-          const thinkingStep = getLatestThinkingStep(this.buffer.steps);
           if (thinkingStep) {
-            if (!thinkingStep.thinkingText?.trim()) {
-              thinkingStep.thinkingText = finalThinking;
-            }
+            thinkingStep.thinkingText = finalThinking;
           } else {
             const nextThinking = createStep("thinking");
             nextThinking.thinkingText = finalThinking;
@@ -373,13 +381,12 @@ export class ElectronAdapter {
       case "message_update": {
         const sub = event.assistantMessageEvent;
         if (sub.type === "thinking_delta") {
-          let step = this.buffer.steps.find(
-            (item) => item.kind === "thinking" && item.status === "executing",
-          );
+          let step = this.buffer.currentThinkingStep;
 
           if (!step) {
             step = createStep("thinking");
             this.buffer.steps.push(step);
+            this.buffer.currentThinkingStep = step;
           }
 
           step.thinkingText = (step.thinkingText ?? "") + sub.delta;

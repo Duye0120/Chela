@@ -36,12 +36,18 @@ function isMaxTokensTruncation(stopReason: string | undefined): boolean {
 async function promptWithPromptTooLongRecovery(
   context: ChatRunContext,
 ): Promise<void> {
+  harnessRuntime.assertRunActive(context.runScope);
   if (!context.handle) {
     throw new Error("Agent handle 未就绪，无法执行聊天 run。");
   }
 
   try {
-    await promptAgent(context.handle, context.input.text, context.input.attachments);
+    await promptAgent(
+      context.handle,
+      context.runScope,
+      context.input.text,
+      context.input.attachments,
+    );
   } catch (promptErr) {
     if (
       isPromptTooLongError(promptErr) &&
@@ -58,7 +64,13 @@ async function promptWithPromptTooLongRecovery(
       });
       const compacted = await reactiveCompact(context.input.sessionId);
       if (compacted) {
-        await promptAgent(context.handle, context.input.text, context.input.attachments);
+        harnessRuntime.assertRunActive(context.runScope);
+        await promptAgent(
+          context.handle,
+          context.runScope,
+          context.input.text,
+          context.input.attachments,
+        );
         return;
       }
     }
@@ -87,6 +99,8 @@ async function switchExecuteFailoverHandle(
   );
 
   context.handle = nextHandle;
+  context.createdHandle = true;
+  harnessRuntime.assertRunActive(context.runScope);
   bindHandleToRun(nextHandle, context.adapter, context.input.runId);
   harnessRuntime.attachHandle(context.runScope, nextHandle);
 }
@@ -110,6 +124,7 @@ async function executePromptWithFailover(
   let lastTransientError: unknown = null;
 
   for (const entryId of candidateEntryIds) {
+    harnessRuntime.assertRunActive(context.runScope);
     if (!context.handle) {
       throw new Error("Agent handle 丢失，无法继续 failover。");
     }
@@ -182,6 +197,7 @@ export async function executeChatRun(context: ChatRunContext): Promise<void> {
   }
 
   await executePromptWithFailover(context);
+  harnessRuntime.assertRunActive(context.runScope);
   throwIfPendingTerminalError(context.adapter);
 
   const stopReason = context.adapter.getLastStopReason();
@@ -201,15 +217,19 @@ export async function executeChatRun(context: ChatRunContext): Promise<void> {
     try {
       await promptAgent(
         context.handle,
+        context.runScope,
         "直接继续，不要道歉，不要回顾，从中断处接着写。",
         [],
       );
+      harnessRuntime.assertRunActive(context.runScope);
+      throwIfPendingTerminalError(context.adapter);
     } catch (contErr) {
       appLogger.warn({
         scope: "chat.send",
         message: "max_tokens 续写失败",
         error: contErr,
       });
+      throw contErr;
     }
   }
 }

@@ -14,21 +14,21 @@ const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 
 const selectTriggerVariants = cva(
-  "cursor-pointer flex w-fit items-center justify-between gap-2 whitespace-nowrap rounded-[var(--radius-control)] text-sm text-foreground outline-none transition-[background-color,color,box-shadow,transform] duration-150 disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground ring-1 ring-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] shadow-[var(--color-control-shadow)] hover:bg-[color:var(--color-control-bg-hover)] focus-visible:ring-2 focus-visible:ring-[color:var(--color-control-focus-ring)] [&>span]:line-clamp-1 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "cursor-pointer flex w-fit items-center justify-between gap-2 whitespace-nowrap rounded-[var(--radius-control)] text-sm text-foreground transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground ring-1 ring-inset ring-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] hover:bg-[color:var(--color-control-bg-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-control-focus-ring)] [&>span]:line-clamp-1 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         outline:
           "",
         ghost:
-          "bg-transparent shadow-none ring-transparent hover:bg-[color:var(--color-control-bg-hover)] hover:ring-[color:var(--color-control-border)]",
+          "bg-transparent text-[color:var(--color-text-secondary)] ring-0 hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground",
         muted:
-          "bg-[color:var(--color-shell-panel-muted)] text-secondary-foreground shadow-none ring-transparent hover:bg-[color:var(--color-control-bg-hover)]",
+          "bg-shell-panel-muted text-secondary-foreground ring-0 hover:bg-[color:var(--color-control-bg-hover)]",
       },
       size: {
-        default: "h-9 px-3 py-2",
-        sm: "h-8 px-2.5 py-1.5 text-xs",
-        lg: "h-10 px-4 py-2.5",
+        default: "h-[var(--control-size-md)] px-3",
+        sm: "h-[var(--control-size-sm)] px-2.5",
+        lg: "h-[var(--control-size-lg)] px-4",
       },
     },
     defaultVariants: {
@@ -55,7 +55,7 @@ const SelectTrigger = ({
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDownIcon className="size-4 opacity-50" />
+      <ChevronDownIcon className="size-4 text-[color:var(--color-text-tertiary)]" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 );
@@ -104,7 +104,7 @@ const SelectContent = ({
       position={position}
       sideOffset={6}
       className={cn(
-        "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-[var(--radius-popover)] bg-[color:var(--color-control-panel-bg)] p-1.5 text-foreground ring-1 ring-[color:var(--color-control-border)] shadow-[var(--color-control-panel-shadow)] backdrop-blur-[8px]",
+        "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-[var(--radius-popover)] bg-[color:var(--color-control-panel-bg)] p-1.5 text-foreground ring-1 ring-[color:var(--color-control-border)] shadow-[var(--color-control-panel-shadow)]",
         "data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in",
         "data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out",
         "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
@@ -201,21 +201,11 @@ function Select({ options, placeholder, className, ...props }: SelectProps) {
 
   return (
     <SelectRoot {...props}>
-      <SelectPrimitive.Trigger
-        className={cn(
-          "cursor-pointer flex items-center gap-1.5 rounded-[var(--radius-control)] py-1 pr-2 pl-3 text-sm text-foreground outline-none transition-[background-color,color,box-shadow] duration-150",
-          "ring-1 ring-[color:var(--color-control-border)] bg-[color:var(--color-control-bg)] shadow-[var(--color-control-shadow)] hover:bg-[color:var(--color-control-bg-hover)]",
-          "focus-visible:ring-2 focus-visible:ring-[color:var(--color-control-focus-ring)]",
-          "disabled:cursor-not-allowed disabled:opacity-50",
-          !selectedOption && placeholder && "italic opacity-70",
-          className,
-        )}
+      <SelectTrigger
+        className={cn(!selectedOption && placeholder && "text-muted-foreground", className)}
       >
-        <span className={"text-[12px]"}>
-          {selectedOption?.label ?? placeholder}
-        </span>
-        <ChevronDownIcon className="size-3.5 text-[color:var(--color-text-tertiary)]" />
-      </SelectPrimitive.Trigger>
+        <span>{selectedOption?.label ?? placeholder}</span>
+      </SelectTrigger>
 
       <SelectContent>
         {options.map(({ label, disabled, textValue, ...itemProps }) => (

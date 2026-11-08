@@ -3,6 +3,10 @@ import type { MemoryEmbeddingModelId } from "./memory.ts";
 import type { ChelaPluginManifest } from "./plugins.ts";
 import type { ProviderErrorCode } from "./provider-errors.ts";
 import type { RunFailureKind } from "./run-recovery.ts";
+import type { ClipboardShelfApi } from "./clipboard-shelf.ts";
+import type { PlannerApi } from "./planner.ts";
+import type { WorkspacePage } from "./ipc.ts";
+import type { TerminalAgentId } from "./terminal-agents.ts";
 
 export type ChatRole = "user" | "assistant" | "system";
 export type ChatMessageStatus = "idle" | "streaming" | "done" | "error";
@@ -1022,7 +1026,7 @@ export type PendingApprovalNotice = {
   currentStepId: string | null;
   approval: {
     requestId: string;
-    kind: "shell" | "file_write" | "mcp";
+    kind: "shell" | "file_write" | "mcp" | "planner";
     payloadHash: string;
     reason: string;
     createdAt: number;
@@ -1064,7 +1068,7 @@ export type InterruptedApprovalNotice = {
   interruptedAt: number;
   approval: {
     requestId: string;
-    kind: "shell" | "file_write" | "mcp";
+    kind: "shell" | "file_write" | "mcp" | "planner";
     payloadHash: string;
     reason: string;
     createdAt: number;
@@ -1082,10 +1086,13 @@ export type InterruptedApprovalGroup = {
   approvals: InterruptedApprovalNotice[];
 };
 
+export type { TerminalAgentId } from "./terminal-agents.ts";
+
 export type SendMessageOrigin = "user" | "guided" | "resume_interrupted_approval";
 
 export type SendMessageInput = AgentRunScope & {
   text: string;
+  toolsDisabled?: boolean;
   displayText?: string;
   browserContextItems?: BrowserContextItem[];
   attachments: SelectedFile[];
@@ -1469,7 +1476,9 @@ export type DesktopApi = {
     readFilePreview: (relativePath: string) => Promise<FilePreviewResult>;
   };
   terminal: {
-    create: (options?: { cwd?: string }) => Promise<string>;
+    create: (options?: { cwd?: string; agent?: TerminalAgentId }) => Promise<string>;
+    attach: (terminalId: string) => Promise<void>;
+    list: () => Promise<Array<{ id: string; cwd: string; exitCode?: number }>>;
     write: (terminalId: string, data: string) => Promise<void>;
     resize: (terminalId: string, cols: number, rows: number) => Promise<void>;
     destroy: (terminalId: string) => Promise<void>;
@@ -1477,6 +1486,7 @@ export type DesktopApi = {
     onExit: (callback: (terminalId: string, exitCode: number) => void) => () => void;
   };
   git: {
+    getSnapshotForDirectory: (directory: string) => Promise<GitDiffOverview>;
     getSummary: () => Promise<GitBranchSummary>;
     getSnapshot: () => Promise<GitDiffOverview>;
     listBranches: () => Promise<GitBranchEntry[]>;
@@ -1502,6 +1512,7 @@ export type DesktopApi = {
     setRightPanelState: (partial: Partial<RightPanelState>) => Promise<void>;
   };
   window: {
+    showCompanion: () => Promise<void>;
     getState: () => Promise<WindowFrameState>;
     getBounds: () => Promise<WindowBounds>;
     setBounds: (bounds: WindowBounds) => Promise<WindowBounds>;
@@ -1509,10 +1520,15 @@ export type DesktopApi = {
     toggleMaximize: () => Promise<WindowFrameState>;
     close: () => void;
     onStateChange: (listener: (state: WindowFrameState) => void) => () => void;
+    onWorkspacePageRequested: (listener: (page: WorkspacePage) => void) => () => void;
+    onTaskFocusRequested: (listener: (taskId: string) => void) => () => void;
+    onSessionFocusRequested: (listener: (sessionId: string) => void) => () => void;
   };
   quickInvoke: {
     onFocusComposer: (listener: () => void) => () => void;
   };
+  clipboardShelf: ClipboardShelfApi;
+  planner: PlannerApi;
 };
 
 export function createEmptySession(): ChatSession {

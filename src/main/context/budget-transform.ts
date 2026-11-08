@@ -84,12 +84,17 @@ function isShortChatter(message: AgentMessage): boolean {
     return false;
   }
 
-  const text = extractTextFromContent((message as { content?: unknown }).content);
+  const content = (message as { content?: unknown }).content;
+  if (Array.isArray(content) && content.some((part) => part?.type === "toolCall")) {
+    return false;
+  }
+  const text = extractTextFromContent(content);
   return text.length < 60;
 }
 
 function isToolResultMessage(message: AgentMessage): boolean {
-  return getAgentMessageRole(message) === "tool";
+  const role = getAgentMessageRole(message);
+  return role === "toolResult" || role === "tool";
 }
 
 function truncateToolResult(message: AgentMessage): AgentMessage {
@@ -105,7 +110,13 @@ function truncateToolResult(message: AgentMessage): AgentMessage {
 
   return {
     ...message,
-    content: `${text.slice(0, 100)}\n...[已截断]...\n${text.slice(-50)}`,
+    content: typeof content === "string"
+      ? `${text.slice(0, 100)}\n...[已截断]...\n${text.slice(-50)}`
+      : content.map((part) =>
+          part?.type === "text" && typeof part.text === "string" && part.text.length > 200
+            ? { ...part, text: `${part.text.slice(0, 100)}\n...[已截断]...\n${part.text.slice(-50)}` }
+            : part,
+        ),
   } as AgentMessage;
 }
 
@@ -157,7 +168,7 @@ function applyBudgetAllocation(
 
 export function createBudgetedMessageTransform(
   contextWindow: number | null,
-  ensureSnapshotCoverage?: () => Promise<void>,
+  ensureSnapshotCoverage?: () => Promise<boolean | void>,
 ): (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]> {
   return async (messages, signal) => {
     if (signal?.aborted || messages.length === 0) {
@@ -182,7 +193,10 @@ export function createBudgetedMessageTransform(
       return messages;
     }
 
-    await ensureSnapshotCoverage?.();
+    const covered = await ensureSnapshotCoverage?.();
+    if (covered === false || signal?.aborted) {
+      return messages;
+    }
     return applyBudgetAllocation(messages, budget, protectedTailIndex);
   };
 }

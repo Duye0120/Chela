@@ -71,10 +71,7 @@ for (const dependencyName of [
   assert.ok(packageJson.dependencies[dependencyName]);
 }
 
-assert.match(viteConfig, /manualChunks/);
-assert.match(viteConfig, /vendor-react/);
-assert.match(viteConfig, /vendor-radix/);
-assert.match(viteConfig, /vendor-editor/);
+assert.match(viteConfig, /format: "cjs",\s+entryFileNames: "\[name\]\.cjs"/);
 assert.match(vitestConfig, /from "vitest\/config"/);
 assert.match(vitestConfig, /"@renderer": resolve\("src\/renderer\/src"\)/);
 assert.match(vitestConfig, /"@shared": resolve\("src\/shared"\)/);

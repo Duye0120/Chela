@@ -27,15 +27,11 @@ function atomicWrite(filePath: string, data: string): void {
 
 export function loadInterruptedApprovals(): InterruptedApprovalRecord[] {
   const filePath = getInterruptedApprovalsPath();
-  if (!existsSync(filePath)) {
-    return [];
-  }
-
   try {
     const raw = readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(raw) as Partial<PersistedInterruptedApprovals>;
-    return Array.isArray(parsed.approvals)
-      ? parsed.approvals.map((approval) => ({
+    if (!parsed || !Array.isArray(parsed.approvals)) throw new Error("中断审批记录格式无效。");
+    return parsed.approvals.map((approval) => ({
           ...approval,
           canResume: approval?.canResume ?? true,
           recoveryStatus: approval?.recoveryStatus ?? "interrupted",
@@ -43,10 +39,10 @@ export function loadInterruptedApprovals(): InterruptedApprovalRecord[] {
             typeof approval?.ownerId === "string" && approval.ownerId.trim()
               ? approval.ownerId
               : PRIMARY_AGENT_OWNER,
-        }))
-      : [];
-  } catch {
-    return [];
+        }));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw new Error("无法读取中断审批记录，已保留原文件。", { cause: error });
   }
 }
 

@@ -149,13 +149,13 @@ function SettingsViewImpl({
 
   return (
     <div className="flex h-full flex-col bg-transparent">
-      <div className="flex-1 overflow-y-auto px-8 pb-12 pt-5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-10 pt-6 sm:px-6 lg:px-8">
         <div className="mx-auto h-full w-full max-w-[58rem]">
-          <header className="mb-7">
+          <header className="mb-6">
             <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-foreground">
               {meta.label}
             </h1>
-            <p className="mt-2.5 max-w-[680px] text-[13px] leading-6 text-muted-foreground">
+            <p className="mt-2 max-w-[680px] text-sm leading-relaxed text-muted-foreground">
               {meta.description}
             </p>
             {(activeSection === "ai_model" || activeSection === "general") &&

@@ -6,7 +6,7 @@ import type {
 } from "@shared/contracts";
 import { useGitStore } from "@renderer/stores/git-store";
 
-type AppView = "thread" | "settings";
+type AppView = "thread" | "settings" | "workspace";
 
 export function useAppGitState({
   desktopApi,

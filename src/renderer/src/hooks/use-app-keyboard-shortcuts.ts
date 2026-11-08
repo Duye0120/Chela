@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import type { DesktopApi, WindowFrameState } from "@shared/contracts";
 import type { SettingsSection } from "@renderer/components/assistant-ui/settings-view";
 
-type MainView = "thread" | "settings";
+type MainView = "thread" | "settings" | "workspace";
 
 type KeyboardShortcutActions = {
   setFrameState: (frameState: WindowFrameState) => void;
@@ -13,6 +13,7 @@ type KeyboardShortcutState = {
   mainView: MainView;
   terminalOpen: boolean;
   createNewSession: () => unknown;
+  openTerminalWorkspace: () => void;
   closeSettingsView: () => void;
   openSettingsView: (section?: SettingsSection) => void;
   toggleSidebarCollapsed: () => void;
@@ -45,8 +46,10 @@ export function useAppKeyboardShortcuts({
       const mod = event.metaKey || event.ctrlKey;
       const shortcuts = shortcutStateRef.current;
       if (mod && event.key === "j") {
-        if (!shortcuts.terminalOpen) {
-          event.preventDefault();
+        event.preventDefault();
+        if (shortcuts.mainView !== "thread") {
+          shortcuts.openTerminalWorkspace();
+        } else if (!shortcuts.terminalOpen) {
           appActions.setTerminalOpen(true);
         }
       } else if (mod && event.key === "b") {

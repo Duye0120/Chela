@@ -234,7 +234,7 @@ export function useSessionOperations({
   );
 
   const selectSession = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, reload = false) => {
       if (!desktopApi) {
         return;
       }
@@ -254,7 +254,7 @@ export function useSessionOperations({
         }
       }
 
-      const cachedSession = sessionCacheRef.current[sessionId];
+      const cachedSession = reload ? undefined : sessionCacheRef.current[sessionId];
       if (cachedSession) {
         if (sessionSelectionSerialRef.current !== selectionSerial) {
           return;
@@ -268,6 +268,7 @@ export function useSessionOperations({
       if (session && sessionSelectionSerialRef.current === selectionSerial) {
         hydrateSession(session);
         void refreshContextSummary(sessionId);
+        if (reload) void refreshInterruptedApprovalGroups(sessionId);
       }
     },
     [
@@ -276,6 +277,7 @@ export function useSessionOperations({
       groupsRef,
       hydrateSession,
       refreshContextSummary,
+      refreshInterruptedApprovalGroups,
       sessionCacheRef,
       sessionSelectionSerialRef,
       summariesRef,
@@ -486,19 +488,15 @@ export function useSessionOperations({
   );
 
   const handleCreateProject = useCallback(async () => {
-    if (!desktopApi) {
-      return;
-    }
+    if (!desktopApi) return false;
 
     const nextWorkspace = await desktopApi.workspace.pickFolder();
-    if (!nextWorkspace) {
-      return;
-    }
+    if (!nextWorkspace) return false;
 
     const existingGroup = findGroupByPath(groupsRef.current, nextWorkspace);
     if (existingGroup) {
       await createSessionInGroup(existingGroup.id);
-      return;
+      return true;
     }
 
     const group = await desktopApi.groups.create({
@@ -508,6 +506,7 @@ export function useSessionOperations({
     sessionActions.setGroups([...groupsRef.current, group]);
     await switchWorkspacePath(nextWorkspace);
     await createSessionInGroup(group.id);
+    return true;
   }, [
     createSessionInGroup,
     desktopApi,

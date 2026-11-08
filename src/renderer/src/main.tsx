@@ -1,9 +1,10 @@
-import { Component, type ReactNode } from "react";
+import { Component, lazy, Suspense, type ReactNode } from "react";
 import ReactDOM from "react-dom/client";
 import { HashRouter } from "react-router-dom";
-import App from "./App";
 import { TooltipProvider } from "@renderer/components/ui/tooltip";
 import "./styles.css";
+
+const AppSurface = lazy(() => import("./App"));
 
 type BoundaryState = {
   hasError: boolean;
@@ -50,7 +51,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <RenderErrorBoundary>
     <HashRouter>
       <TooltipProvider delayDuration={150}>
-        <App />
+        <Suspense fallback={<div className="h-full bg-shell-window" role="status" aria-label="正在加载" />}>
+          <AppSurface />
+        </Suspense>
       </TooltipProvider>
     </HashRouter>
   </RenderErrorBoundary>,

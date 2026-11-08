@@ -10,7 +10,7 @@ export type HarnessRunState =
 
 export type HarnessRiskLevel = "safe" | "guarded" | "dangerous";
 
-export type HarnessApprovalKind = "shell" | "file_write" | "mcp";
+export type HarnessApprovalKind = "shell" | "file_write" | "mcp" | "planner";
 export type HarnessApprovalSource = "dialog" | "renderer" | "system";
 export type HarnessRunLane = "foreground" | "background";
 

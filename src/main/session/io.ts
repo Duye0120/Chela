@@ -1,7 +1,11 @@
 import {
   appendFileSync,
+  closeSync,
   existsSync,
+  fstatSync,
   mkdirSync,
+  openSync,
+  readSync,
 } from "node:fs";
 import { dirname } from "node:path";
 import {
@@ -21,7 +25,17 @@ export function atomicWrite(filePath: string, data: string): void {
 
 export function appendLine(filePath: string, line: string): void {
   ensureDir(dirname(filePath));
-  appendFileSync(filePath, line + "\n", "utf-8");
+  const fd = openSync(filePath, "a+");
+  try {
+    const size = fstatSync(fd).size;
+    const tail = Buffer.alloc(1);
+    const needsNewline =
+      size > 0 && readSync(fd, tail, 0, 1, size - 1) === 1 && tail[0] !== 10;
+    // Keep a crash-truncated last line from swallowing the next event.
+    appendFileSync(fd, (needsNewline ? "\n" : "") + line + "\n", "utf-8");
+  } finally {
+    closeSync(fd);
+  }
 }
 
 export const readJsonFile = readJsonFileSync;

@@ -139,22 +139,27 @@ export class HarnessRuntime {
     return resumedRunId;
   }
 
-  hydrateFromDisk(): HarnessRunSnapshot[] {
+  discardPendingResume(resumedRunId: string): void {
+    this.pendingResumedRunsById.delete(resumedRunId);
+  }
+
+  hydrateFromDisk(recoverRuns: (runs: HarnessRunSnapshot[]) => HarnessRunSnapshot[]): HarnessRunSnapshot[] {
     if (this.hydrated) {
       return [];
     }
 
-    this.hydrated = true;
     const persistedRuns = loadPersistedHarnessRuns();
     if (persistedRuns.length === 0) {
       this.restoreInterruptedApprovalsFromStore();
+      this.hydrated = true;
       return [];
     }
 
     this.restoreInterruptedApprovalsFromStore();
+    const recoveredRuns = recoverRuns(persistedRuns);
     const now = Date.now();
 
-    for (const run of persistedRuns) {
+    for (const run of recoveredRuns) {
       const wasAwaitingConfirmation = run.state === "awaiting_confirmation";
       const finalState = wasAwaitingConfirmation ? "aborted" : "failed";
       const action: HarnessAuditEvent["action"] = wasAwaitingConfirmation
@@ -202,7 +207,8 @@ export class HarnessRuntime {
     }
 
     savePersistedHarnessRuns([]);
-    return persistedRuns;
+    this.hydrated = true;
+    return recoveredRuns;
   }
 
   getActiveRunBySession(sessionId: string): HarnessRunSnapshot | null {
@@ -211,6 +217,9 @@ export class HarnessRuntime {
   }
 
   createRun(input: CreateRunInput): HarnessRunSnapshot {
+    if (this.activeRunsById.has(input.runId)) {
+      throw new Error("运行 ID 已被占用。");
+    }
     const pendingResumedRun = this.pendingResumedRunsById.get(input.runId);
     if (
       pendingResumedRun &&
@@ -221,6 +230,9 @@ export class HarnessRuntime {
     }
 
     const lane = input.lane ?? "foreground";
+    const previousRun = lane === "foreground"
+      ? this.activeForegroundRunsBySession.get(input.sessionId)
+      : undefined;
     const ownerId =
       input.ownerId ??
       (lane === "foreground" ? PRIMARY_AGENT_OWNER : buildSystemOwnerId(input.runKind));
@@ -254,31 +266,48 @@ export class HarnessRuntime {
         : input.metadata,
       handle: null,
     };
-    if (pendingResumedRun) {
-      this.pendingResumedRunsById.delete(input.runId);
-    }
-
     if (run.lane === "foreground") {
       this.activeForegroundRunsBySession.set(run.sessionId, run);
     }
     this.activeRunsById.set(run.runId, run);
-    this.persistActiveRuns();
-    this.audit({
-      runId: run.runId,
-      sessionId: run.sessionId,
-      action: "run_created",
-      timestamp: run.startedAt,
-      state: run.state,
-      metadata: {
-        modelEntryId: run.modelEntryId,
-        requestId: run.requestId,
-        ownerId: run.ownerId,
-        runKind: run.runKind,
-        runSource: run.runSource,
-        lane: run.lane,
-        ...run.metadata,
-      },
-    });
+    try {
+      this.persistActiveRuns();
+      this.audit({
+        runId: run.runId,
+        sessionId: run.sessionId,
+        action: "run_created",
+        timestamp: run.startedAt,
+        state: run.state,
+        metadata: {
+          modelEntryId: run.modelEntryId,
+          requestId: run.requestId,
+          ownerId: run.ownerId,
+          runKind: run.runKind,
+          runSource: run.runSource,
+          lane: run.lane,
+          ...run.metadata,
+        },
+      });
+    } catch (error) {
+      this.activeRunsById.delete(run.runId);
+      if (run.lane === "foreground") {
+        if (previousRun) {
+          this.activeRunsById.set(previousRun.runId, previousRun);
+          this.activeForegroundRunsBySession.set(run.sessionId, previousRun);
+        } else {
+          this.activeForegroundRunsBySession.delete(run.sessionId);
+        }
+      }
+      try {
+        this.persistActiveRuns();
+      } catch (rollbackError) {
+        throw new AggregateError([error, rollbackError], "运行创建失败且快照回滚失败。", { cause: error });
+      }
+      throw error;
+    }
+    if (pendingResumedRun) {
+      this.pendingResumedRunsById.delete(input.runId);
+    }
 
     bus.emit(BUS_EVENTS.RUN_CREATED, {
       sessionId: run.sessionId,
@@ -332,28 +361,32 @@ export class HarnessRuntime {
 
     if (!run.cancelled) {
       run.cancelled = true;
-      this.persistActiveRuns();
-      this.audit({
-        runId: run.runId,
-        sessionId: run.sessionId,
-        action: "run_cancel_requested",
-        timestamp: Date.now(),
-        state: run.state,
-      });
+      const errors: unknown[] = [];
+      for (const cancel of [
+        () => this.rejectPendingApprovals(scope),
+        () => this.persistActiveRuns(),
+        () => this.audit({
+          runId: run.runId,
+          sessionId: run.sessionId,
+          action: "run_cancel_requested",
+          timestamp: Date.now(),
+          state: run.state,
+        }),
+      ]) {
+        try {
+          cancel();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
 
       bus.emit(BUS_EVENTS.RUN_CANCEL_REQUESTED, {
         sessionId: run.sessionId,
         runId: run.runId,
       });
 
-      if (run.pendingApproval?.requestId) {
-        this.resolvePendingApproval(
-          {
-            requestId: run.pendingApproval.requestId,
-            allowed: false,
-          },
-          "system",
-        );
+      if (errors.length > 0) {
+        throw new AggregateError(errors, "运行已请求取消，但持久化或审批清理失败。", { cause: errors[0] });
       }
     }
 
@@ -364,6 +397,7 @@ export class HarnessRuntime {
     scope: HarnessRunScope,
     approval: HarnessPendingApproval,
   ): Promise<HarnessApprovalResolution> {
+    this.assertRunActive(scope);
     const existing = this.approvalWaitersByRequestId.get(approval.requestId);
     if (existing) {
       return existing.promise;
@@ -395,14 +429,19 @@ export class HarnessRuntime {
 
     waiter.settled = true;
     this.approvalWaitersByRequestId.delete(response.requestId);
-    this.dismissInterruptedApproval(waiter.scope.runId);
-    waiter.resolve({
-      requestId: response.requestId,
-      allowed: response.allowed,
-      respondedAt: Date.now(),
-      source,
-      remember: response.remember,
-    });
+    let dismissed = false;
+    try {
+      this.dismissInterruptedApproval(waiter.scope.runId);
+      dismissed = true;
+    } finally {
+      waiter.resolve({
+        requestId: response.requestId,
+        allowed: dismissed && response.allowed,
+        respondedAt: Date.now(),
+        source: dismissed ? source : "system",
+        remember: dismissed ? response.remember : undefined,
+      });
+    }
     return true;
   }
 
@@ -462,7 +501,8 @@ export class HarnessRuntime {
     }
 
     run.state = finalState;
-    run.endedAt = Date.now();
+    const endedAt = Date.now();
+    run.endedAt = endedAt;
     if (finalState === "aborted") {
       run.cancelled = true;
     }
@@ -474,26 +514,31 @@ export class HarnessRuntime {
           ? "run_aborted"
           : "run_failed";
 
-    this.audit({
-      runId: run.runId,
-      sessionId: run.sessionId,
-      action,
-      timestamp: run.endedAt,
-      state: run.state,
-      reason: options?.reason,
-      metadata: options?.metadata,
-    });
-
-    if (run.pendingApproval?.requestId) {
-      this.approvalWaitersByRequestId.delete(run.pendingApproval.requestId);
-    }
-    this.dismissInterruptedApproval(run.runId);
-
     this.activeRunsById.delete(run.runId);
     if (this.activeForegroundRunsBySession.get(run.sessionId)?.requestId === run.requestId) {
       this.activeForegroundRunsBySession.delete(run.sessionId);
     }
-    this.persistActiveRuns();
+    const errors: unknown[] = [];
+    for (const finalize of [
+      () => this.rejectPendingApprovals(scope),
+      () => this.dismissInterruptedApproval(run.runId),
+      () => this.persistActiveRuns(),
+      () => this.audit({
+        runId: run.runId,
+        sessionId: run.sessionId,
+        action,
+        timestamp: endedAt,
+        state: run.state,
+        reason: options?.reason,
+        metadata: options?.metadata,
+      }),
+    ]) {
+      try {
+        finalize();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
 
     bus.emit(BUS_EVENTS.RUN_COMPLETED, {
       sessionId: run.sessionId,
@@ -516,6 +561,9 @@ export class HarnessRuntime {
       });
     }
 
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "运行已结束，但持久化或审批清理失败。", { cause: errors[0] });
+    }
     return this.toSnapshot(run);
   }
 
@@ -552,6 +600,22 @@ export class HarnessRuntime {
       decision: evaluation.decision.type,
       riskLevel: evaluation.riskLevel,
     });
+  }
+
+  private rejectPendingApprovals(scope: HarnessRunScope): void {
+    const errors: unknown[] = [];
+    for (const [requestId, waiter] of this.approvalWaitersByRequestId) {
+      if (waiter.scope.runId === scope.runId && waiter.scope.sessionId === scope.sessionId) {
+        try {
+          this.resolvePendingApproval({ requestId, allowed: false }, "system");
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+    }
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "审批已拒绝，但中断记录清理失败。", { cause: errors[0] });
+    }
   }
 
   private restoreInterruptedApprovalsFromStore(): void {

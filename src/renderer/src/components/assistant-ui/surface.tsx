@@ -4,17 +4,17 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@renderer/lib/utils";
 
 const surfaceVariants = cva(
-  "rounded-[var(--radius-shell)] transition-[background-color,box-shadow,color]",
+  "transition-colors",
   {
     variants: {
       tone: {
-        shell: "bg-[color:var(--color-shell-panel)]",
-        panel: "bg-[color:var(--color-control-panel-bg)]",
-        control: "bg-[color:var(--color-control-bg)]",
-        preview: "bg-[color:var(--color-control-bg)]",
-        overlay: "bg-[color:var(--color-control-panel-bg)]",
+        shell: "rounded-[var(--radius-panel)] bg-[color:var(--color-shell-panel)]",
+        panel: "rounded-[var(--radius-panel)] bg-[color:var(--color-shell-panel)]",
+        control: "rounded-[var(--radius-control)] bg-[color:var(--color-control-bg)]",
+        preview: "rounded-[var(--radius-panel)] bg-[color:var(--color-control-bg)]",
+        overlay: "rounded-[var(--radius-popover)] bg-[color:var(--color-control-panel-bg)]",
         danger:
-          "bg-[color:var(--chela-status-error-bg)] text-[color:var(--chela-status-error-text)]",
+          "rounded-[var(--radius-control)] bg-[color:var(--chela-status-error-bg)] text-[color:var(--chela-status-error-text)]",
       },
       shadow: {
         none: "shadow-none",
@@ -25,7 +25,7 @@ const surfaceVariants = cva(
       padding: {
         none: "p-0",
         xs: "p-2",
-        sm: "p-2.5",
+        sm: "p-3",
         md: "p-4",
         lg: "p-5",
       },

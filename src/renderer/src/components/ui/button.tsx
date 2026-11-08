@@ -5,26 +5,30 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@renderer/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-control)] text-sm font-medium transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--color-control-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-control)] text-sm font-medium transition-[background-color,color,box-shadow] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-control-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default:
-          "bg-[color:var(--color-accent)] text-[color:var(--chela-text-inverse)] shadow-[var(--color-control-shadow)] hover:bg-[color:var(--color-accent-hover)]",
+          "bg-[color:var(--color-accent)] text-[color:var(--chela-text-inverse)] hover:bg-[color:var(--color-accent-hover)]",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-[var(--color-control-shadow)] hover:bg-destructive/90",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:
-          "bg-[color:var(--color-control-bg)] text-foreground shadow-[var(--color-control-shadow)] ring-1 ring-[color:var(--color-control-border)] hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground",
+          "bg-transparent text-foreground ring-1 ring-inset ring-[color:var(--color-control-border)] hover:bg-[color:var(--color-control-bg-hover)]",
         secondary:
-          "bg-[color:var(--color-control-panel-bg)] text-secondary-foreground shadow-[var(--color-control-shadow)] ring-1 ring-[color:var(--color-control-border)] hover:bg-[color:var(--color-control-bg-hover)]",
-        ghost: "hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground",
+          "bg-[color:var(--color-control-bg)] text-foreground hover:bg-[color:var(--color-control-bg-hover)]",
+        ghost:
+          "text-[color:var(--color-text-secondary)] hover:bg-[color:var(--color-control-bg-hover)] hover:text-foreground aria-pressed:bg-[color:var(--color-selection-bg)] aria-pressed:text-[color:var(--color-selection-fg)]",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 px-3 text-xs",
-        lg: "h-10 px-8",
-        icon: "h-9 w-9",
+        default: "h-[var(--control-size-md)] px-3",
+        sm: "h-[var(--control-size-sm)] px-2.5",
+        xs: "h-[var(--control-size-xs)] px-2 text-xs",
+        lg: "h-[var(--control-size-lg)] px-4",
+        icon: "h-[var(--control-size-md)] w-[var(--control-size-md)]",
+        "icon-sm": "h-[var(--control-size-sm)] w-[var(--control-size-sm)]",
+        "icon-xs": "h-[var(--control-size-xs)] w-[var(--control-size-xs)]",
       },
     },
     defaultVariants: {

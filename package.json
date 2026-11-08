@@ -79,7 +79,8 @@
       "better-sqlite3",
       "electron",
       "esbuild",
-      "node-pty"
+      "node-pty",
+      "sharp"
     ],
     "ignoredBuiltDependencies": [
       "protobufjs"

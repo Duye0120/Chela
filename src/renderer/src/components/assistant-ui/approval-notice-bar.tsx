@@ -25,6 +25,7 @@ const pendingApprovalKindLabels: Record<
   shell: "命令执行",
   file_write: "文件写入",
   mcp: "MCP",
+  planner: "个人计划",
 };
 
 const interruptedApprovalKindLabels = pendingApprovalKindLabels;
@@ -69,9 +70,10 @@ const ApprovalDetailCard: FC<{
   reason: string;
   detail?: string;
   metaItems: string[];
-}> = ({ reason, detail, metaItems }) => {
+  initiallyOpen?: boolean;
+}> = ({ reason, detail, metaItems, initiallyOpen }) => {
   return (
-    <details className="group">
+    <details className="group" open={initiallyOpen}>
       <summary className="cursor-pointer select-none text-[12px] leading-5 text-[color:var(--color-text-secondary)]/85 outline-none transition-colors hover:text-[color:var(--color-text-primary)]">
         查看审批上下文
       </summary>
@@ -132,6 +134,12 @@ export const PendingApprovalNoticeBar: FC<PendingApprovalNoticeBarProps> = ({
                 <p className="line-clamp-2 leading-5">
                   {latestApproval.approval.title}：{latestApproval.approval.description}
                 </p>
+                {latestApproval.approval.kind === "planner" && <ApprovalDetailCard
+                  initiallyOpen
+                  reason={latestApproval.approval.reason}
+                  detail={latestApproval.approval.detail}
+                  metaItems={[]}
+                />}
                 <div className="flex flex-wrap gap-x-2 gap-y-1 text-[11px] leading-4 text-[color:var(--color-text-secondary)]/80">
                   {metaItems.map((item) => (
                     <span key={item}>{item}</span>
