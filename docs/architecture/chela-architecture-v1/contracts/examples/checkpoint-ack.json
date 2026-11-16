@@ -1,0 +1,23 @@
+{
+  "protocol_version": 1,
+  "kind": "ack",
+  "method": "session.checkpoint",
+  "worker_id": "worker_2",
+  "epoch": 7,
+  "worker_seq": 19,
+  "request_id": "request_example",
+  "correlation_id": "command_example",
+  "context": {
+    "assistant_id": "assistant_id_example",
+    "session_id": "session_id_example",
+    "branch_id": "branch_id_example",
+    "run_id": "run_id_example",
+    "attempt_id": "attempt_id_example"
+  },
+  "payload": {
+    "batch_id": "batch_example",
+    "canonical_revision": 42,
+    "committed_seq": "105",
+    "active_leaf_id": "pi_entry_42"
+  }
+}

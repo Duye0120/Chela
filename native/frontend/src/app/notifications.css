@@ -1,0 +1,22 @@
+.notifications { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--chela-color-border-default); border-radius: var(--chela-radius-panel); background: var(--chela-color-bg-surface); color: var(--chela-color-text-primary); padding: 20px; }
+.notifications::backdrop { background: rgb(0 0 0 / 25%); }
+.notifications header { display: flex; align-items: center; justify-content: space-between; }
+.notifications h2 { margin: 0; font-size: 16px; }
+.notifications article { margin-top: 12px; padding: 12px; background: var(--chela-color-bg-canvas); border-radius: var(--chela-radius-control); }
+.notifications article > div { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.notifications article p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.companion-panel { min-inline-size: 0; margin-block: 1rem; }
+.companion-panel form { display: grid; gap: .75rem; margin-block: .75rem 1rem; }
+.companion-panel fieldset { min-inline-size: 0; padding: 0; border: 0; display: grid; gap: .5rem; }
+.companion-panel legend { padding: 0; margin-block-end: .5rem; font-weight: 600; }
+.companion-panel summary { cursor: pointer; padding-block: .5rem; }
+.companion-field { display: grid; gap: .25rem; min-inline-size: 0; }
+.companion-field .ui-field { inline-size: 100%; min-inline-size: 0; box-sizing: border-box; }
+.companion-inline { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,12rem),1fr)); gap: .75rem; }
+.companion-options { display: flex; flex-wrap: wrap; gap: .75rem; }
+.companion-options > span,.companion-check { display: flex; align-items: center; gap: .375rem; }
+.companion-check input,.companion-options input { accent-color: var(--chela-color-accent-default); flex-shrink: 0; }
+.companion-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .75rem; }
+.companion-panel dl > div { display: flex; justify-content: space-between; gap: 1rem; }
+.companion-report { white-space: pre-wrap; }
+@media (pointer: coarse) { .companion-panel .ui-field,.companion-panel .ui-button,.companion-panel summary,.companion-check,.companion-options > span { min-block-size: 3rem; } }

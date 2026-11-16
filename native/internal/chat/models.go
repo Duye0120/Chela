@@ -1,0 +1,150 @@
+package chat
+
+import (
+	"encoding/json"
+	"errors"
+	"github.com/Duye0120/Chela/native/internal/storage"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+type modelInfo struct {
+	ID              string   `json:"id"`
+	Label           string   `json:"label"`
+	Provider        string   `json:"provider"`
+	Reasoning       bool     `json:"reasoning"`
+	Efforts         []string `json:"efforts,omitempty"`
+	ContextWindow   int      `json:"contextWindow,omitempty"`
+	MaxOutputTokens int      `json:"maxOutputTokens,omitempty"`
+	Source          string   `json:"source,omitempty"`
+	FetchedAt       string   `json:"fetchedAt,omitempty"`
+	Stale           bool     `json:"stale,omitempty"`
+}
+type modelConfig struct {
+	Source json.RawMessage `json:"source"`
+	Entry  json.RawMessage `json:"entry"`
+	Key    string          `json:"key"`
+}
+type profileModel struct {
+	URL    string `json:"url"`
+	Model  string `json:"model"`
+	Secret []byte `json:"secret"`
+}
+
+func readOptional(path string, out any) error {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, out)
+}
+func (c *Chat) catalog() ([]modelInfo, map[string]modelConfig, string, string, error) {
+	infos := []modelInfo{}
+	configs := map[string]modelConfig{}
+	var entries, sources []json.RawMessage
+	var settings struct {
+		ModelRouting  struct{ Chat struct{ ModelID string } }
+		ThinkingLevel string
+	}
+	var credentials map[string]struct{ APIKey string }
+	for name, out := range map[string]any{"provider-sources.json": &sources, "model-entries.json": &entries, "settings.json": &settings, "credentials.json": &credentials} {
+		if err := readOptional(filepath.Join(c.config, name), out); err != nil {
+			return nil, nil, "", "", err
+		}
+	}
+	for _, src := range sources {
+		var s struct {
+			ID, Name, BaseURL string
+			Enabled           bool
+		}
+		if err := json.Unmarshal(src, &s); err != nil {
+			return nil, nil, "", "", err
+		}
+		if !s.Enabled {
+			continue
+		}
+		for _, raw := range entries {
+			var e struct {
+				ID, SourceID, Name                 string
+				Enabled                            bool
+				Capabilities, DetectedCapabilities struct {
+					Reasoning   *bool
+					Embedding   *bool
+					ImageOutput *bool
+				}
+			}
+			if err := json.Unmarshal(raw, &e); err != nil {
+				return nil, nil, "", "", err
+			}
+			if !e.Enabled || s.ID != e.SourceID {
+				continue
+			}
+			if (e.DetectedCapabilities.Embedding != nil && *e.DetectedCapabilities.Embedding) || (e.DetectedCapabilities.ImageOutput != nil && *e.DetectedCapabilities.ImageOutput) {
+				continue
+			}
+			r := e.Capabilities.Reasoning
+			if r == nil {
+				r = e.DetectedCapabilities.Reasoning
+			}
+			configs[e.ID] = modelConfig{src, raw, credentials[s.ID].APIKey}
+			infos = append(infos, modelInfo{ID: e.ID, Label: e.Name, Provider: s.Name, Reasoning: r != nil && *r})
+		}
+	}
+	var custom profileModel
+	if err := readOptional(filepath.Join(c.profile, "chat-provider.json"), &custom); err != nil {
+		return nil, nil, "", "", err
+	}
+	chosen := settings.ModelRouting.Chat.ModelID
+	if custom.Model != "" {
+		key, err := unseal(custom.Secret)
+		if err != nil {
+			return nil, nil, "", "", err
+		}
+		source, _ := json.Marshal(map[string]any{"id": "chela-custom", "name": "自定义", "providerType": "openai-compatible", "baseUrl": custom.URL})
+		entry, _ := json.Marshal(map[string]any{"id": "chela-custom", "name": custom.Model, "modelId": custom.Model, "capabilities": map[string]bool{}, "detectedCapabilities": map[string]bool{}, "limits": map[string]int{}, "detectedLimits": map[string]int{}})
+		chosen = "chela-custom"
+		infos = append(infos, modelInfo{ID: chosen, Label: custom.Model, Provider: "自定义", Reasoning: false, Source: "用户配置，窗口上限未声明"})
+		configs[chosen] = modelConfig{source, entry, string(key)}
+	}
+	magpieInfos, magpieConfigs, err := c.magpieModels()
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+	infos = append(infos, magpieInfos...)
+	for id, cfg := range magpieConfigs {
+		configs[id] = cfg
+	}
+	roles, err := c.ModelRoles()
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+	if roles["chat"] != "" {
+		chosen = roles["chat"]
+	}
+	if _, ok := configs[chosen]; !ok && len(infos) > 0 && roles["chat"] == "" {
+		chosen = infos[0].ID
+	}
+	return infos, configs, chosen, settings.ThinkingLevel, nil
+}
+
+func (c *Chat) Configure(endpoint, model, key string) error {
+	u, err := modelEndpoint(endpoint)
+	if err != nil {
+		return err
+	}
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return errors.New("请填写模型 ID")
+	}
+	secret, err := seal([]byte(strings.TrimSpace(key)))
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return storage.WriteJSON(filepath.Join(c.profile, "chat-provider.json"), profileModel{strings.TrimRight(u.String(), "/"), model, secret})
+}

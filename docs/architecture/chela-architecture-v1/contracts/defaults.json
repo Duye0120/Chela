@@ -1,0 +1,21 @@
+{
+  "config_version": 1,
+  "status": "proposed_tunable_defaults_not_benchmarks",
+  "scheduler": { "foreground_runs": 2, "background_runs": 1, "max_pi_workers": 3, "max_external_pty": 4, "max_child_depth": 1, "max_children_per_parent": 2, "warm_approval_worker_seconds": 120, "shutdown_grace_seconds": 10 },
+  "transport": { "protocol_version": 1, "max_frame_bytes": 1048576, "heartbeat_seconds": 15, "heartbeat_missed_limit": 3 },
+  "context": { "prepare_compaction_ratio": 0.72, "required_compaction_ratio": 0.88, "target_ratio": 0.55, "guard_min_tokens": 1024, "guard_window_ratio": 0.02, "margin_min_tokens": 2048, "margin_window_ratio": 0.05, "max_auto_compaction_failures": 3 },
+  "memory": { "lexical_candidates": 40, "vector_candidates": 40, "rerank_candidates": 20, "max_selected_memories": 12, "memory_token_budget": 4000, "rrf_k": 60, "single_character_fallback_candidates": 100, "tokenizer_version": "chela-cjk-bigram-v1" },
+  "consolidation": { "idle_before_seconds": 300, "batch_max_events": 128, "batch_max_input_tokens": 12000, "lease_seconds": 120, "lease_renew_seconds": 30 },
+  "proactivity": { "fallback_scan_seconds": 900, "batch_max_attention_items": 20, "input_tokens_per_call": 4000, "output_tokens_per_call": 512, "max_calls_per_hour": 4, "max_calls_per_day": 12, "unchanged_attention_min_interval_seconds": 1800, "project_delivery_coalesce_seconds": 60, "candidate_score_threshold": 0.45, "companion_max_deliveries_per_day": 1, "companion_min_interval_seconds": 14400 },
+  "affect": {
+    "dimensions": ["joy", "pride", "playful_irritation", "concern", "curiosity", "disappointment"],
+    "baseline": { "joy": 12, "pride": 0, "playful_irritation": 0, "concern": 0, "curiosity": 10, "disappointment": 0 },
+    "half_life_seconds": { "joy": 1800, "pride": 2400, "playful_irritation": 300, "concern": 1200, "curiosity": 1200, "disappointment": 600 },
+    "score_min": 0, "score_max": 100, "max_abs_delta_per_event": 12,
+    "ambiguous_appraisal_min_confidence": 0.65, "event_cluster_window_seconds": 600,
+    "cluster_pulse_cooldown_seconds": 30, "late_event_cutoff_seconds": 600,
+    "trait_multiplier_min": 0.5, "trait_multiplier_max": 1.5,
+    "half_life_scale_min": 0.5, "half_life_scale_max": 2.0
+  },
+  "storage": { "journal_mode": "WAL", "synchronous": "FULL", "busy_timeout_ms": 5000, "foreign_keys": true, "requires_wal_reset_fix": true }
+}

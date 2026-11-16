@@ -1,0 +1,16 @@
+.capabilities-panel { inline-size: min(40rem, calc(100vw - 2rem)); max-block-size: calc(100dvh - 3rem); box-sizing: border-box; overflow: auto; padding: 1.25rem; background: var(--chela-color-bg-surface); color: var(--chela-color-text-primary); border: 1px solid var(--chela-color-border-default); border-radius: var(--chela-radius-panel); }
+.capabilities-panel:modal { overscroll-behavior: contain; }
+.capabilities-panel::backdrop { background: rgb(0 0 0 / 25%); overflow: hidden; overscroll-behavior: contain; }
+.capabilities-panel header,.capabilities-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; }
+.capabilities-panel h2,.capabilities-panel h3 { margin-block: 0 .5rem; font-size: 1rem; }
+.capabilities-panel p,.capabilities-panel dd { overflow-wrap: anywhere; white-space: pre-wrap; }
+.capabilities-panel form { display: grid; gap: .375rem; margin-block: 1rem; }
+.capabilities-panel label:not(:first-child) { margin-block-start: .5rem; }
+.capabilities-panel .ui-field { min-inline-size: 0; inline-size: 100%; box-sizing: border-box; }
+.capabilities-panel article { margin-block-start: 1rem; padding: 1rem; background: var(--chela-color-bg-canvas); border-radius: var(--chela-radius-control); }
+.capabilities-actions { justify-content: flex-start; margin-block-start: .75rem; }
+.capabilities-panel summary { cursor: pointer; }
+.capabilities-panel dd { margin-inline-start: 0; margin-block-end: .5rem; font-size: .8rem; }
+.extension-request form { display: grid; gap: .5rem; }
+.extension-request p { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (pointer: coarse) { .capabilities-panel button,.capabilities-panel input,.capabilities-panel summary,.extension-request button,.extension-request .ui-field { min-block-size: 3rem; } }

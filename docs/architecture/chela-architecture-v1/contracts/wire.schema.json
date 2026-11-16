@@ -1,0 +1,483 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:chela:wire:1",
+  "title": "Chela private worker wire envelope v1",
+  "description": "Envelope validation only. Method payload validation must additionally be generated from protocol.ts. Frame bytes are bounded by transport.",
+  "type": "object",
+  "required": [
+    "protocol_version",
+    "kind",
+    "method",
+    "worker_id",
+    "epoch",
+    "worker_seq",
+    "request_id",
+    "correlation_id"
+  ],
+  "properties": {
+    "protocol_version": {
+      "const": 1
+    },
+    "kind": {
+      "enum": [
+        "request",
+        "response",
+        "event",
+        "ack",
+        "cancel"
+      ]
+    },
+    "method": {
+      "type": "string",
+      "minLength": 1
+    },
+    "worker_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "epoch": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "worker_seq": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "context": {
+      "$ref": "#/$defs/context"
+    },
+    "payload": {},
+    "ok": {
+      "type": "boolean"
+    },
+    "error": {
+      "$ref": "#/$defs/error"
+    },
+    "requires_ack": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "properties": {
+        "kind": {
+          "const": "request"
+        },
+        "method": {
+          "enum": [
+            "session.open",
+            "run.start",
+            "run.steer",
+            "run.followUp",
+            "run.cancel",
+            "session.checkpoint",
+            "session.compaction_commit",
+            "session.context_repair_commit",
+            "model.request.prepare",
+            "model.request.finish",
+            "tool.request",
+            "ui.request",
+            "ui.reply",
+            "session.dispose"
+          ]
+        }
+      },
+      "required": [
+        "context",
+        "payload"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "ok"
+            ]
+          },
+          {
+            "required": [
+              "error"
+            ]
+          },
+          {
+            "required": [
+              "requires_ack"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "response"
+        },
+        "method": {
+          "enum": [
+            "session.open",
+            "run.start",
+            "run.steer",
+            "run.followUp",
+            "run.cancel",
+            "model.request.prepare",
+            "model.request.finish",
+            "tool.request",
+            "ui.request",
+            "ui.reply",
+            "session.dispose"
+          ]
+        },
+        "ok": {
+          "const": true
+        }
+      },
+      "required": [
+        "context",
+        "ok",
+        "payload"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "error"
+            ]
+          },
+          {
+            "required": [
+              "requires_ack"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "response"
+        },
+        "method": {
+          "enum": [
+            "session.open",
+            "run.start",
+            "run.steer",
+            "run.followUp",
+            "run.cancel",
+            "session.checkpoint",
+            "session.compaction_commit",
+            "session.context_repair_commit",
+            "model.request.prepare",
+            "model.request.finish",
+            "tool.request",
+            "ui.request",
+            "ui.reply",
+            "session.dispose"
+          ]
+        },
+        "ok": {
+          "const": false
+        }
+      },
+      "required": [
+        "context",
+        "ok",
+        "error"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "payload"
+            ]
+          },
+          {
+            "required": [
+              "requires_ack"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "event"
+        },
+        "method": {
+          "enum": [
+            "worker.ready",
+            "worker.health",
+            "run.accepted",
+            "stream.delta",
+            "tool.progress",
+            "run.settled",
+            "error"
+          ]
+        }
+      },
+      "required": [
+        "payload",
+        "requires_ack"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "ok"
+            ]
+          },
+          {
+            "required": [
+              "error"
+            ]
+          }
+        ]
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "enum": [
+                  "worker.ready",
+                  "worker.health"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "requires_ack": {
+                "const": false
+              }
+            }
+          },
+          "else": {
+            "required": [
+              "context"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "run.settled"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "requires_ack": {
+                "const": true
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "requires_ack": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "ack"
+        },
+        "method": {
+          "enum": [
+            "session.checkpoint",
+            "session.compaction_commit",
+            "session.context_repair_commit",
+            "run.settled"
+          ]
+        }
+      },
+      "required": [
+        "context",
+        "payload"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "ok"
+            ]
+          },
+          {
+            "required": [
+              "error"
+            ]
+          },
+          {
+            "required": [
+              "requires_ack"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "cancel"
+        },
+        "method": {
+          "const": "request.cancel"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "target_request_id",
+            "reason"
+          ],
+          "properties": {
+            "target_request_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "context",
+        "payload"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "ok"
+            ]
+          },
+          {
+            "required": [
+              "error"
+            ]
+          },
+          {
+            "required": [
+              "requires_ack"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "context": {
+      "type": "object",
+      "required": [
+        "assistant_id",
+        "session_id",
+        "branch_id",
+        "run_id",
+        "attempt_id"
+      ],
+      "properties": {
+        "assistant_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "branch_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "attempt_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "retryable",
+        "correlation_id"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_ARGUMENT",
+            "REVISION_CONFLICT",
+            "IDEMPOTENCY_CONFLICT",
+            "SCOPE_DENIED",
+            "APPROVAL_REQUIRED",
+            "APPROVAL_EXPIRED",
+            "CANCELLED",
+            "DEADLINE_EXCEEDED",
+            "CAPACITY_EXHAUSTED",
+            "MODEL_UNAVAILABLE",
+            "CONTEXT_TOO_LARGE",
+            "PROTOCOL_MISMATCH",
+            "STALE_EPOCH",
+            "STALE_LEASE",
+            "OUTCOME_UNKNOWN",
+            "CURSOR_EXPIRED",
+            "STORAGE_UNAVAILABLE",
+            "DELEGATION_CAPACITY"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "correlation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "retry_after_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "details_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

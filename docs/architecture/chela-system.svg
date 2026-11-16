@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1460 1190" width="1460" height="1190" role="img" aria-labelledby="title desc">
+<title id="title">Chela 目标架构与上下文设计</title><desc id="desc">图上方是已明确的产品和宿主分工，中部展示两条独立的会话如何通过 Go Harness 使用 Pi 与 Magpie，下方是尚在讨论的记忆、压缩、情绪和评分设计。</desc>
+<style>text{font-family:"Microsoft YaHei","Noto Sans CJK SC",sans-serif;fill:#17383c}.h{font-weight:700}</style>
+<defs><marker id="tip" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7Z" fill="#517572"/></marker></defs>
+<rect width="1460" height="1190" fill="#fafbf7"/>
+<text x="44" y="71" font-size="43" style="fill:#17383c" class="h">Chela · 整体架构与上下文</text>
+<text x="1078" y="65" font-size="23" style="fill:#526977">讨论稿  /  2026.11.13</text>
+<text x="44" y="116" font-size="23" style="fill:#17383c">在原有架构上重构。Go 接管运行，Pi 保留 Agent 核心，Magpie 管理模型目录与路由。</text>
+<text x="44" y="174" font-size="23" style="fill:#17383c" class="h">产品入口</text>
+<rect x="202" y="143" width="1208" height="77" rx="10" fill="#e8f3ed" stroke="#c6d6cf"/>
+<text x="226" y="175" font-size="22" style="fill:#17383c" class="h">React 工作台与悬浮助手</text>
+<text x="226" y="204" font-size="18" style="fill:#17383c">主窗与气泡接续同一会话。看板、日历、笔记和终端围绕同一项工作，执行结果回到人工验收。</text>
+<path d="M520 221 V254" fill="none" stroke="#517572" stroke-width="1.7" marker-end="url(#tip)"/>
+<path d="M1110 221 V254" fill="none" stroke="#517572" stroke-width="1.7" marker-end="url(#tip)"/>
+<text x="44" y="291" font-size="23" style="fill:#17383c" class="h">会话边界</text>
+<rect x="202" y="255" width="591" height="102" rx="10" fill="#eef3f8" stroke="#c6d6cf"/>
+<text x="224" y="291" font-size="23" style="fill:#17383c" class="h">会话 A  /  Chela 项目</text>
+<text x="224" y="327" font-size="19" style="fill:#17383c">只读取 A 的工作状态、近期原文与本轮输入</text>
+<rect x="819" y="255" width="591" height="102" rx="10" fill="#eef3f8" stroke="#c6d6cf"/>
+<text x="841" y="291" font-size="23" style="fill:#17383c" class="h">会话 B  /  述职写作</text>
+<text x="841" y="327" font-size="19" style="fill:#17383c">只读取 B 的工作状态、近期原文与本轮输入</text>
+<path d="M520 359 V396" fill="none" stroke="#517572" stroke-width="1.7" marker-end="url(#tip)"/>
+<path d="M1110 359 V396" fill="none" stroke="#517572" stroke-width="1.7" marker-end="url(#tip)"/>
+<text x="44" y="432" font-size="23" style="fill:#17383c" class="h">运行治理</text>
+<rect x="202" y="397" width="1208" height="94" rx="10" fill="#204543" stroke="#204543"/>
+<text x="226" y="433" font-size="26" style="fill:#ffffff" class="h">Go Harness</text>
+<text x="226" y="469" font-size="18" style="fill:#e1f1eb">按 sessionId 组上下文，按 runId 分流与取消。目标采用有界队列和多个 Pi worker，前台优先，故障按 worker 隔离。</text>
+<path d="M507 492 V530" fill="none" stroke="#517572" stroke-width="1.7" marker-end="url(#tip)"/>
+<path d="M1104 492 V530" fill="none" stroke="#517572" stroke-width="1.7" marker-end="url(#tip)"/>
+<rect x="202" y="532" width="591" height="99" rx="10" fill="#e8f3ed" stroke="#c6d6cf"/>
+<text x="226" y="568" font-size="23" style="fill:#17383c" class="h">Pi 执行池 · 目标形态</text>
+<text x="226" y="604" font-size="18" style="fill:#17383c">空闲进程可复用；每个活动运行拥有独立 Agent 和输入。</text>
+<rect x="819" y="532" width="591" height="99" rx="10" fill="#e8f3ed" stroke="#c6d6cf"/>
+<text x="842" y="568" font-size="23" style="fill:#17383c" class="h">Magpie · 模型来源</text>
+<text x="842" y="604" font-size="18" style="fill:#17383c">统一供应商、凭据、模型目录与路由。会话记录所选模型。</text>
+<path d="M794 585 H816" fill="none" stroke="#517572" stroke-width="1.7" marker-end="url(#tip)"/>
+<text x="44" y="700" font-size="23" style="fill:#17383c" class="h">上下文设计</text>
+<text x="202" y="700" font-size="21" style="fill:#17383c">建议保留三个作用域，原始对话记录和活动运行状态独立保存。</text>
+<rect x="44" y="729" width="438" height="132" rx="10" fill="#eef3f8" stroke="#c6d6cf"/>
+<text x="62" y="767" font-size="23" style="fill:#17383c" class="h">T0  /  明确规则</text>
+<text x="62" y="805" font-size="18" style="fill:#17383c">用户与当前项目的明确约束</text>
+<text x="62" y="835" font-size="17" style="fill:#50676c">按适用范围加载，用户可修订。</text>
+<rect x="510" y="729" width="438" height="132" rx="10" fill="#eef3f8" stroke="#c6d6cf"/>
+<text x="528" y="767" font-size="23" style="fill:#17383c" class="h">T1  /  长期记忆</text>
+<text x="528" y="805" font-size="18" style="fill:#17383c">偏好与项目决定带来源、范围和有效期</text>
+<text x="528" y="835" font-size="17" style="fill:#50676c">先过滤范围，再按当前问题检索。</text>
+<rect x="976" y="729" width="434" height="132" rx="10" fill="#eef3f8" stroke="#c6d6cf"/>
+<text x="994" y="767" font-size="23" style="fill:#17383c" class="h">T2  /  会话工作状态</text>
+<text x="994" y="805" font-size="18" style="fill:#17383c">目标、纠正、决定和未完成事项</text>
+<text x="994" y="835" font-size="17" style="fill:#50676c">每个会话维护自己的快照与近期原文。</text>
+<rect x="44" y="892" width="670" height="147" rx="10" fill="#f0f5ee" stroke="#c6d6cf"/>
+<text x="64" y="931" font-size="24" style="fill:#17383c" class="h">在线压缩</text>
+<text x="64" y="970" font-size="19" style="fill:#17383c">按本轮模型算预算，保留当前要求和仍有效的纠正。</text>
+<text x="64" y="1004" font-size="19" style="fill:#17383c">快照写入成功才省略已覆盖的原文，随时可追溯。</text>
+<rect x="740" y="892" width="670" height="147" rx="10" fill="#f3eff7" stroke="#d9cfe0"/>
+<text x="760" y="931" font-size="24" style="fill:#17383c" class="h">空闲整理 · 待定策略</text>
+<text x="760" y="970" font-size="19" style="fill:#17383c">按增量整理候选，去重并标明哪项旧决定被取代。</text>
+<text x="760" y="1004" font-size="19" style="fill:#17383c">写入看来源与适用范围；检索评分只决定本轮相关性。</text>
+<text x="44" y="1090" font-size="21" style="fill:#17383c" class="h">情绪信号</text>
+<text x="206" y="1090" font-size="19" style="fill:#17383c">短时调整回应的深度和节奏。一次语气变化不足以形成长期画像。</text>
+<text x="44" y="1141" font-size="21" style="fill:#17383c" class="h">未来方向</text>
+<text x="206" y="1141" font-size="18" style="fill:#17383c">同一入口可延伸到主动提醒、Drop、Notion、语音与移动端；产品内委派沿用 Harness 的运行边界。</text>
+</svg>

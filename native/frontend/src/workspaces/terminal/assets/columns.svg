@@ -1,0 +1,11 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Lucide / columns-2" clip-path="url(#clip0_0_41)">
+<path id="Vector" d="M2.5 1.5H9.5C10.0523 1.5 10.5 1.94772 10.5 2.5V9.5C10.5 10.0523 10.0523 10.5 9.5 10.5H2.5C1.94772 10.5 1.5 10.0523 1.5 9.5V2.5C1.5 1.94772 1.94772 1.5 2.5 1.5Z" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" stroke="#666666"/>
+<path id="Vector_2" d="M6 1.5V10.5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" stroke="#666666"/>
+</g>
+<defs>
+<clipPath id="clip0_0_41">
+<rect width="12" height="12" fill="white"/>
+</clipPath>
+</defs>
+</svg>

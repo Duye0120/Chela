@@ -1,167 +1,33 @@
 # Chela
 
-`Chela` 是这个项目的正式名称。
+Windows 桌面端由 Go 和 MyGo 创建窗口，WebView2 加载 React 界面。Dock 提供对话、看板、日历、笔记和终端五个工作区。看板和日历共用事项数据。
 
-仓库目录目前可能还是 `first_pi_agent`，但从现在开始，**产品名 / 对外名称统一使用 `Chela`**。
+## 运行
 
-现在这个仓库已经切到 **Chela 桌面 Agent 工作台**：
+首次在仓库根目录安装前端依赖，随后可启动窗口或生成 Windows 可执行文件。
 
-- `Electron`
-- `React`
-- `TypeScript`
-- `Vite`
-- `Tailwind CSS`
-- `Headless UI`
-
-目标不是先把 agent 做完，而是先把未来 agent 的宿主壳子搭起来。
-
-## 现在有什么
-
-当前默认产品是一个偏 `Codex` 风格的桌面聊天工作台：
-
-- 自定义标题栏
-- 左侧会话列表
-- 中间消息流
-- 底部输入区
-- 右侧上下文面板
-- 本地文件选择
-- 文本文件预览
-- 本地会话持久化
-- pi-mono agent 回复
-
-这版还没接真实模型，但已经把将来接 agent 的接口位留好了。
-
-## 项目结构
-
-```text
-Chela/
-├─ src/
-│  ├─ main/              # Electron main process
-│  ├─ preload/           # 安全桥接 API
-│  ├─ renderer/          # React UI
-│  ├─ shared/            # 主进程 / 渲染进程共享类型
-│  ├─ main/chat/         # 聊天 run 编排
-│  ├─ main/agent.ts      # pi-mono agent 装配
-│  ├─ tools/
-│  ├─ config.ts
-│  └─ main.ts            # 旧 CLI demo
-├─ electron.vite.config.ts
-├─ tailwind.config.ts
-└─ package.json
+```sh
+corepack pnpm install --frozen-lockfile
+npm run dev     # 启动 Go 桌面壳
+npm run dev:web # 仅启动浏览器预览，打开 Vite 输出的本机地址
+npm run build   # 生成 native/bin/Chela.exe
 ```
 
-## 开发
+Chat 的桌面入口通过 MyGo IPC 调用 Go。开发页通过 Vite 的本机同源入口调用相同的 Go Chat 服务，聊天记录保存在独立的 `Chela/web-dev` 目录。其他工作区仍使用浏览器预览数据。
 
-安装依赖：
+Chela 自带 `pi-agent-core` 和 `pi-ai`。在 [Agent 入口](native/agent/chat.mjs) 中，Pi 负责对话循环、模型适配和回复事件。Go 提供会话存储、模型配置和进程控制，React 展示消息与生成状态。单机分发时，将 `native/bin/Chela.exe` 与同级 `runtime/` 一起交付，其中含 Node 运行时和打包后的 Agent。
 
-```bash
-pnpm install
-```
+Chat 读取旧 Chela 配置的模型来源和聊天路由。首次打开桌面对话时，从旧事件记录投影文字历史，原始文件保留。点输入区的模型名称可切换模型，右上角「对话信息 → 配置模型」可设置兼容 OpenAI 的接口地址、模型 ID 和密钥。新凭据使用 Windows DPAPI 加密。旧 Electron safeStorage 凭据需要在新壳重新录入。
 
-启动桌面应用：
+## 从哪里开始
 
-```bash
-pnpm dev
-```
+[整体架构图与迁移边界](docs/architecture/chela.md) 说明 Go、Pi 与桌面工作台各自负责什么，以及悬浮助手、审批恢复、长期记忆和外部执行者将从哪里接入。
 
-类型检查：
-
-```bash
-pnpm check
-```
-
-构建：
-
-```bash
-pnpm build
-```
-
-预览构建产物：
-
-```bash
-pnpm start
-```
-
-## v1 已打通的能力
-
-### 1. 桌面 UI
-
-- 深色工作台布局
-- 类 Codex 的桌面壳体验
-- 自定义窗口控制按钮
-
-### 2. 本地文件
-
-- 选择一个或多个本地文件
-- 读取基础元信息
-- 文本类文件预览
-- 会话里挂载附件
-
-### 3. 状态持久化
-
-- 会话列表持久化
-- 消息历史持久化
-- 草稿持久化
-- 附件元信息持久化
-- 右侧面板开关持久化
-
-### 4. agent 接口位
-
-当前 `chat.send(...)` 会进入 `src/main/chat/*`，创建 run 后调用 `src/main/agent.ts` 里的 pi-mono agent。
-
-## preload 暴露给 React 的能力
-
-当前统一挂在：
-
-```ts
-window.desktopApi
-```
-
-包含这些能力：
-
-- `files.pick()`
-- `files.readPreview(path)`
-- `sessions.list()`
-- `sessions.load(sessionId)`
-- `sessions.save(session)`
-- `sessions.create()`
-- `chat.send(input)`
-- `ui.getState()`
-- `ui.setRightPanelOpen(open)`
-- `window.getState()`
-- `window.minimize()`
-- `window.toggleMaximize()`
-- `window.close()`
-- `window.onStateChange(listener)`
-
-## 后续最适合做什么
-
-1. 继续收紧 Harness approval / recovery 链路
-2. 给右侧面板补齐 tool 调用流 / agent 步骤流
-3. 强化工作区浏览和上下文选择
-
-## 常见问题
-
-### Electron uninstall
-
-如果你执行 `pnpm dev` 时看到：
-
-```text
-Error: Electron uninstall
-```
-
-说明 `pnpm` 把 Electron 的安装脚本拦掉了。
-
-执行下面任一方案：
-
-```bash
-node node_modules/electron/install.js
-```
-
-或者：
-
-```bash
-pnpm approve-builds
-```
-
-然后再重新启动。
+| 要找什么 | 位置 |
+| --- | --- |
+| 桌面入口、窗口与系统菜单 | [Go 入口](native/main.go) · [React 桌面壳](native/frontend/src/app/) · [Figma 窗口规范](https://www.figma.com/design/COT3jrWrT1ZzmhfsuY7LR7?node-id=186-23827) |
+| Go 服务 | [internal](native/internal/) 下的 chat 管理会话和 Pi，work 保存任务与笔记，terminal 管理本机终端，storage 提供原子写盘。 |
+| 五个工作区 | [workspaces](native/frontend/src/workspaces/) 中各模块管理自己的页面、样式和专属资源。跨工作区的任务和笔记数据接口在 [data](native/frontend/src/data/)，MyGo 桥接与浏览器预览存储在 [platform](native/frontend/src/platform/)。 |
+| 本版改动及验证记录 | [docs/changes](docs/changes/) |
+| 通用组件、主题 token 和使用约定 | [前端组件库](native/frontend/src/ui/README.md) |
+| 仓库协作约定 | [AGENTS.md](AGENTS.md) |

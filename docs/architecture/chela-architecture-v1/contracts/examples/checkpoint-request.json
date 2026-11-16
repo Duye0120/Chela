@@ -1,0 +1,27 @@
+{
+  "protocol_version": 1,
+  "kind": "request",
+  "method": "session.checkpoint",
+  "worker_id": "worker_2",
+  "epoch": 7,
+  "worker_seq": 18,
+  "request_id": "request_example",
+  "correlation_id": "command_example",
+  "context": {
+    "assistant_id": "assistant_id_example",
+    "session_id": "session_id_example",
+    "branch_id": "branch_id_example",
+    "run_id": "run_id_example",
+    "attempt_id": "attempt_id_example"
+  },
+  "payload": {
+    "base_revision": 42,
+    "branch_generation": 1,
+    "lease_token": 4,
+    "erase_epoch": 0,
+    "active_leaf_id": "pi_entry_42",
+    "added_entries": [],
+    "boundary": "message",
+    "batch_id": "batch_example"
+  }
+}

@@ -29,6 +29,10 @@
 
 ## 执行默认值
 
+- Chela 的 Agent 核心使用项目依赖的 Pi SDK；Go 提供本机能力，MyGo + React 负责展示。换壳时从旧实现迁移 Chat 与 Harness 能力。直接 npm 依赖使用当前稳定版本的 `^` 范围，实际解析版本由 pnpm 锁文件记录。
+- Chela 只有一个持续身份，人格与短期心情可跨会话延续。会话的上下文、工具、审批和取消按 session/branch/run 隔离。重建遵循 `docs/architecture/chela-architecture-v1/`，Go 持有唯一持久源，Pi AgentSession 承担唯一内部循环。
+- Go 服务按职责放在 `native/internal/`，`native/main.go` 负责启动与绑定。React 工作区放在 `native/frontend/src/workspaces/<模块>/`，页面私有组件、样式和资源跟随模块；共用 UI、窗口壳、数据接口和宿主桥接分别放在 `src/ui`、`src/app`、`src/data` 和 `src/platform`。
+
 - 检索、扫描、批量处理优先使用快工具或成熟现成包，不为了语言统一牺牲性能。
 - 搜索类能力交付前要做真实烟测；不能只看类型或静态检查。
 - 代码改动保持小范围、贴合现有架构；不要顺手做无关重构。

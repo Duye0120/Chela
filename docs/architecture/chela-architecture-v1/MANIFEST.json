@@ -1,0 +1,90 @@
+{
+  "package": "Chela architecture v1.0",
+  "created": "2026-11-13",
+  "files": {
+    "README.md": {
+      "sha256": "61d0db0154505711fff2bb08c3255549d5fc29471ac196e62e43b04af9217129",
+      "bytes": 2918
+    },
+    "VALIDATION.json": {
+      "sha256": "bafeefe5c4246e7c7518d1df98809147026b8e6162e883bde9e5a3001d569e39",
+      "bytes": 2191
+    },
+    "VALIDATION.md": {
+      "sha256": "a94477c2a16cdcff74e709d7a258065521789c91091a07f90e021ed7d6fe0887",
+      "bytes": 1137
+    },
+    "contracts/defaults.json": {
+      "sha256": "184050aee962baa7ec4874a9ce87caad8b2084d1b1fe31406fcdf0c9886ef983",
+      "bytes": 2372
+    },
+    "contracts/examples/checkpoint-ack.json": {
+      "sha256": "acf835755c3eb24ea357a7b00817b280c63c7c728effb0a55aef4b149ed435ca",
+      "bytes": 574
+    },
+    "contracts/examples/checkpoint-request.json": {
+      "sha256": "d90f2b66cb02581c7fd6ce5e617c47dacdde32ce0d692190994f85af757e27c9",
+      "bytes": 669
+    },
+    "contracts/protocol.ts": {
+      "sha256": "14a7d242efd0116c3323354d7e0a24510d0949cc48965aaf478dc57694cf8546",
+      "bytes": 23792
+    },
+    "contracts/storage.sql": {
+      "sha256": "e77e92d3cae9c6ea117e3f7e4a79d34ceb63aa2d7ef1a44d7289e7f7a224b540",
+      "bytes": 29206
+    },
+    "contracts/wire.schema.json": {
+      "sha256": "7e836cfd30b745f1d0cd5f2122a1f6c7186f48aa1267fe8bfef508533aee7c84",
+      "bytes": 9779
+    },
+    "docs/architecture/00-decisions.md": {
+      "sha256": "0ad163680e92e72bf6aa6f59d203284b255c4dc673411f03276bdc3512d1b059",
+      "bytes": 7797
+    },
+    "docs/architecture/01-system.md": {
+      "sha256": "475ed53557de67e1817f27822ea83a3da7f6d8304661bb641d1894146fd9c9c9",
+      "bytes": 12147
+    },
+    "docs/architecture/02-runtime-pi.md": {
+      "sha256": "b9f5304f880feb33dc2108205dd559f326b7b54a929034498ee70b25268d4c65",
+      "bytes": 22643
+    },
+    "docs/architecture/03-memory-context.md": {
+      "sha256": "7ab90ee323f572315fcd81ce8cfae45969ec11f1bc85d2c5ba488cd9fd2f4cb8",
+      "bytes": 26807
+    },
+    "docs/architecture/04-proactivity-emotion.md": {
+      "sha256": "a0ca031d4140ba97795fae32752ae94351902b1a28e26d2e5aac510b5bc7795c",
+      "bytes": 22626
+    },
+    "docs/architecture/05-data-contracts.md": {
+      "sha256": "a9be059efcaab1893683de4933743a1b380f9edb1f5ea811495c2316f8a48079",
+      "bytes": 19005
+    },
+    "docs/architecture/06-ui-integrations.md": {
+      "sha256": "73b5b92d17c52338a87461c2a1b5acc133093474d4715c8fedece8aa48f4bb5e",
+      "bytes": 14903
+    },
+    "docs/architecture/07-reliability-release.md": {
+      "sha256": "412a8973a60c7df8bbe25793ee52ffacc9b1c86f55663e4c6743d3391c203c11",
+      "bytes": 10046
+    },
+    "docs/architecture/08-evidence.md": {
+      "sha256": "c67bf8e80bd28d0f72174675d122646873c50886e9d062d76da4a0ea40a73874",
+      "bytes": 15179
+    },
+    "implementation/ACCEPTANCE.md": {
+      "sha256": "babb6700b0b5492cc0593a0d44dc37fce90353d855836d02508b14fc265a98f4",
+      "bytes": 48555
+    },
+    "implementation/IMPLEMENTER-PROMPT.md": {
+      "sha256": "dd3a654d5d7e12d9a9051a8090fb6dc36ad0b7b22501a7cb7e1ba4ac01fc8fb8",
+      "bytes": 4819
+    },
+    "implementation/PLAN.md": {
+      "sha256": "2182ee74719df6c36bb0c2d1f0fc2d299e4edd7f83cbb2b5995bcae347901d80",
+      "bytes": 11357
+    }
+  }
+}

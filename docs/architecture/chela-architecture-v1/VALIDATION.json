@@ -1,0 +1,43 @@
+{
+  "date": "2026-11-13",
+  "scope": "Architecture artifact validation only; no Chela application/SDK/platform tests executed",
+  "sqlite_validation_runtime": "3.53.1",
+  "type_script_validation": "Node v24.22.1 native type-stripping syntax load succeeded; no tsc semantic check",
+  "passed_checks": [
+    "All JSON documents parse; envelope schema is valid Draft 2020-12",
+    "Both canonical checkpoint wire examples validate",
+    "Reject missing context, version mismatch, duplicate success channel, extra field, unacked settled",
+    "Full target DDL creates with JSON and FTS5 available",
+    "Only one active writer per branch",
+    "Checkpoint batch receipt is unique per attempt",
+    "Pi append ordinal unique per session",
+    "Memory slot identity unique across separately proposed IDs",
+    "Affect cause applied only once",
+    "New intention or delivery ID cannot bypass same-fact dedupe",
+    "FTS indexes pretokenized two-character Chinese term",
+    "FTS update removes old tokens and adds current tokens",
+    "FTS delete removes searchable projection",
+    "Foreign key check clean",
+    "Canonical fixed-precision UTC order is chronological",
+    "Balanced code fences: README.md",
+    "Balanced code fences: implementation/ACCEPTANCE.md",
+    "Balanced code fences: implementation/PLAN.md",
+    "Balanced code fences: implementation/IMPLEMENTER-PROMPT.md",
+    "Balanced code fences: docs/architecture/06-ui-integrations.md",
+    "Balanced code fences: docs/architecture/07-reliability-release.md",
+    "Balanced code fences: docs/architecture/04-proactivity-emotion.md",
+    "Balanced code fences: docs/architecture/01-system.md",
+    "Balanced code fences: docs/architecture/08-evidence.md",
+    "Balanced code fences: docs/architecture/03-memory-context.md",
+    "Balanced code fences: docs/architecture/02-runtime-pi.md",
+    "Balanced code fences: docs/architecture/05-data-contracts.md",
+    "Balanced code fences: docs/architecture/00-decisions.md",
+    "All relative Markdown links resolve inside the package",
+    "A01-A46 present once in order"
+  ],
+  "counts": {
+    "base_tables": 58,
+    "acceptance_cases": 46,
+    "package_files_before_report": 19
+  }
+}
