@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { chatApi, type ExtensionRequest } from "./data";
+import { chatApi, type ExtensionRequest } from "../../data/chat";
 import { Button } from "../../ui/button";
 import { Input, Textarea } from "../../ui/text-field";
 import { Select } from "../../ui/select";

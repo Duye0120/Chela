@@ -460,3 +460,17 @@
 - 从 Git 索引移除 `.claude/skills/` 的 90 个重复文件并忽略该路径；本机 junction 和 `.agents/skills/` 唯一源码保持原样，不影响 skill 加载。
 - 验证：核对入口与引用、重复文件、Git 删除清单和 skill 链接；未运行 build/check、全量测试或 UI 自动化，未修改 UI 或热更新行为。按用户后续要求保存为本地提交，不推送。
 - 执行边界：递归清理命令被自动审批拒绝，仅返回 `blocked by policy`；改用 Git 删除已跟踪、可恢复的文件。未跟踪的旧产物与 `native/bin/Chela.exe`、`Chela-dev.exe` 保留，现用服务、runtime、发行目录和依赖未动。
+
+## 第一轮 Chat / Preview 状态与组件结构整理
+
+- 时间：2026-11-16（America/Los_Angeles）。
+- 基线：`codex/chela-figma-restart` / `200d23b933781f4ba3268818ecaf24eb2b7e5104`，开始时工作区干净；未自动提交、推送或合并。
+- 改了什么：
+  - 新增 `docs/architecture/state-ownership.md` 与 `state-refactor-progress.md`，覆盖全项目主要状态归属、Chat/Preview 资源合同、生命周期、删除的旧路径、逐项不变量核对、检查边界与后续任务。
+  - 用同步 Zustand 状态及独立 action/controller 接入草稿/附件、snapshot/progress、分支、runtime、Git 资源、Preview 意图；分支与仓库直接消费者共用查询/失效，最后消费者释放订阅，过期请求不覆盖新目标。仅增加 `zustand ^5.1.0`，锁文件由 pnpm 生成。
+  - 拆出 ChatSidebar、ChatTranscript、ChatComposer、ChatInfoPanel、ChatToolbar；输入只订阅当前草稿，Workspace 保留会话/路由协调、临时模型、历史编辑与共享操作门闩；附件/引用 I/O、发送/重试放入各自 action。
+  - 公共客户端移至 `native/frontend/src/data/chat.ts` / `preview.ts`，仓库选择移至 `state/repository-selection.ts`；保留方法名、参数、响应、存储键及兼容事件。
+  - 共用只读 Markdown 提取为 `ui/markdown.tsx` / `.css`，Notes 保留薄链接适配及原保存机制；Chat 不再导入 Notes 编辑器或整份 Notes 样式。Sidebar 使用 resizable / hotEdge 显式能力 props，其他调用方默认行为保持。
+- 为什么改：让 Chat / Preview 的数据和意图具有单一可定位的所有者，消除两个分支缓存、两个 Git 列表读取与分散订阅，并使主要界面区域可以分别调整。
+- 验证结果：前端 TypeScript 与 diff 检查通过；无宿主断言覆盖缓存/过期响应/清理、草稿/附件限制、首发迁移、command ID 复用和编辑恢复；五种 Chat 状态静态 DOM、Markdown/Notes 适配与基线一致（归一化 React ID）；CSS 规则保留、Chat 布局 CSS 未改；客户端合同、阅读/Notes 保存 hook 与后端边界核对通过。临时脚本和 HTML 留在 `output/state-refactor-2026-11-16/`，未新增测试框架或常驻测试套件。
+- 未做：不启动应用，不运行全量 build/test/lint，不连接真实模型；原生浏览器、菜单键盘焦点、真实附件、滚动与业务链路未验收。Go / Electron / Pi、SQLite、IPC、队列/审批/取消/恢复及退出顺序无修改。Work / Notes 编辑器 / Settings / Go 的后续完整重构只记录范围，没有实施。

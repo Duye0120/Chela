@@ -1,0 +1,35 @@
+.notes-wikilink { display: inline; padding: .125rem .375rem; border: 0; border-radius: var(--chela-radius-xs); background: var(--chela-color-status-info-bg); color: var(--chela-color-status-info-text); font: inherit; text-align: start; cursor: pointer; overflow-wrap: anywhere; }
+.notes-wikilink:disabled { color: var(--chela-color-text-tertiary); background: var(--chela-color-selection-bg); cursor: default; }
+.notes-wikilink:hover:not(:disabled) { text-decoration: underline; }
+.notes-heading { font-weight: 500; padding-block: .25rem; }
+.notes-h1 { font-size: 1.375rem; line-height: 1.875rem; }
+.notes-h2 { font-size: 1rem; line-height: 1.5rem; }
+.notes-h3 { font-size: .875rem; line-height: 1.375rem; }
+.notes-paragraph { white-space: pre-wrap; font-size: .875rem; line-height: 1.375rem; overflow-wrap: anywhere; }
+.notes-todo { display: flex; align-items: flex-start; gap: .625rem; font-size: .875rem; line-height: 1.25rem; }
+.notes-todo input { width: 1rem; height: 1rem; flex: none; margin: .125rem 0; accent-color: var(--chela-color-action-default); cursor: pointer; }
+.notes-todo[data-done=true] > span { color: var(--chela-color-text-tertiary); text-decoration: line-through; }
+.notes-todo > span { overflow-wrap: anywhere; white-space: pre-wrap; }
+.notes-code { border: 1px solid var(--chela-color-border-subtle); background: var(--chela-color-bg-subtle); border-radius: var(--chela-radius-card); padding: .625rem .875rem .75rem; }
+.notes-code small { color: var(--chela-color-text-tertiary); font: .75rem/1rem var(--chela-type-family-code); }
+.notes-code pre { margin: .5rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: .8125rem/1.25rem var(--chela-type-family-code); }
+.notes-callout { display: flex; gap: .625rem; align-items: center; background: var(--chela-color-bg-subtle); border: 1px solid var(--chela-color-border-subtle); border-radius: var(--chela-radius-card); padding: .75rem .875rem; font-size: .8125rem; line-height: 1.25rem; }
+.notes-callout svg { flex: none; }
+.notes-callout span { overflow-wrap: anywhere; }
+.notes-block blockquote, .notes-markdown blockquote { margin: 0; border-inline-start: 2px solid var(--chela-color-accent-border); padding: .25rem .875rem; color: var(--chela-color-text-secondary); font-size: .8125rem; line-height: 1.25rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.notes-linked-card { display: flex; align-items: center; gap: .5rem; border: 1px solid var(--chela-color-border-subtle); border-radius: var(--chela-radius-card); padding: .625rem .875rem; text-decoration: none; color: var(--chela-color-status-info-text); }
+.notes-linked-card span { margin-inline-start: auto; }
+.notes-block hr { border: 0; border-top: 1px solid var(--chela-color-border-default); margin-block: .5rem; }
+.notes-markdown { display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
+.notes-code > header { display: flex; gap: 8px; align-items: center; padding: 5px 10px; border-bottom: 1px solid var(--chela-color-border-subtle); }
+.notes-code > header > small { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; padding: 0; }
+.notes-code > header > span { display: flex; gap: 12px; font: 11px/16px var(--chela-type-family-code); }
+.notes-code b { color: #278445; font-weight: 500; }.notes-code i { color: #ba4037; font-style: normal; }
+.notes-code[data-diff=true] pre { padding: 0; }
+.notes-code[data-diff=true] pre code { display: block; min-height: 20px; padding: 0 12px; white-space: pre; }
+.notes-code code[data-change=added] { background: #69b94114; color: var(--chela-color-text-primary); }
+.notes-code code[data-change=removed] { background: #de4e4910; color: var(--chela-color-text-primary); }
+.notes-paragraph > code, .notes-markdown li code { background: var(--chela-color-bg-subtle); border: 1px solid var(--chela-color-border-subtle); padding: 1px 4px; border-radius: 3px; font-family: var(--chela-type-family-code); }
+.notes-markdown ul, .notes-markdown ol { margin: 4px 0; padding-inline-start: 22px; }
+.notes-diff-open { border: 0; background: transparent; color: var(--chela-color-text-secondary); font: 11px/18px var(--chela-type-family-ui); cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+.notes-diff-open:hover { background: var(--chela-color-selection-bg); }

@@ -4,7 +4,7 @@ import { Button } from "../../ui/button";
 import { CapabilitiesPanel } from "../../app/capabilities-panel";
 import { MCPPanel } from "../../app/mcp-panel";
 import { MemoryPanel } from "../chat/memory-panel";
-import { chatApi, type Capability, type ChatSession, type MCPConfig, type MCPStatus, type MemoryItem } from "../chat/data";
+import { chatApi, type Capability, type ChatSession, type MCPConfig, type MCPStatus, type MemoryItem } from "../../data/chat";
 import { Row, SectionHeading, Toggle } from "./settings-controls";
 import { SettingsDialog } from "./settings-dialog";
 

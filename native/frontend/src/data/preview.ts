@@ -1,4 +1,4 @@
-import { desktop, serviceCall } from "../../platform/bridge";
+import { desktop, serviceCall } from "../platform/bridge";
 export type BrowserTab={id:string;url:string;title:string;error:string;loading:boolean;back:boolean;forward:boolean};
 export type GitFile={path:string;oldPath?:string;status:string};
 export type Repository={path:string;name:string;branch:string;files:GitFile[]};

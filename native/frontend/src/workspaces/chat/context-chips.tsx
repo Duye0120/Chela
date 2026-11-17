@@ -3,7 +3,7 @@ import * as Popover from "@radix-ui/react-popover";
 import documentIcon from "./assets/document.svg";
 import { FileText, Image, X } from "lucide-react";
 import { IconButton } from "../../ui/icon-button";
-import { chatApi, type ChatAttachment } from "./data";
+import { chatApi, type ChatAttachment } from "../../data/chat";
 
 export function ContextChips({ items, onRemove, session, message }: { items: ChatAttachment[]; onRemove?: (id: string) => void; session?: string; message?: string }) {
   return <div className="chat-context-chips" aria-label="附件与引用">{items.map(item => <ContextChip key={item.id} item={item} onRemove={onRemove} session={session} message={message} />)}</div>;

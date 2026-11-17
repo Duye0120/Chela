@@ -1,4 +1,4 @@
-import { desktop } from "../../platform/bridge";
+import { desktop } from "../platform/bridge";
 
 export type ChatMessage = {
   tools?: {id:string;name:string;arguments:string;state:string;result?:string;milliseconds?:number}[];

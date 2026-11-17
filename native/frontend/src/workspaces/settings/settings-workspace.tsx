@@ -1,10 +1,11 @@
+import { saveWorkspacePreference, readEditor } from "../../state/preferences";
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Button } from "../../ui/button";
 import { Select } from "../../ui/select";
 import { Input, SearchField } from "../../ui/text-field";
 import { Sidebar, SidebarItem } from "../../ui/sidebar";
 import { SettingsSubnav, settingsSections } from "../../ui/settings-subnav";
-import { chatApi, type ChatSnapshot, type RuntimeSettings } from "../chat/data";
+import { chatApi, type ChatSnapshot, type RuntimeSettings } from "../../data/chat";
 import { ModelSettings } from "../chat/model-settings";
 import { CompanionPanel } from "../../app/companion-panel";
 import { Plus } from "lucide-react";
@@ -54,9 +55,9 @@ export function SettingsWorkspace({ position, onPositionChange, appearance, onAp
   const [shortcuts,setShortcuts]=useState(readShortcuts);
   const [preview,setPreview]=useState(readPreviewPreferences),[port,setPort]=useState(""),[portError,setPortError]=useState("");
   function previewPreference(value:PreviewPreferences){void act(()=>setPreview(savePreviewPreferences(value)))}
-  const [directory,setDirectory]=useState(""),[editor,setEditor]=useState(()=>localStorage.getItem("chela.workspace.editor")||"system"),[gitDetect,setGitDetect]=useState(()=>localStorage.getItem("chela.git.detect")!=="false"),[gitDepth,setGitDepth]=useState(()=>Number(localStorage.getItem("chela.git.depth")??2));
+  const [directory,setDirectory]=useState(""),[editor,setEditor]=useState(()=>readEditor()),[gitDetect,setGitDetect]=useState(()=>localStorage.getItem("chela.git.detect")!=="false"),[gitDepth,setGitDepth]=useState(()=>Number(localStorage.getItem("chela.git.depth")??2));
   useEffect(()=>{let active=true;void chatApi.defaultDirectory().then(value=>{if(active)setDirectory(value)}).catch(cause=>{if(active)setError(String(cause))});return()=>{active=false}},[]);
-  function workspacePreference(key:string,value:string){localStorage.setItem(key,value);window.dispatchEvent(new Event("chela-workspace-settings"));setStatus("已自动保存")}
+  function workspacePreference(key:string,value:string){saveWorkspacePreference(key,value);setStatus("已自动保存")}
   useEffect(() => { let active = true; void serviceCall<string>("Work.WindowCloseMode").then(value => { if (active) setCloseMode(value); }).catch(cause => { if (active) setError(String(cause)); }); return () => { active = false; }; }, []);
   const scroll = useRef<HTMLDivElement>(null), id = useId();
   useEffect(() => {

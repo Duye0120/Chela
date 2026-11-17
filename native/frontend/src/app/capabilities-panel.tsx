@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { chatApi, type Capability } from "../workspaces/chat/data";
+import { chatApi, type Capability } from "../data/chat";
 import { Button } from "../ui/button";
 import { Input } from "../ui/text-field";
 import "./capabilities.css";

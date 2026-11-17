@@ -2,7 +2,7 @@ import { useId, useRef, useState } from "react";
 import { Button } from "../../ui/button";
 import { Select } from "../../ui/select";
 import { SearchField } from "../../ui/text-field";
-import { chatApi, type ChatSession } from "../chat/data";
+import { chatApi, type ChatSession } from "../../data/chat";
 
 export function ArchiveCard({ sessions, refresh }: { sessions: ChatSession[]; refresh: () => Promise<void> }) {
   const [query, setQuery] = useState(""), [group, setGroup] = useState("all"), [pending, setPending] = useState<ChatSession[]>([]), [busy, setBusy] = useState(false), [error, setError] = useState("");

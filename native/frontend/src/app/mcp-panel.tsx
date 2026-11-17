@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { chatApi, type MCPConfig, type MCPStatus } from "../workspaces/chat/data";
+import { chatApi, type MCPConfig, type MCPStatus } from "../data/chat";
 import { Button } from "../ui/button";
 import { Input, Textarea } from "../ui/text-field";
 import { Select } from "../ui/select";

@@ -1,18 +1,23 @@
+import { useStore } from "zustand";
+import { previewState, setPreviewTab } from "../../state/preview";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowRight, Crosshair, ExternalLink, FileDiff, Globe, Maximize2, Plus, RefreshCw, X } from "lucide-react";
 import { IconButton } from "../../ui/icon-button";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/text-field";
-import type { ChatAttachment } from "../chat/data";
-import { previewApi, type BrowserTab } from "./api";
+import type { ChatAttachment } from "../../data/chat";
+import { previewApi, type BrowserTab } from "../../data/preview";
 import { GitChanges } from "./git-changes";
 import * as Tabs from "@radix-ui/react-tabs";
 import { readPreviewPreferences } from "./preferences";
 import "./preview.css";
 
-export function PreviewWorkspace({session,onClose,onContext,changeRequest,requestedTab}:{session:string;onClose:()=>void;onContext:(item:ChatAttachment)=>void;changeRequest:{path:string;key:number}|null;requestedTab:string}){
- const [tabs,setTabs]=useState<BrowserTab[]>([]),[active,setActive]=useState(()=>sessionStorage.getItem("chela.preview.tab")||"browser"),[error,setError]=useState(""),[address,setAddress]=useState("");
+export function PreviewWorkspace({session,project,onClose,onContext}:{session:string;project:string;onClose:()=>void;onContext:(item:ChatAttachment)=>void}){
+ const active = useStore(previewState, state => state.tab), setActive = setPreviewTab;
+ const changeRequest = useStore(previewState, state => state.changeRequest);
+ const requestedTab = useStore(previewState, state => state.requestedTab);
+ const [tabs,setTabs]=useState<BrowserTab[]>([]),[error,setError]=useState(""),[address,setAddress]=useState("");
  const [maximized,setMaximized]=useState(false),[picking,setPicking]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[dragging,setDragging]=useState(false);
  const [width,setWidth]=useState(()=>{const value=Number(localStorage.getItem("chela.preview.width"));return value>=320&&value<=900?value:520});
  const host=useRef<HTMLElement>(null),viewport=useRef<HTMLDivElement>(null),addressInput=useRef<HTMLInputElement>(null),stop=useRef<(()=>void)|null>(null),pickTarget=useRef(onContext);
@@ -26,7 +31,6 @@ export function PreviewWorkspace({session,onClose,onContext,changeRequest,reques
  const pickingRef=useRef(picking);pickingRef.current=picking;
  useEffect(()=>{if(changeRequest)setActive("changes")},[changeRequest?.key]);
  useEffect(()=>{if(requestedTab)setActive(requestedTab)},[requestedTab]);
- useEffect(()=>{sessionStorage.setItem("chela.preview.tab",active)},[active]);
  useEffect(()=>{const list=tabList.current,item=list?.querySelector('[aria-selected=true]');if(!list||!item)return;const bounds=list.getBoundingClientRect(),selected=item.getBoundingClientRect();list.scrollBy({left:selected.left<bounds.left?selected.left-bounds.left:selected.right>bounds.right?selected.right-bounds.right:0})},[active,tabs.length]);
  useEffect(()=>{if(picking){void previewApi.pick(picking,false).catch(()=>{});setPicking("")}},[session]);
  useEffect(()=>{if(picking&&active!==picking){void previewApi.pick(picking,false).catch(()=>{});setPicking("")}},[active,picking]);
@@ -75,7 +79,7 @@ export function PreviewWorkspace({session,onClose,onContext,changeRequest,reques
    <div className="preview-browser-canvas"><div ref={viewport} className="preview-browser-viewport" data-native-preview={Boolean(tab&&tab.url!=="about:blank")}>
     {(!tab||tab.url==="about:blank")&&<div className="preview-empty"><Globe size={28}/><h2>打开本机页面或网页</h2><p>{previewApi.native?"在上方输入地址，回车打开。":"在 Chela 桌面端使用独立的浏览器预览。"}</p><small>页面与 Chela 控制界面隔离；拾取元素后可引用到对话。</small>{previewApi.native&&preferences.ports.length>0&&<div className="preview-local-pages">{preferences.ports.map(url=><Button key={url} onClick={()=>void act(()=>newTab(url))}>{url}</Button>)}</div>}</div>}
    </div></div><footer>{tab?.loading?"正在加载…":notice||tab?.url||"新标签页"}{picking&&<Button onClick={()=>void pick()}>取消拾取</Button>}</footer>
-  </section>:<GitChanges key={session} session={session} requestedPath={changeRequest?.path||""} onContext={onContext}/ >}</Tabs.Content>
+  </section>:<GitChanges key={session} session={session} project={project} requestedPath={changeRequest?.path||""} onContext={onContext}/ >}</Tabs.Content>
   {dragging&&createPortal(<div className="ui-resize-shield"/>,document.body)}
  </aside></Tabs.Root>;
 }

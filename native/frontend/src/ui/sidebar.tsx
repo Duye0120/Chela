@@ -12,9 +12,11 @@ type SidebarProps = {
   actions?: ReactNode;
   toolbar?: ReactNode;
   children?: ReactNode;
+  resizable?: boolean;
+  hotEdge?: boolean;
 };
 
-export function Sidebar({ id, title, open, actions, toolbar, children }: SidebarProps) {
+export function Sidebar({ id, title, open, actions, toolbar, children, resizable = false, hotEdge = false }: SidebarProps) {
   const titleId = useId();
   const [peek, setPeek] = useState(false), [dragging, setDragging] = useState(false);
   const [width, setWidth] = useState<number | undefined>(() => { const value = Number(localStorage.getItem(`chela.sidebar.${id}`)); return value >= 184 && value <= 420 ? value : undefined; });
@@ -45,10 +47,10 @@ export function Sidebar({ id, title, open, actions, toolbar, children }: Sidebar
     <header><h1 id={titleId}>{title}</h1>{actions}</header>
     {toolbar}
     <div className="ui-sidebar-list">{children}</div>
-    {open && id === "chat-sidebar" && <div className="ui-sidebar-resizer" role="separator" aria-label={`调整${title}侧栏宽度`} aria-orientation="vertical" aria-valuemin={184} aria-valuemax={420} aria-valuenow={width || 280} tabIndex={0}
+    {open && resizable && <div className="ui-sidebar-resizer" role="separator" aria-label={`调整${title}侧栏宽度`} aria-orientation="vertical" aria-valuemin={184} aria-valuemax={420} aria-valuenow={width || 280} tabIndex={0}
       onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { x: event.clientX, width: panel.current!.getBoundingClientRect().width }; setDragging(true); }} onLostPointerCapture={() => setDragging(false)}
       onKeyDown={event => { if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); const value = (currentWidth.current || panel.current!.clientWidth) + (event.key === "ArrowRight" ? 16 : -16); saveWidth(value); localStorage.setItem(`chela.sidebar.${id}`, String(currentWidth.current)); } }} />}
-  </aside>{!open&&id==="chat-sidebar"&&<div className="chat-sidebar-hot-edge" aria-hidden="true" onPointerEnter={()=>{clearTimeout(timer.current);setPeek(true)}} onPointerLeave={()=>{timer.current=setTimeout(()=>{if(!panel.current?.matches(":hover, :focus-within"))setPeek(false)},180)}}/>}{dragging && createPortal(<div className="ui-resize-shield" aria-hidden="true" />, document.body)}</>;
+  </aside>{!open&&hotEdge&&<div className="chat-sidebar-hot-edge" aria-hidden="true" onPointerEnter={()=>{clearTimeout(timer.current);setPeek(true)}} onPointerLeave={()=>{timer.current=setTimeout(()=>{if(!panel.current?.matches(":hover, :focus-within"))setPeek(false)},180)}}/>}{dragging && createPortal(<div className="ui-resize-shield" aria-hidden="true" />, document.body)}</>;
 }
 
 export function SidebarToggle({ controls, open, onToggle }: { controls: string; open: boolean; onToggle: () => void }) {

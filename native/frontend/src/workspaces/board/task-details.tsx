@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { workApi, type WorkTask } from "../../data/work";
 import { Button } from "../../ui/button";
 import { IconButton } from "../../ui/icon-button";
-import { MarkdownNote } from "../notes/note-editor";
+import { Markdown } from "../../ui/markdown";
 import "../notes/notes.css";
 
 export function TaskDetails({ task, busy, onClose, onEdit, onComplete }: { task: WorkTask; busy: boolean; onClose: () => void; onEdit: () => void; onComplete: () => void }) {
@@ -19,7 +19,7 @@ export function TaskDetails({ task, busy, onClose, onEdit, onComplete }: { task:
       <dt>工作目录</dt><dd title={details?.workspace}>{details?.workspace || "未关联目录"}</dd>
       <dt>执行工具</dt><dd>{executor}{details?.state === "exited" || details?.state === "interrupted" ? " · 已结束" : ""}</dd>
       <dt>时间</dt><dd>{task.dueDate ? `截止 ${task.dueDate}` : task.dueLocal || "未设截止日"}{details?.updatedAt && ` · 更新于 ${new Date(details.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`}</dd>
-    </dl><section className="board-details-progress"><h3>验收条件与最近进展</h3>{task.description ? <MarkdownNote content={task.description} notes={[]} onOpen={() => {}} /> : <p>暂无补充说明，可通过“编辑”记录验收条件。</p>}</section>{error && <p role="alert" className="board-error">{error}<Button onClick={onEdit}>查看任务内容</Button></p>}</div>
+    </dl><section className="board-details-progress"><h3>验收条件与最近进展</h3>{task.description ? <Markdown content={task.description} /> : <p>暂无补充说明，可通过“编辑”记录验收条件。</p>}</section>{error && <p role="alert" className="board-error">{error}<Button onClick={onEdit}>查看任务内容</Button></p>}</div>
     <footer><a href={target} className="ui-button" data-variant="primary">{details?.sessionId ? "查看关联对话" : details?.terminalId ? "返回原终端" : "打开关联终端"}</a>{task.status !== "已完成" && task.status !== "已归档" && <Button variant="ghost" disabled={busy} onClick={onComplete}>标记完成</Button>}<small>查看回复后任务继续，完成后再标记。</small></footer>
   </section>;
 }

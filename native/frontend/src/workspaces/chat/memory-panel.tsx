@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../../ui/button";
 import { Select } from "../../ui/select";
 import { Input, Textarea } from "../../ui/text-field";
-import { chatApi, type ChatSession, type MemoryItem } from "./data";
+import { chatApi, type ChatSession, type MemoryItem } from "../../data/chat";
 
 const scopes = {assistant:"所有会话",project:"当前项目",session:"当前会话"};
 const kinds = {preference:"偏好",fact:"事实主张",decision:"决定",procedure:"操作经验",episode:"经历"};

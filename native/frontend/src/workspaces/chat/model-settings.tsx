@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/text-field";
-import { chatApi, type ChatSnapshot } from "./data";
+import { chatApi, type ChatSnapshot } from "../../data/chat";
 
 export function ModelSettings({ onSaved, embedded = false, showRoles = true, initialMode="magpie" }: { onSaved: () => Promise<void>; embedded?: boolean; showRoles?: boolean;initialMode?:"custom"|"magpie" }) {
   const dialog = useRef<HTMLDialogElement>(null);

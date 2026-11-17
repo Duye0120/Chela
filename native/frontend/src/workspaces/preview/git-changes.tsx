@@ -1,10 +1,11 @@
+import { useRepositories, invalidateRepositories } from "../../state/git-actions";
 import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, FileDiff, MessageSquarePlus, RefreshCw, Undo2 } from "lucide-react";
 import { IconButton } from "../../ui/icon-button";
 import { Button } from "../../ui/button";
-import { previewApi, type GitFile, type Repository, type Patch, type RestorePlan } from "./api";
-import { readRepository, useRepository } from "./repository-selection";
-import type { ChatAttachment } from "../chat/data";
+import { previewApi, type GitFile, type Repository, type Patch, type RestorePlan } from "../../data/preview";
+import { useRepository } from "../../state/repository-selection";
+import type { ChatAttachment } from "../../data/chat";
 
 export type DiffLine={old?:number;next?:number;prefix:string;text:string};
 export function diffLines(text:string):DiffLine[]{
@@ -34,20 +35,18 @@ function FileChange({session,repo,file,open,split,onContext,onRestore,busy}:{ses
   </div>}
  </details>;
 }
-export function GitChanges({session,onContext,requestedPath}:{session:string;onContext:(item:ChatAttachment)=>void;requestedPath:string}){
- const [repos,setRepos]=useState<Repository[]>([]),[loading,setLoading]=useState(false),[error,setError]=useState(""),[split,setSplit]=useState(false),[revision,setRevision]=useState(0);
+export function GitChanges({session,project,onContext,requestedPath}:{session:string;project:string;onContext:(item:ChatAttachment)=>void;requestedPath:string}){
+ const { items: repos, loading, error: resourceError, revision } = useRepositories(session, project);
+ const [actionError,setError]=useState(""),[split,setSplit]=useState(false);
+ const error = actionError || resourceError;
  const [selected,setSelected]=useRepository(session);
- const readDepth=()=>{const value=Number(localStorage.getItem("chela.git.depth")??2);return localStorage.getItem("chela.git.detect")==="false"?0:Number.isInteger(value)&&value>=0&&value<=4?value:2};
- const [depth,setDepth]=useState(readDepth);
  const [plan,setPlan]=useState<RestorePlan|null>(null),[restoring,setRestoring]=useState(false),[backup,setBackup]=useState(""),[notice,setNotice]=useState("");const dialog=useRef<HTMLDialogElement>(null),dialogId=useId();
  useEffect(()=>{if(plan)dialog.current?.showModal()},[plan]);
  async function prepareRestore(repo:Repository,files:GitFile[]){setRestoring(true);setError("");try{setPlan(await previewApi.restorePreview(session,repo.path,files.map(file=>file.path)))}catch(cause){setError(String(cause))}finally{setRestoring(false)}}
- async function restore(){if(!plan)return;setRestoring(true);setError("");try{const result=await previewApi.restore(session,plan);setBackup(result.backup);if(result.problem)setError(result.problem);else setNotice(`已还原 ${result.restored.length} 个文件`);dialog.current?.close();setPlan(null)}catch(cause){setError(String(cause))}finally{setRestoring(false);setRevision(value=>value+1)}}
+ async function restore(){if(!plan)return;setRestoring(true);setError("");try{const result=await previewApi.restore(session,plan);setBackup(result.backup);if(result.problem)setError(result.problem);else setNotice(`已还原 ${result.restored.length} 个文件`);dialog.current?.close();setPlan(null)}catch(cause){setError(String(cause))}finally{setRestoring(false);invalidateRepositories(session)}}
 
- useEffect(()=>{const update=()=>setDepth(readDepth());window.addEventListener("chela-workspace-settings",update);return()=>window.removeEventListener("chela-workspace-settings",update)},[]);
- useEffect(()=>{if(!session){setRepos([]);return;}let active=true;setLoading(true);setError("");void previewApi.repositories(session,depth).then(value=>{if(active){setRepos(value);setSelected(value.some(repo=>repo.path===readRepository(session))?readRepository(session):"all")}}).catch(cause=>{if(active)setError(String(cause))}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[session,depth,revision]);
  const visible=selected==="all"?repos:repos.filter(repo=>repo.path===selected),count=visible.reduce((sum,repo)=>sum+repo.files.length,0);
- return <section className="preview-changes" aria-label="Git 变更"><div className="preview-repositories"><button type="button" aria-pressed={selected==="all"} onClick={()=>setSelected("all")}>全部 {repos.reduce((sum,repo)=>sum+repo.files.length,0)}</button>{repos.map(repo=><button key={repo.path} type="button" aria-pressed={selected===repo.path} title={repo.path} onClick={()=>setSelected(repo.path)}>{repo.name} {repo.files.length}</button>)}<IconButton aria-label="刷新变更" disabled={loading} onClick={()=>setRevision(value=>value+1)}><RefreshCw size={13}/></IconButton></div>
+ return <section className="preview-changes" aria-label="Git 变更"><div className="preview-repositories"><button type="button" aria-pressed={selected==="all"} onClick={()=>setSelected("all")}>全部 {repos.reduce((sum,repo)=>sum+repo.files.length,0)}</button>{repos.map(repo=><button key={repo.path} type="button" aria-pressed={selected===repo.path} title={repo.path} onClick={()=>setSelected(repo.path)}>{repo.name} {repo.files.length}</button>)}<IconButton aria-label="刷新变更" disabled={loading} onClick={()=>{setError("");invalidateRepositories(session)}}><RefreshCw size={13}/></IconButton></div>
   <header><span>{selected==="all"?"全部仓库":visible[0]?.name} · {count} 改动</span><Button disabled={restoring||!count||(selected==="all"&&repos.length>1)} title={selected==="all"&&repos.length>1?"切入单仓后才能全部还原":"还原当前仓库的全部改动"} onClick={()=>visible.length===1&&void prepareRestore(visible[0],visible[0].files)}>全部还原</Button><div className="preview-diff-modes"><Button aria-pressed={!split} onClick={()=>setSplit(false)}>单栏</Button><Button aria-pressed={split} onClick={()=>setSplit(true)}>分栏</Button></div></header>
   {error&&<p className="preview-error" role="alert">{error}</p>}
   <div className="preview-file-list" key={`${session}:${revision}:${selected}:${requestedPath}`}>

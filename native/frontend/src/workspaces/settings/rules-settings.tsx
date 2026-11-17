@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { chatApi } from "../chat/data";
+import { chatApi } from "../../data/chat";
 import { Button } from "../../ui/button";
 import { Textarea } from "../../ui/text-field";
 import { serviceCall } from "../../platform/bridge";
