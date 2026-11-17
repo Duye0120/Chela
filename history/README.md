@@ -10,4 +10,5 @@
 | Agent、工具、存储、终端等模块规格 | [规格索引](electron/specs/README.md) |
 | 架构与交互方案、待办 | [旧文档](electron/docs/) · [计划](electron/docs/plans/) · [待办索引](electron/docs/todos/README.md) |
 | 按日期回看旧实现 | [旧变更记录](electron/docs/changes/) |
-| 检查输出、UI 截图、样稿及测试构建 | [artifacts](artifacts/) |
+
+旧检查输出、UI 截图、样稿及测试构建中的 Git 已跟踪文件已清理，需要追溯时可查看提交 `50b8594`；未跟踪的本地产物保留。仍用于迁移参考的旧源码、规格和文档继续保留。

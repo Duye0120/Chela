@@ -7,7 +7,6 @@ out
 output
 coverage
 artifacts
-!/history/artifacts/
 .electron-vite
 .superpowers/
 .playwright-mcp/
@@ -19,3 +18,4 @@ artifacts
 /chela_mockup.html
 /*.png
 /release/
+/.claude/skills/
