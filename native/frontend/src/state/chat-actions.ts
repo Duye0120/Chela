@@ -117,7 +117,11 @@ function acceptSnapshot(value: ChatSnapshot) {
 let snapshotRequest: Promise<ChatSnapshot> | undefined;
 export function refreshChat(fresh = true) {
   if (!fresh && snapshotRequest) return snapshotRequest;
-  const request = chatApi.load().then(value => { acceptSnapshot(value); return chatState.getState().snapshot; })
+  const current = epoch;
+  const request = chatApi.load().then(value => {
+    if (current === epoch) acceptSnapshot(value);
+    return chatState.getState().snapshot;
+  })
     .finally(() => { if (snapshotRequest === request) snapshotRequest = undefined; });
   snapshotRequest = request;
   return request;
@@ -156,6 +160,7 @@ export function observeChat() {
   return { ready: initial, release: () => {
     if (--observers) return;
     ++epoch; clearTimeout(timer);
+    snapshotRequest = undefined;
     window.removeEventListener("chela-models-changed", modelsChanged);
     chatState.setState({ progress: {}, branches: {}, runtime: {}, loading: true, error: "" });
     branchRequests.clear(); runtimeRequests.clear();

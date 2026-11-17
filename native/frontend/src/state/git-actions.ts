@@ -44,7 +44,8 @@ function acquire(target: Target) {
   if (!target.session) return;
   const key = keyOf(target), existing = readers.get(key);
   if (existing) existing.count++;
-  else { readers.set(key, { ...target, count: 1 }); void load(target); }
+  else readers.set(key, { ...target, count: 1 });
+  void load(target);
   return () => {
     const reader = readers.get(key);
     if (!reader || --reader.count) return;

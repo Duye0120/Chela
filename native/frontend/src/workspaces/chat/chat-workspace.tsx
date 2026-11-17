@@ -51,6 +51,7 @@ export function ChatWorkspace({ sidebarOpen, onToggleSidebar }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<ChatSession | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const operation = useRef(false);
+  const instance = useRef(0);
   const input = useRef<HTMLTextAreaElement>(null);
   const confirmDelete = useRef<HTMLDialogElement>(null);
   const dialogTitle = useId();
@@ -65,7 +66,27 @@ export function ChatWorkspace({ sidebarOpen, onToggleSidebar }: Props) {
       await saveRuntimeSettings(current.id, value);
     });
   }
-  useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.defaultPrevented||event.isComposing||document.querySelector("dialog[open]"))return;const keys=readShortcuts();if(matchesShortcut(event,keys.togglePreview)){event.preventDefault();setPreviewOpen(value=>!value)}else if(matchesShortcut(event,keys.newTab)){event.preventDefault();if(!previewApi.native){setError("请在 Chela 桌面端新建浏览器标签页");return;}void previewApi.create(crypto.randomUUID()).then(tab=>{openBrowserTab(tab.id)}).catch(cause=>setError(errorMessage(cause)))}else if(matchesShortcut(event,keys.openEditor)){event.preventDefault();if(session?.project&&!busy)void chatApi.openEditor(session.id,readEditor()).catch(cause=>setError(errorMessage(cause)))}};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key)},[session,busy]);
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || document.querySelector("dialog[open]")) return;
+      const keys = readShortcuts();
+      if (matchesShortcut(event, keys.togglePreview)) {
+        event.preventDefault(); setPreviewOpen(value => !value);
+      } else if (matchesShortcut(event, keys.newTab)) {
+        event.preventDefault();
+        if (!previewApi.native) { setError("请在 Chela 桌面端新建浏览器标签页"); return; }
+        const current = instance.current;
+        void previewApi.create(crypto.randomUUID()).then(tab => {
+          if (current === instance.current) openBrowserTab(tab.id);
+        }).catch(cause => { if (current === instance.current) setError(errorMessage(cause)); });
+      } else if (matchesShortcut(event, keys.openEditor)) {
+        event.preventDefault();
+        if (session?.project && !busy) void chatApi.openEditor(session.id, readEditor()).catch(cause => setError(errorMessage(cause)));
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [session, busy]);
   const editing=edit?.session===selectedId ? edit : null;
   const sessionRuns = (snapshot.runs || []).filter(run => run.session_id === selectedId);
   const activeRun = sessionRuns.find(run => isActiveRun(run) && run.state !== "queued");
@@ -98,7 +119,7 @@ export function ChatWorkspace({ sidebarOpen, onToggleSidebar }: Props) {
       setArchived(item?.archived ?? false);
       if (target && !item) setError("引用的对话已不存在");
     }).catch(() => {});
-    return () => { active = false; observer.release(); previewState.setState({ changeRequest: null, requestedTab: "" }); };
+    return () => { active = false; instance.current++; observer.release(); previewState.setState({ changeRequest: null, requestedTab: "" }); };
   }, []);
 
   useEffect(() => {

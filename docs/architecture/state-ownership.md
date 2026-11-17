@@ -1,6 +1,6 @@
 # 状态归属
 
-更新时间：2026-11-16（America/Los_Angeles）。实施基线：`codex/chela-figma-restart` / `200d23b933781f4ba3268818ecaf24eb2b7e5104`。本文只描述当前 `native/` 实现；历史 Electron 目录不是代码落点。本轮进度见 [state-refactor-progress.md](state-refactor-progress.md)。
+更新时间：2026-11-17（America/Los_Angeles）。第一轮实施基线：`codex/chela-figma-restart` / `200d23b933781f4ba3268818ecaf24eb2b7e5104`；本次生命周期修复基线为 `f69b070658e3b79380a0bbbb3930b4c8f42efade`。本文只描述当前 `native/` 实现；历史 Electron 目录不是代码落点。本轮进度见 [state-refactor-progress.md](state-refactor-progress.md)。
 
 ## 基础约定
 
@@ -16,7 +16,7 @@
 
 | 状态 / 实体 | 权威来源 | renderer 镜像 / 消费者 / 订阅 | 写入入口 | 范围 / 生命周期 | 持久化 | 刷新、失效、清理 |
 | --- | --- | --- | --- | --- | --- | --- |
-| Chat 会话、消息、模型目录、runs、approvals | Go Chat + storage | 本轮统一 Chat snapshot；Sidebar / Transcript / Composer / Info | `chatApi`，成功后合并会话或刷新 snapshot | 应用数据镜像；订阅仅 Chat 挂载期 | Go profile `chela.db`；模型配置沿用 Go 目录 | Observe 事件、操作完成、models-changed；cursor 防回退；最后消费者卸载停止观察 |
+| Chat 会话、消息、模型目录、runs、approvals | Go Chat + storage | 本轮统一 Chat snapshot；Sidebar / Transcript / Composer / Info | `chatApi`，成功后合并会话或刷新 snapshot | 应用数据镜像；请求归属发起时的观察生命周期 | Go profile `chela.db`；模型配置沿用 Go 目录 | 接收前先检查生命周期，再以 cursor 防回退；允许同 cursor 的合法模型配置更新；最后消费者释放使旧请求失效 |
 | Chat progress | Go `sending` / Pi 输出 | 本轮统一 progress；只取 selected session 且 run_id 匹配 activeRun | Observe controller | session / run，易失 | 无前端持久化 | 单一 Observe 循环，卸载停止；不把其他 run 的输出显示在当前 run |
 | 对话分支列表 | Go Chat.Branches | 本轮按 session 共用缓存；ProjectControls / Info | 分支查询 action；switch/edit/regenerate 后失效 | session；可丢弃查询镜像 | Go DB | 当前 branch 改变、分支操作、会话删除 |
 | 运行设置 | Go RuntimeSettings（全局默认 + session 设置） | 本轮按 session 镜像；Composer；Settings 仍独立读取全局值 | runtime action / Settings 现有 API | session；未选择使用空 session 默认值 | Go DB / 现有配置 | session 改变、`chela-runtime-settings-changed`；过期请求不覆盖新值 |
@@ -25,8 +25,8 @@
 | command ID 重试 | renderer action 内存映射 | 发送 / steer | 内容和目标固定的提交 action | 重试期间，跨 Chat 卸载保持 | 无 | 同一 payload 重用；成功删除 |
 | 历史编辑状态 | ChatWorkspace | Composer / Transcript | 编辑准备、取消、成功 | 工作区挂载期；不是所有 session 的持久草稿 | 无 | 保留 previousDraft / previousContexts；卸载释放 |
 | 当前 session / 路由 | hash + 首次 snapshot 的现有规则 | ChatWorkspace 选择并传递子区与 Preview | 初始 load、选择、新建、删除、hashchange | 工作区挂载期 | hash；不新增 last-session 存储 | 有 hash 时按引用定位，否则首个未归档；不存在保留提示 |
-| Preview 开关、当前 tab、打开 diff 意图 | renderer UI | 本轮 Preview UI store；ChatToolbar / Preview | 同步 UI 动作 | 开关/tab 按现有 sessionStorage；diff 请求为工作区意图 | `chela.preview.open` / `.tab` | close/toggle/tab 操作；工作区卸载清理请求，不关闭 Electron 标签 |
-| Git 仓库列表 / 文件状态 | Go Git 读取磁盘 | 本轮按 session + project + 有效 depth 共用资源；ProjectControls / GitChanges | repository 查询/刷新 action | 可丢弃镜像，无独立轮询 | 无 | project、探测配置、分支、显式刷新、还原完成；多消费者合并在途请求 |
+| Preview 开关、当前 tab、打开 diff 意图 | renderer UI | 本轮 Preview UI store；ChatToolbar / Preview | 同步 UI 动作；异步标签回调先校验发起实例代次 | 开关/tab 按现有 sessionStorage；diff 请求为工作区意图 | `chela.preview.open` / `.tab` | 卸载使旧实例的 UI 提交失效并清理工作区请求；有效实例仍按原顺序重放请求；不关闭 Electron 持有的迟到新标签 |
+| Git 仓库列表 / 文件状态 | Go Git 读取磁盘 | 本轮按 session + project + 有效 depth 共用资源；ProjectControls / GitChanges | repository 查询/刷新 action | 可丢弃镜像，无独立轮询 | 无 | 新读者首次/重新挂载即重新验证，包括底栏仍订阅时打开变更；同键在途读取合并；项目/配置/分支/刷新/还原规则保留 |
 | Git 当前仓库 | 浏览器 UI 偏好 | 现有 `repository-selection.ts` 统一读取/订阅；两个入口 | `selectRepository` | session，跨卸载 | `chela.git.selection.<session>` | 同窗口自定义事件 / 跨窗口 storage；仓库失效回退 all |
 | 阅读位置 / 问题锚定 | renderer hook | `useReadingPosition` 的模块 Map / DOM ref | scroll / layout effect | session + branch；跨卸载 | 内存 | 新问题锚定、同问题恢复 top；流式输出不自动滚底；observer / rAF 随组件清理 |
 | busy / 操作互斥 / 错误 | ChatWorkspace 操作 controller；`chatState.error` 是共享展示错误 | 所有操作区共享门闩；删除对话框等局部表单错误独立 | `run` / rename、资源 action | 工作区；busy 与 Go running 不同 | 无 | finally 释放；最后观察者卸载重置 loading/error；不按组件各建一份发送门闩 |
@@ -48,10 +48,10 @@
 
 | 所有者 | 消费者 / 入口 | 失效与退出 |
 | --- | --- | --- |
-| `state/chat.ts` / `chat-actions.ts` | Workspace 订阅 snapshot、当前 session progress、loading 和 modelRevision；Composer 订阅展示错误；Info / ProjectControls 共享 branches；runtime 按 session 订阅 | Observe 200ms，只有一个循环；最后释放取消计时器、事件监听和 progress/branches/runtime，保留可丢弃的 snapshot 内存镜像。每次重新挂载仍重新读取并按 hash/snapshot 初始化，不恢复上次选择。snapshot cursor 不回退；观察读取可合并，写操作后读取必须新发请求。models 事件回调也受观察代次保护 |
+| `state/chat.ts` / `chat-actions.ts` | Workspace 订阅 snapshot、当前 session progress、loading 和 modelRevision；Composer 订阅展示错误；Info / ProjectControls 共享 branches；runtime 按 session 订阅 | Observe 200ms，只有一个循环；最后释放取消计时器/事件、清理 progress/branches/runtime 并推进 epoch，清除在途 snapshot 的复用入口。refreshChat 在调用时捕获 epoch，在 acceptSnapshot 前拒绝已释放代次，迟到 finally 不能清除新请求。保留 snapshot_cursor 的 >= 保护，相同 cursor 可更新模型配置。重新挂载仍重新读取并按 hash/snapshot 初始化，不恢复上次选择；观察读取可合并，写后读取新发请求 |
 | `state/chat-drafts.ts` | Composer 只订阅当前 session 或 `new` 的文本/附件；Workspace 提交时读取；Preview 引用按开始拾取时的回调固定目标 | 不随 Workspace 卸载清空，不持久化；删除会话清除文本和附件；FileReader 在 action 闭包内，进度和完成只更新原 key / attachment ID |
-| `state/git.ts` / `git-actions.ts` | ProjectControls 和 GitChanges 使用同一 session/project/depth 查询；`preferences.ts` 提供有效探测深度 | 同键挂载共享一个请求；请求身份防止失效或释放后的响应写回。项目/深度改键；分支切换、run 结束、显式刷新、还原完成失效，同次 snapshot 按 session 合并刷新。无后台 Git 轮询；最后读者卸载丢弃该键。无项目时 GitChanges 保留 Go 的原错误 |
-| `state/preview.ts` | Toolbar、Workspace 快捷键、共享 Markdown 发出 open/diff/tab 意图；Preview 消费请求并修改共享 tab | open/tab 只写原 sessionStorage 键；diff/requestedTab 随 Workspace 卸载清除。保留原请求 effect 的处理顺序及重新打开面板时的重放；不增加第二套 tab state |
+| `state/git.ts` / `git-actions.ts` | ProjectControls 和 GitChanges 使用同一 session/project/depth 查询；`preferences.ts` 提供有效探测深度 | 每次 acquire 都调用共用 load：已有读者或缓存不阻止新挂载的重新验证；已有同键在途请求则合并。重新验证保留缓存数据，所有消费者接收同一确认结果。请求身份拒绝失效/释放后的响应；项目/深度改键，分支/run 结束/手动刷新/还原规则不变。无后台 Git 轮询；最后读者卸载丢弃该键。无项目时保留 Go 原错误 |
+| `state/preview.ts` | Toolbar、Workspace 快捷键、共享 Markdown 发出 open/diff/tab 意图；Preview 消费请求并修改共享 tab | 快捷新建标签捕获 Chat 实例代次；Preview 新建/关闭及 act 捕获 Preview 实例代次。卸载递增各自代次；每个 await 后写 open/requestedTab/tab 或刷新 tabs 前检查归属。原生操作可以完成，Electron 继续持有资源，旧实例只放弃 UI 提交。open/tab 存储键、diff/requestedTab 的工作区寿命、原 effect 顺序与重开重放不变 |
 | `state/preferences.ts` / `repository-selection.ts` | 模型收藏、编辑器、Git 深度及仓库选择；Settings 调用相同写入口 | 保留 localStorage 键、workspace-settings / git-scope 兼容通知和 storage 跨窗口订阅；偏好监听引用计数，最后消费者卸载移除。仓库选择仍以 localStorage 为单一来源，不另建副本 |
 | `chat/submission-actions.ts` / `composer-actions.ts` | 发送、steer、再生成、引用查询、附件读取；由 Workspace 的同一 run 门闩协调 | 目标和 payload 在调用时固定；command ID 只在成功后删除；失败草稿保留。历史编辑成功先恢复原草稿/附件并结束编辑，再刷新快照，刷新失败不重新进入已完成的编辑 |
 

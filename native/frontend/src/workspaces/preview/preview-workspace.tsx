@@ -22,6 +22,7 @@ export function PreviewWorkspace({session,project,onClose,onContext}:{session:st
  const [width,setWidth]=useState(()=>{const value=Number(localStorage.getItem("chela.preview.width"));return value>=320&&value<=900?value:520});
  const host=useRef<HTMLElement>(null),viewport=useRef<HTMLDivElement>(null),addressInput=useRef<HTMLInputElement>(null),stop=useRef<(()=>void)|null>(null),pickTarget=useRef(onContext);
  const tabList=useRef<HTMLDivElement>(null);
+ const instance=useRef(0);
  const focusAfterClose=useRef<{removed:string;next:string}|null>(null);
  useEffect(()=>{const pending=focusAfterClose.current;if(pending&&!tabs.some(item=>item.id===pending.removed)){focusAfterClose.current=null;tabList.current?.querySelector<HTMLButtonElement>(`[data-tab-key="${CSS.escape(pending.next)}"]`)?.focus()}},[tabs]);
  const [preferences,setPreferences]=useState(readPreviewPreferences);
@@ -58,10 +59,18 @@ export function PreviewWorkspace({session,project,onClose,onContext}:{session:st
   update();window.addEventListener("resize",update);document.addEventListener("visibilitychange",update);
   return()=>{current=false;cancelAnimationFrame(frame);resize.disconnect();mutation.disconnect();window.removeEventListener("resize",update);document.removeEventListener("visibilitychange",update);void previewApi.layout("").catch(()=>{})};
  },[tab?.id,tab?.url,showBrowser,maximized]);
- useEffect(()=>()=>{stop.current?.();void previewApi.layout("").catch(()=>{});if(pickingRef.current)void previewApi.pick(pickingRef.current,false).catch(()=>{})},[]);
- async function act(action:()=>Promise<unknown>){setBusy(true);setError("");try{await action();if(previewApi.native)setTabs(await previewApi.tabs())}catch(cause){setError(String(cause))}finally{setBusy(false)}}
- async function closeTab(id:string,keyboard=false){await act(async()=>{const index=tabs.findIndex(item=>item.id===id),next=tabs[index+1]?.id||tabs[index-1]?.id||"browser";await previewApi.close(id);if(active===id)setActive(next);if(keyboard)focusAfterClose.current={removed:id,next}})}
- async function newTab(url=""){const value=await previewApi.create(crypto.randomUUID(),url);setTabs(items=>[...items.filter(item=>item.id!==value.id),value]);setActive(value.id)}
+ useEffect(()=>()=>{instance.current++;stop.current?.();void previewApi.layout("").catch(()=>{});if(pickingRef.current)void previewApi.pick(pickingRef.current,false).catch(()=>{})},[]);
+ async function act(action:()=>Promise<unknown>){
+  const current=instance.current;
+  setBusy(true);setError("");
+  try{
+   await action();
+   if(current!==instance.current)return;
+   if(previewApi.native){const items=await previewApi.tabs();if(current===instance.current)setTabs(items)}
+  }catch(cause){if(current===instance.current)setError(String(cause))}finally{if(current===instance.current)setBusy(false)}
+ }
+ async function closeTab(id:string,keyboard=false){const current=instance.current;await act(async()=>{const index=tabs.findIndex(item=>item.id===id),next=tabs[index+1]?.id||tabs[index-1]?.id||"browser";await previewApi.close(id);if(current!==instance.current)return;if(active===id)setActive(next);if(keyboard)focusAfterClose.current={removed:id,next}})}
+ async function newTab(url=""){const current=instance.current,value=await previewApi.create(crypto.randomUUID(),url);if(current!==instance.current)return;setTabs(items=>[...items.filter(item=>item.id!==value.id),value]);setActive(value.id)}
  async function navigate(event:FormEvent){event.preventDefault();await act(async()=>{let url:URL;try{url=new URL(address)}catch{throw Error("请输入完整的 http:// 或 https:// 地址")};if(!["http:","https:"].includes(url.protocol)||url.username||url.password)throw Error("仅支持不包含账号密码的 http / https 地址");if(tab)await previewApi.action(tab.id,"navigate",url.href);else await newTab(url.href)})}
  async function pick(){if(!tab||!preferences.picker)return;await act(async()=>{if(picking){await previewApi.pick(picking,false);setPicking("")}else{pickTarget.current=onContext;await previewApi.pick(tab.id,true);setPicking(tab.id);setNotice("点击页面元素以引用，Esc 取消")}})}
  function resizeTo(value:number){const bounded=Math.round(Math.max(320,Math.min(900,innerWidth-180,value)));setWidth(bounded);localStorage.setItem("chela.preview.width",String(bounded))}

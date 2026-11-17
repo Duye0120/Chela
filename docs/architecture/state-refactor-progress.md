@@ -1,6 +1,6 @@
 # 第一轮状态与组件整理进度
 
-更新时间：2026-11-16（America/Los_Angeles）。恢复工作时先读本文，再检查 `git status`、HEAD 与相关 diff。
+更新时间：2026-11-17（America/Los_Angeles）。恢复工作时先读本文，再检查 `git status`、HEAD 与相关 diff。本次回归修复基线及新增验证见下方「2026-11-17：生命周期回归修复」；第一轮的验证记录保留其原范围。
 
 ## 实施基线
 
@@ -24,7 +24,7 @@
 
 五个主要区域已拆分为模块顶层组件；Workspace 保留当前 session、临时模型、历史编辑、单一操作门闩与页面协调。Composer 只订阅当前 draft key，局部管理建议、拖拽和文件输入；`composer-actions.ts` 负责引用/附件 I/O，`submission-actions.ts` 负责发送、steer、再生成和 command ID 重试。Thought、ToolActivities、ContextControl、useReadingPosition 保留，阅读 hook 的 ref 传入 Transcript，DOM 锚点不变。没有给 Composer 添加 session key。
 
-本轮实施完成，后续按下方任务顺序继续。依赖由 `pnpm add zustand` 添加 `^5.1.0` 并生成锁文件，未升级其他依赖。未自动提交、推送、合并，也没有启动后续领域重构。
+第一轮实施完成，依赖由 `pnpm add zustand` 添加 `^5.1.0` 并生成锁文件，未升级其他依赖；随后按用户 `cp` 指令提交并推送为 `f69b070`。没有启动后续领域重构。本次只修复下面列出的三类回归。
 
 ## 关键文件与职责
 
@@ -65,6 +65,40 @@
 临时断言脚本、隔离 bundle、静态 HTML 保留在 `output/state-refactor-2026-11-16/`（Git 忽略的本地产物），没有新增常驻测试框架、测试依赖或测试套件。曾检索 modern-web-guidance 的外部状态订阅主题，无直接匹配的指南；没有套用无关 Web 平台改造。
 
 未验证：没有启动应用、真实 Electron WebContentsView / Browser 布局遮挡与拾取、跨窗口 storage、菜单/键盘/focus/拖拽、真实阅读位置恢复/流式输出、真实文件与模型聊天、Go 的队列/审批/取消/恢复操作。未运行全量 build/test/lint。以上须后续在桌面环境按实际业务验收，不能由静态结果推断通过。
+
+## 2026-11-17：生命周期回归修复
+
+- 基线：`codex/chela-figma-restart` / `f69b070658e3b79380a0bbbb3930b4c8f42efade`，开始时工作区干净。
+- 范围：保留现有组件拆分，仅修改 `state/chat-actions.ts`、`state/git-actions.ts`、`chat/chat-workspace.tsx`、`preview/preview-workspace.tsx` 及本文、状态归属、当日变更记录。用户已授权完成后 `cp`，沿用当前 checkout，不合并、不部署。
+- 已完成：
+  - refreshChat 捕获发起 epoch，在 acceptSnapshot 前校验；最后观察者释放时推进 epoch 并清除旧请求复用入口。保留 cursor >=，不会阻止相同 cursor 的模型配置更新。
+  - Git acquire 即重新验证，即使 ProjectControls 仍持有该资源；同键在途 load 仍合并，缓存保留、最后读者清理及失效保护保持，不添加后台轮询。
+  - Chat 快捷新建、Preview 新建/关闭与后续 act 刷新捕获各自实例代次；卸载递增代次，迟到响应不提交共享 UI，也不继续读取旧实例 tabs。正常实例行为及既有 diff/requestedTab 重放顺序不变；不回滚或主动关闭 Electron 持有的迟到标签。
+
+### 聚焦回归与证据
+
+`node output/lifecycle-fixes-2026-11-17/check-lifecycle.mjs` 修复前复现 6 个失败，修复后下列 10 个场景全部通过：
+
+| 场景 | 隔离 JavaScript 执行结果 |
+| --- | --- |
+| 旧 Chat 读取 → 释放 → 配置改变 → 新 Chat 同 cursor 新模型先返回 → 旧读取迟到 | 新模型不被旧快照覆盖 |
+| 旧读取释放后、尚未重新挂载时返回更大 cursor | 不修改保留的快照缓存 |
+| 当前生命周期内同 cursor 模型刷新 / 更小 cursor 结果 | 同 cursor 更新生效，更小 cursor 被拒绝 |
+| 底栏读者先加载 → 外部文件变化 fixture → 打开/重新打开变更面板 | 两次打开均重新读取共享资源并展示 fixture 的新文件 |
+| 底栏与变更面板在同键请求仍在途中同时挂载 | 仍然只有一个在途读取 |
+| 快捷新建标签未返回 → 旧 Chat 卸载 → 新 Chat 选择页签 → 旧创建完成 | 不重开 Preview，不覆盖新 requestedTab/tab |
+| 当前 Chat 的快捷新建完成 | 正常打开 Preview 并发出 requestedTab |
+| Preview 新建未返回 → 卸载/新实例 → 旧创建完成 | 不覆盖新 tab，不触发旧 act 的额外 Snapshot |
+| Preview 关闭未返回 → 卸载/新实例 → 旧关闭完成 | 不覆盖新实例 tab |
+| 有效 Preview 新建/关闭，以及关闭面板后保留请求的重放 | 正常切换页签，原请求重放顺序保持 |
+
+脚本执行真实状态/action 与组件回调代码；bridge、浏览器存储、计时器和 hook 挂载/清理由隔离 harness 模拟，JSX 不渲染。它不是 React DOM 挂载、实际磁盘 Git、Electron 或真实模型验收。复现脚本和隔离 bundle 位于 Git 忽略的 `output/lifecycle-fixes-2026-11-17/`，未新增测试框架或依赖。
+
+静态验证：`pnpm exec tsc -p native/frontend --pretty false` 通过；`git diff --check` 通过。Go、Electron、Pi、公共 API/IPC、schema、CSS 和 JSX 结构没有改动。未运行全量 build/test/lint，未启动应用或真实模型请求；真实窗口切换、原生标签资源和真实文件变化仍待桌面集成验收。
+
+modern-web-guidance：已查阅 `js` 的异步协调指南；IPC 无 AbortSignal 取消合同，产品实现只校验 UI 提交代次。临时脚本用 Promise.withResolvers 控制返回顺序，遵循指南“Use Promise.withResolvers()”的外部 resolve/reject 约定，没有引入新的取消或重试框架。
+
+三类回归已修复，下一阶段任务范围与依赖保持下方原记录，不在本次继续实施。
 
 ## 后续独立任务（本轮只记录）
 
