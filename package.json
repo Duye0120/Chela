@@ -11,8 +11,10 @@
     "build": "npm run shell:build",
     "shell:frontend": "vite build native/frontend --config native/frontend/vite.config.ts",
     "shell:agent": "node native/scripts/build-agent.mjs",
-    "shell:dev": "npm run shell:agent && npm run shell:frontend && go -C native build -o bin/Chela-dev.exe . && native/bin/Chela-dev.exe",
-    "shell:build": "npm run shell:agent && npm run shell:frontend && go -C native build -ldflags=-H=windowsgui -o bin/Chela.exe ."
+    "shell:icon": "electron native/scripts/render-icon.cjs",
+    "shell:dev": "node native/scripts/desktop.mjs dev",
+    "shell:build": "node native/scripts/desktop.mjs build",
+    "shell:smoke": "node native/scripts/desktop.mjs smoke"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "^1.5.2",
@@ -34,8 +36,50 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^45.3.3",
+    "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.8"
+  },
+  "main": "native/electron/main.mjs",
+  "build": {
+    "appId": "com.chela.desktop",
+    "productName": "Chela",
+    "directories": {
+      "output": "release",
+      "app": "native/electron"
+    },
+    "files": [
+      "**/*",
+      "!smoke.mjs",
+      "!node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "native/bin",
+        "to": "backend",
+        "filter": [
+          "Chela-service.exe",
+          "runtime/**/*"
+        ]
+      },
+      {
+        "from": "native/dist",
+        "to": "frontend"
+      }
+    ],
+    "win": {
+      "target": "dir",
+      "icon": "native/electron/icon.png",
+      "signExecutable": false
+    },
+    "asar": true
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
   }
 }

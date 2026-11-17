@@ -2,16 +2,18 @@
 body { margin: 0; font: var(--chela-type-control); color: var(--chela-color-text-primary); background: var(--chela-color-bg-canvas); }
 img { display: block; pointer-events: none; }
 .shell { height: 100dvh; display: flex; flex-direction: column; background: var(--chela-color-bg-canvas); overflow: hidden; }
-.shell > header { --app-region: drag; display: flex; align-items: center; justify-content: space-between; height: var(--chela-window-title-height); flex: none; padding-left: var(--chela-space-4); user-select: none; }
+.shell > header { -webkit-app-region: drag; display: flex; align-items: center; justify-content: space-between; height: var(--chela-window-title-height); flex: none; padding-left: var(--chela-space-4); user-select: none; }
 .route { display: flex; align-items: center; gap: 6px; }
-.window-controls { --app-region: no-drag; display: flex; }
+.route { min-width: 0; color: var(--chela-color-text-secondary); }
+.route strong { color: var(--chela-color-text-primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.window-controls { -webkit-app-region: no-drag; display: flex; }
 .window-controls button { border-radius: 0; width: 36px; height: 36px; }
 .window-controls button:last-child:hover { background: var(--chela-window-close-hover); }
 .window-controls button:last-child:hover img { filter: brightness(0) invert(1); }
 .body, .frame, .workspace, .workspace > main { flex: 1; min-width: 0; min-height: 0; }
 .body { display: flex; flex-direction: column; }
 .frame { display: flex; padding: var(--chela-space-1) var(--chela-space-2); }
-.workspace { display: flex; overflow: hidden; background: var(--chela-color-bg-surface); border-radius: var(--chela-radius-panel); }
+.workspace { display: flex; position: relative; overflow: hidden; background: var(--chela-color-bg-surface); border-radius: var(--chela-radius-panel); }
 .workspace > main { padding: var(--chela-space-1) var(--chela-space-2); }
 .body > nav { display: flex; flex: none; gap: var(--chela-space-2); align-items: center; justify-content: center; height: var(--chela-window-dock-height); padding: 0 var(--chela-space-4); }
 .dock-item { width: 44px; height: 36px; border-radius: var(--chela-radius-control); }
@@ -21,3 +23,23 @@ img { display: block; pointer-events: none; }
 .shell[data-position=right] .body { flex-direction: row; }
 .shell:not([data-position=bottom]) .body > nav { width: var(--chela-window-dock-width); height: auto; flex-direction: column; padding: 8px 0; }
 .shell:not([data-position=bottom]) .separator { width: 20px; height: 1px; }
+.dock-preview { position: fixed; z-index: 70; width: 236px; padding: 10px 11px; background: var(--chela-color-bg-surface); border: 1px solid var(--chela-color-border-subtle); border-radius: 12px; box-shadow: 0 6px 20px #0002; pointer-events: none; }
+.dock-preview > strong { font-size: 12px; font-weight: 500; display: block; margin-bottom: 8px; }
+.dock-preview > small { color: var(--chela-color-text-tertiary); }
+.dock-preview-viewport { height: 126px; overflow: hidden; border: 1px solid var(--chela-color-border-subtle); border-radius: 8px; }
+.dock-preview-viewport > div { transform-origin: top left; pointer-events: none; }
+.dock-preview .workspace { width: 100%; height: 100%; }
+.body > nav { transition: opacity 160ms, transform 160ms; }
+.shell[data-dock-hidden=true][data-position=bottom] .body > nav { opacity: 0; transform: translateY(100%); pointer-events: none; }
+.shell[data-dock-hidden=true][data-position=left] .body > nav { opacity: 0; transform: translateX(-100%); pointer-events: none; }
+.shell[data-dock-hidden=true][data-position=right] .body > nav { opacity: 0; transform: translateX(100%); pointer-events: none; }
+.dock-hot-edge { position: fixed; z-index: 60; bottom: 0; left: 0; right: 0; height: 8px; }
+.shell[data-dock-auto=true] .body > nav { position: fixed; z-index: 61; background: var(--chela-color-bg-canvas); border-radius: 10px; }
+.shell[data-dock-auto=true][data-position=bottom] .body > nav { bottom: 0; left: 50%; translate: -50% 0; }
+.shell[data-dock-auto=true][data-position=left] .body > nav { left: 0; top: 50%; translate: 0 -50%; }
+.shell[data-dock-auto=true][data-position=right] .body > nav { right: 0; top: 50%; translate: 0 -50%; }
+.shell:not([data-position=bottom]) .dock-hot-edge { top: 36px; bottom: 0; height: auto; width: 8px; }
+.shell[data-position=left] .dock-hot-edge { right: auto; }
+.shell[data-position=right] .dock-hot-edge { left: auto; }
+:root[data-reduced-motion=true] .body > nav { transition: none; }
+@media (prefers-reduced-motion: reduce) { .body > nav { transition: none; } }

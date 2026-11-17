@@ -12,20 +12,23 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Duye0120/Chela/native/internal/network"
 	"github.com/Duye0120/Chela/native/internal/storage"
 )
 
 const newChatTitle = "新对话"
 
 type ChatMessage struct {
-	ID        string `json:"id"`
-	Role      string `json:"role"`
-	Thinking  string `json:"thinking,omitempty"`
-	Tokens    int    `json:"tokens,omitempty"`
-	Limit     int    `json:"limit,omitempty"`
-	Content   string `json:"content"`
-	CreatedAt string `json:"createdAt"`
-	Delivery  string `json:"delivery,omitempty"`
+	Tools       []ToolActivity `json:"tools,omitempty"`
+	Attachments []Attachment   `json:"attachments,omitempty"`
+	ID          string         `json:"id"`
+	Role        string         `json:"role"`
+	Thinking    string         `json:"thinking,omitempty"`
+	Tokens      int            `json:"tokens,omitempty"`
+	Limit       int            `json:"limit,omitempty"`
+	Content     string         `json:"content"`
+	CreatedAt   string         `json:"createdAt"`
+	Delivery    string         `json:"delivery,omitempty"`
 }
 
 type ChatSession struct {
@@ -59,24 +62,26 @@ type ChatSnapshot struct {
 }
 
 type Chat struct {
-	mu           sync.Mutex
-	profile      string
-	config       string
-	sending      map[string]*generation
-	pool         map[string]*piWorker
-	fileMu       sync.Mutex
-	closed       bool
-	store        *storage.Store
-	imported     bool
-	started      bool
-	lifetime     context.Context
-	stopLifetime context.CancelFunc
-	wake         chan struct{}
-	workers      sync.WaitGroup
-	runtimeError string
-	runtimeDir   string
-	mcpMu        sync.Mutex
-	mcpClients   map[string]*mcpSlot
+	mu             sync.Mutex
+	profile        string
+	config         string
+	sending        map[string]*generation
+	pool           map[string]*piWorker
+	fileMu         sync.Mutex
+	closed         bool
+	store          *storage.Store
+	imported       bool
+	started        bool
+	lifetime       context.Context
+	stopLifetime   context.CancelFunc
+	wake           chan struct{}
+	workers        sync.WaitGroup
+	runtimeError   string
+	runtimeDir     string
+	mcpMu          sync.Mutex
+	mcpClients     map[string]*mcpSlot
+	approvalGrants sync.Map
+	network        *network.Service
 }
 
 type generation struct {
@@ -110,6 +115,7 @@ func New(profile string, store *storage.Store) (*Chat, func()) {
 		config = filepath.Join(base, "Chela")
 	}
 	c := &Chat{config: config, profile: profile, sending: make(map[string]*generation), store: store}
+	c.network = network.New(store)
 	c.lifetime, c.stopLifetime = context.WithCancel(context.Background())
 	c.wake = make(chan struct{}, 1)
 	c.pool = make(map[string]*piWorker)
@@ -123,10 +129,24 @@ func chatTime() string {
 func (c *Chat) Create() (ChatSession, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	directory, err := c.DefaultDirectory()
+	if err != nil {
+		return ChatSession{}, err
+	}
+	if directory != "" {
+		info, err := os.Stat(directory)
+		if err != nil || !info.IsDir() {
+			return ChatSession{}, errors.New("默认工作目录不可用，请在设置中修改或清空")
+		}
+	}
 	now := chatTime()
 	session := ChatSession{
 		ID: rand.Text(), Title: newChatTitle, CreatedAt: now, UpdatedAt: now,
 		Messages: []ChatMessage{},
+		Project:  directory,
+	}
+	if directory != "" {
+		session.Group = filepath.Base(directory)
 	}
 	if err := c.save(session); err != nil {
 		return ChatSession{}, err

@@ -12,6 +12,7 @@ import { chatApi } from "../chat/data";
 import { MarkdownNote, NoteEditor, noteLinks, type NoteTarget } from "./note-editor";
 import { useNotes } from "./use-notes";
 import "./notes.css";
+import { routeTitle } from "../../ui/route-title";
 
 type View = "page" | "inbox" | "favorites" | "archive";
 type Props = { sidebarOpen: boolean; onToggleSidebar: () => void };
@@ -56,6 +57,7 @@ export function NotesWorkspace({ sidebarOpen, onToggleSidebar }: Props) {
   const tagField = useRef<HTMLInputElement>(null);
   const searchResults = useRef<HTMLDivElement>(null);
   const note = notes.find(item => item.id === selected);
+  useEffect(() => { routeTitle(note ? [notes.find(item => item.id === note.parentId)?.title, note.title].filter(Boolean).join(" / ") : { inbox: "随手摘录", favorites: "已收藏", archive: "已归档", page: "笔记" }[view]); }, [note?.id, note?.title, note?.parentId, view, notes]);
   const inbox = notes.filter(item => item.inbox && !item.archived);
   const favorites = notes.filter(item => item.favorite && !item.archived);
   const archived = notes.filter(item => item.archived);

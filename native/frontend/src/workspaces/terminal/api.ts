@@ -1,7 +1,7 @@
 import { desktop } from "../../platform/bridge";
 
 export type TerminalProgram = "pwsh" | "codex" | "opencode";
-export type TerminalInfo = { id: string; program: TerminalProgram; directory: string; taskId: string; ended: boolean; state: string; version: string; exitCode: number | null; mode:string;generation:number;observable:boolean;resumable:boolean;externalSessionId:string };
+export type TerminalInfo = { id: string; name?: string; program: TerminalProgram; directory: string; taskId: string; ended: boolean; state: string; version: string; exitCode: number | null; mode:string;generation:number;observable:boolean;resumable:boolean;externalSessionId:string };
 export type ExecutionResult={ref:string;version:number;text:string;seen:boolean};
 type Output = { data: string; next: number; ended: boolean; reset: boolean; persistenceError: string };
 
@@ -12,6 +12,7 @@ async function call<T>(method: string, ...args: unknown[]): Promise<T> {
 
 export const terminalApi = {
   available: Boolean(desktop),
+  rename: (id: string, name: string) => call<void>("Rename", id, name),
   list: () => desktop ? call<TerminalInfo[]>("List") : Promise.resolve([] as TerminalInfo[]),
   chooseDirectory: () => call<string>("ChooseDirectory"),
   start: (program: TerminalProgram, directory: string, taskId: string) => call<TerminalInfo>("Start", program, directory, taskId),

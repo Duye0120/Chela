@@ -1,11 +1,17 @@
 package chat
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +29,151 @@ import (
 	"github.com/Duye0120/Chela/native/internal/storage"
 	"github.com/Duye0120/Chela/native/internal/work"
 )
+
+func TestRuntimeSettingsRulesPriorityAndReferences(t *testing.T) {
+	var requests atomic.Int32
+	outside := filepath.Join(t.TempDir(), "outside.txt")
+	c, s := fixtureChat(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":[{"id":"fixture"}]}`))
+			return
+		}
+		data, _ := io.ReadAll(r.Body)
+		var body map[string]any
+		_ = json.Unmarshal(data, &body)
+		if body["service_tier"] != "priority" || !bytes.Contains(data, []byte("global-proof")) || !bytes.Contains(data, []byte("project-proof")) {
+			t.Error("runtime settings did not reach model request")
+		}
+		n := requests.Add(1)
+		if n == 1 || n == 3 {
+			path := "proof.txt"
+			if n == 3 {
+				path = outside
+			}
+			args, _ := json.Marshal(map[string]string{"path": path, "content": "safe proof"})
+			sse(w, map[string]any{"role": "assistant", "tool_calls": []map[string]any{{"index": 0, "id": fmt.Sprintf("write-%d", n), "type": "function", "function": map[string]string{"name": "write_file", "arguments": string(args)}}}}, "tool_calls")
+			return
+		}
+		sse(w, map[string]any{"role": "assistant", "content": "完成"}, "stop")
+	})
+	var err error
+	s, err = c.update(s.ID, func(s *ChatSession) { s.Project = t.TempDir() })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(s.Project, "AGENTS.md"), []byte("project-proof"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rules, err := c.GlobalRules()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules, err = c.SaveGlobalRules("global-proof", rules.Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var configured profileModel
+	if err = readOptional(filepath.Join(c.profile, "chat-provider.json"), &configured); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(map[string]any{"url": configured.URL, "model": configured.Model, "keepKey": true, "fast": true})
+	if err = c.ConfigureModel(string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	preferences := RuntimeSettings{Permission: "auto", ProjectRules: true, MemoryEnabled: true, FastMode: true}
+	raw, _ = json.Marshal(preferences)
+	if err = c.SetRuntimeSettings(s.ID, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := c.Submit(s.ID, "write proof", "chela-custom", "off", "policy-auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := waitRun(t, c, receipt.RunID)
+	if run.State != "succeeded" {
+		t.Fatal(run.State, run.Reason)
+	}
+	data, err := os.ReadFile(filepath.Join(s.Project, "proof.txt"))
+	if err != nil || string(data) != "safe proof" {
+		t.Fatal(string(data), err)
+	}
+	db, _ := c.store.DB()
+	var count int
+	if err = db.QueryRow("SELECT count(*) FROM approvals WHERE invocation_id IN (SELECT invocation_id FROM tool_invocations WHERE run_id=?)", run.ID).Scan(&count); err != nil || count != 0 {
+		t.Fatal("automatic workspace mode asked approval", count, err)
+	}
+	preferences.Permission = "full"
+	raw, _ = json.Marshal(preferences)
+	if err = c.SetRuntimeSettings(s.ID, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err = c.Submit(s.ID, "write isolated outside proof", "chela-custom", "off", "policy-full")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run = waitRun(t, c, receipt.RunID)
+	if run.State != "succeeded" {
+		t.Fatal(run.State, run.Reason)
+	}
+	data, err = os.ReadFile(outside)
+	if err != nil || string(data) != "safe proof" {
+		t.Fatal("full mode did not reach isolated external file", err)
+	}
+	if _, err = c.ReferenceContent(s.ID, "../outside.txt"); err == nil {
+		t.Fatal("reference escaped project")
+	}
+	refs, err := c.References(context.Background(), s.ID, "proof")
+	if err != nil || len(refs) != 1 {
+		t.Fatal(refs, err)
+	}
+	global := RuntimeSettings{Permission: "ask", ProjectRules: false, MemoryEnabled: false}
+	raw, _ = json.Marshal(global)
+	if err = c.SetRuntimeSettings("", string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	effective, err := c.RuntimeSettings(s.ID)
+	if err != nil || effective.Permission != "full" || effective.MemoryEnabled || effective.ProjectRules {
+		t.Fatal("session override hid global settings", effective, err)
+	}
+	if _, err = c.SaveGlobalRules("new-proof", "stale-hash"); err == nil {
+		t.Fatal("overwrote external rule edits")
+	}
+	var frozen string
+	if err = db.QueryRow("SELECT context_settings_json FROM run_parameters WHERE run_id=?", run.ID).Scan(&frozen); err != nil || !strings.Contains(frozen, "global-proof") {
+		t.Fatal("rule snapshot not persisted", err)
+	}
+	var document bytes.Buffer
+	archive := zip.NewWriter(&document)
+	entry, _ := archive.Create("word/document.xml")
+	_, _ = entry.Write([]byte("<document><p><t>DOCX proof</t></p></document>"))
+	_ = archive.Close()
+	text, err := c.ExtractDocument("sample.docx", base64.StdEncoding.EncodeToString(document.Bytes()))
+	if err != nil || text != "DOCX proof" {
+		t.Fatal(text, err)
+	}
+	if _, err = c.TestProvider("chela-custom"); err != nil {
+		t.Fatal("provider directory probe", err)
+	}
+	if err = c.SetProviderEnabled("chela-custom", "false"); err != nil {
+		t.Fatal(err)
+	}
+	models, _, chosen, _, err := c.catalog()
+	if err != nil || len(models) != 0 || chosen != "" {
+		t.Fatal("disabled provider still selectable", models, chosen, err)
+	}
+	if err = c.SetProviderEnabled("chela-custom", "true"); err != nil {
+		t.Fatal(err)
+	}
+	report, err := c.Diagnostics()
+	if err != nil || report["databaseHealthy"] != true {
+		t.Fatal("health report", report, err)
+	}
+	encoded, _ := json.Marshal(report)
+	if strings.Contains(string(encoded), "global-proof") || strings.Contains(string(encoded), "fixture-key") {
+		t.Fatal("diagnostics included private content")
+	}
+}
 
 func TestPiExtensionUIAndLifecycle(t *testing.T) {
 	var calls atomic.Int32
@@ -1083,6 +1234,21 @@ func TestConservativeContextBudgetStopsBeforeNetwork(t *testing.T) {
 		requests.Add(1)
 		sse(w, map[string]any{"role": "assistant", "content": "unexpected"}, "stop")
 	})
+	if err := c.SetModelRole("compactionThreshold", "80"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetModelRole("compactionThreshold", "99"); err == nil {
+		t.Fatal("unsafe compaction threshold accepted")
+	}
+	if err := c.SetModelRole("compactionEnabled", "false"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetModelRole("effort", "medium"); err != nil {
+		t.Fatal(err)
+	}
+	if roles, err := c.ModelRoles(); err != nil || roles["effort"] != "medium" || roles["compactionThreshold"] != "80" {
+		t.Fatal(roles, err)
+	}
 	receipt, err := c.Submit(s.ID, strings.Repeat("容量", 25000), "chela-custom", "off", "capacity")
 	if err != nil {
 		t.Fatal(err)
@@ -1090,6 +1256,106 @@ func TestConservativeContextBudgetStopsBeforeNetwork(t *testing.T) {
 	run := waitRun(t, c, receipt.RunID)
 	if run.State != "failed" || !strings.Contains(run.Reason, "CONTEXT_CAPACITY") || requests.Load() != 0 {
 		t.Fatalf("capacity gate: %+v requests=%d", run, requests.Load())
+	}
+}
+
+func TestMessageAttachmentsReachProviderAndStayScoped(t *testing.T) {
+	var requests atomic.Int32
+	c, s := fixtureChat(t, func(w http.ResponseWriter, r *http.Request) {
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if !strings.Contains(string(data), "image_url") || !strings.Contains(string(data), "attached text") {
+			var body struct {
+				Messages []struct {
+					Role    string
+					Content json.RawMessage
+				}
+			}
+			_ = json.Unmarshal(data, &body)
+			for _, message := range body.Messages {
+				if message.Role == "user" {
+					t.Errorf("attachments missing from fixture user message: %s", message.Content)
+				}
+			}
+		}
+		requests.Add(1)
+		sse(w, map[string]any{"role": "assistant", "content": "已查看附件"}, "stop")
+	})
+	var config profileModel
+	if err := readOptional(filepath.Join(c.profile, "chat-provider.json"), &config); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(map[string]any{"url": config.URL, "model": config.Model, "key": "fixture-key", "vision": true})
+	if err := c.ConfigureModel(string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	public, err := c.CustomModel()
+	if err != nil || !public.HasKey || !public.Vision || public.URL != config.URL {
+		t.Fatal("safe model settings", public, err)
+	}
+	retained, _ := json.Marshal(map[string]any{"url": config.URL, "model": config.Model, "keepKey": true, "vision": true})
+	if err := c.ConfigureModel(string(retained)); err != nil {
+		t.Fatal(err)
+	}
+	var after profileModel
+	if err := readOptional(filepath.Join(c.profile, "chat-provider.json"), &after); err != nil {
+		t.Fatal(err)
+	}
+	key, err := unseal(after.Secret)
+	if err != nil || string(key) != "fixture-key" {
+		t.Fatal("editing discarded secret", err)
+	}
+	changed, _ := json.Marshal(map[string]any{"url": "https://other.invalid/v1", "model": config.Model, "keepKey": true})
+	if c.ConfigureModel(string(changed)) == nil {
+		t.Fatal("retained secret sent to a different endpoint")
+	}
+	picture := image.NewRGBA(image.Rect(0, 0, 16, 16))
+	picture.Set(0, 0, color.White)
+	var encodedImage bytes.Buffer
+	if err := png.Encode(&encodedImage, picture); err != nil {
+		t.Fatal(err)
+	}
+	imageData := base64.StdEncoding.EncodeToString(encodedImage.Bytes())
+	items := []Attachment{{ID: "text", Name: "note.md", MIME: "text/plain", Text: "attached text"}, {ID: "image", Name: "pixel.png", MIME: "image/png", Data: imageData}}
+	bad := append([]Attachment{}, items...)
+	bad[1].MIME = "image/svg+xml"
+	if validateAttachments(bad) == nil {
+		t.Fatal("disallowed image accepted")
+	}
+	request, _ := json.Marshal(map[string]any{"text": "查看图片与引用", "attachments": items})
+	receipt, err := c.SubmitContext(s.ID, string(request), "chela-custom", "off", "media-fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repeat, err := c.SubmitContext(s.ID, string(request), "chela-custom", "off", "media-fixture")
+	if err != nil || repeat.RunID != receipt.RunID {
+		t.Fatal("media idempotency failed", repeat, err)
+	}
+	run := waitRun(t, c, receipt.RunID)
+	if run.State != "succeeded" || requests.Load() != 1 {
+		t.Fatal(run.State, run.Reason, requests.Load())
+	}
+	attachment, err := c.Attachment(s.ID, receipt.MessageID, "image")
+	if err != nil || attachment.Data != imageData {
+		t.Fatal("attachment lost", err)
+	}
+	other, err := c.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = c.Attachment(other.ID, receipt.MessageID, "image"); err == nil {
+		t.Fatal("cross-session attachment exposed")
+	}
+	snapshot, err := c.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := json.Marshal(snapshot)
+	if strings.Contains(string(encoded), imageData) || strings.Contains(string(encoded), "attached text") {
+		t.Fatal("attachment bodies leaked into polling snapshot")
 	}
 }
 
@@ -1966,7 +2232,10 @@ func TestApprovalBeforeWrite(t *testing.T) {
 	if approval.Preview != "approved text" {
 		t.Fatal("approval did not expose final content")
 	}
-	if err := c.ResolveApproval(approval.ID, true); err != nil {
+	if !approval.CanAllowSession {
+		t.Fatal("file write missing session grant action")
+	}
+	if err := c.AllowSessionApproval(approval.ID); err != nil {
 		t.Fatal(err)
 	}
 	if run := waitRun(t, c, receipt.RunID); run.State != "succeeded" {
@@ -1975,6 +2244,42 @@ func TestApprovalBeforeWrite(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(s.Project, "created.txt"))
 	if err != nil || string(data) != "approved text" {
 		t.Fatalf("file=%s error=%v", data, err)
+	}
+	second, err := c.Submit(s.ID, "再写一次", "chela-custom", "off", "session-grant-repeat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run := waitRun(t, c, second.RunID); run.State != "succeeded" {
+		t.Fatal("session grant not applied", run.Reason)
+	}
+	other, err := c.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err = c.update(other.ID, func(item *ChatSession) { item.Project = s.Project })
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := filepath.Abs("../../bin/runtime")
+	if err != nil {
+		t.Fatal(err)
+	}
+	extra, err := startPiWorker(runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.mu.Lock()
+	c.pool[other.ID] = extra
+	c.mu.Unlock()
+	third, err := c.Submit(other.ID, "另一个会话", "chela-custom", "off", "session-grant-isolated")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next := waitApproval(t, c); next.SessionID != other.ID {
+		t.Fatal("grant leaked across sessions", next)
+	}
+	if err = c.Cancel(third.RunID); err != nil {
+		t.Fatal(err)
 	}
 }
 

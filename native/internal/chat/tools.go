@@ -62,6 +62,9 @@ func (c *Chat) executeTool(ctx context.Context, run Run, raw json.RawMessage) (a
 		return nil, err
 	}
 	rootPath := run.Workspace
+	if run.Policy.Permission == "full" && request.Name != "read" && filepath.IsAbs(file.Path) {
+		rootPath, file.Path = filepath.Dir(file.Path), filepath.Base(file.Path)
+	}
 	if request.Name == "read" {
 		rootPath = ""
 		db, err := c.store.DB()
@@ -297,13 +300,14 @@ func fileFingerprint(root *os.Root, path string) (string, error) {
 }
 
 type Approval struct {
-	ID          string `json:"id"`
-	RunID       string `json:"runId"`
-	SessionID   string `json:"sessionId"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
-	Preview     string `json:"preview"`
+	CanAllowSession bool   `json:"canAllowSession"`
+	ID              string `json:"id"`
+	RunID           string `json:"runId"`
+	SessionID       string `json:"sessionId"`
+	Title           string `json:"title"`
+	Description     string `json:"description"`
+	Status          string `json:"status"`
+	Preview         string `json:"preview"`
 }
 
 func (c *Chat) Approvals() ([]Approval, error) {
@@ -337,7 +341,60 @@ func (c *Chat) ResolveApproval(id string, approved bool) error {
 
 func (c *Chat) awaitFileApproval(ctx context.Context, run Run, invocation, path, hash, version string) error {
 	versions, _ := json.Marshal(map[string]string{path: version})
+	_, granted := c.approvalGrants.Load(fileApprovalGrant{run.SessionID, run.Workspace})
+	if granted || run.Policy.Permission == "auto" || run.Policy.Permission == "full" {
+		return c.store.Update(ctx, func(tx *sql.Tx) error {
+			if err := validateLease(tx, run); err != nil {
+				return err
+			}
+			_, err := tx.Exec("UPDATE tool_invocations SET state='executing',resource_versions_json=? WHERE invocation_id=? AND run_id=?", string(versions), invocation, run.ID)
+			if err != nil {
+				return err
+			}
+			_, err = storage.AppendEvent(tx, run.AssistantID, "approval.policy_allowed", "tool", invocation, 1, "session", run.SessionID, run.ID, map[string]string{"permission": run.Policy.Permission, "workspace": run.Workspace, "path": path})
+			return err
+		})
+	}
 	return c.awaitToolApproval(ctx, run, invocation, hash, versions, "写入文件 "+path, "将修改当前项目内的文件；批准仅用于此次调用。")
+}
+
+type fileApprovalGrant struct{ Session, Workspace string }
+
+func (c *Chat) AllowSessionApproval(id string) error {
+	db, err := c.store.DB()
+	if err != nil {
+		return err
+	}
+	var session, workspace string
+	err = db.QueryRow(`SELECT r.session_id,p.workspace_path FROM approvals a JOIN tool_invocations t ON t.invocation_id=a.invocation_id JOIN runs r ON r.run_id=t.run_id JOIN run_parameters p ON p.run_id=r.run_id WHERE a.approval_id=? AND a.status='pending' AND a.expires_at>? AND r.state='waiting_approval' AND t.tool_id='write_file' AND t.final_args_hash=a.final_args_hash`, id, storage.Now()).Scan(&session, &workspace)
+	if err != nil || workspace == "" {
+		return errors.New("此审批不能授予会话内工作区写入权限")
+	}
+	key := fileApprovalGrant{session, workspace}
+	assistant, err := c.store.Identity()
+	if err != nil {
+		return err
+	}
+	err = c.store.Update(context.Background(), func(tx *sql.Tx) error {
+		result, err := tx.Exec(`UPDATE approvals SET status='approved',revision=revision+1,resolved_at=? WHERE approval_id=? AND status='pending' AND expires_at>? AND EXISTS(SELECT 1 FROM tool_invocations t JOIN runs r ON r.run_id=t.run_id JOIN run_parameters p ON p.run_id=r.run_id WHERE t.invocation_id=approvals.invocation_id AND r.state='waiting_approval' AND t.tool_id='write_file' AND r.session_id=? AND p.workspace_path=? AND t.final_args_hash=approvals.final_args_hash)`, storage.Now(), id, storage.Now(), session, workspace)
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return errors.New("审批已失效或运行已停止")
+		}
+		_, err = storage.AppendEvent(tx, assistant, "approval.session_granted", "approval", id, 2, "session", session, id, map[string]string{"permission": "workspace_file_write", "workspace": workspace, "lifetime": "process"})
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	c.approvalGrants.Store(key, true)
+	return nil
 }
 func (c *Chat) awaitToolApproval(ctx context.Context, run Run, invocation, hash string, versions json.RawMessage, title, description string) error {
 	id := rand.Text()

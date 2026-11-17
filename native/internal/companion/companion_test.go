@@ -563,6 +563,19 @@ func TestDailyReportGroupsFactsWithoutCompletingTasks(t *testing.T) {
 			t.Fatal(key, string(groups[key]), e)
 		}
 	}
+	err = s.Update(context.Background(), func(tx *sql.Tx) error {
+		p, e := NextPresentation(tx, assistant, Presence{}, now)
+		if e != nil {
+			return e
+		}
+		if p == nil || len(p.Items) != 1 || p.Items[0].Report == nil || len(p.Items[0].Report.Today) != 1 || p.Items[0].Report.Today[0].Title != "今天已安排" {
+			t.Fatalf("presentation omitted report facts: %+v", p)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, e = db.Exec(`INSERT INTO execution_observations(observation_id,terminal_session_id,source_event_key,evidence_format,kind,result_ref,result_version,payload_json,observed_at) VALUES('seen','term','seen','fixture','reply_seen','ref',1,'{}',?)`, storage.Now()); e != nil {
 		t.Fatal(e)
 	}

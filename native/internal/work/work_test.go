@@ -20,6 +20,15 @@ func TestLegacyImportAndPlannerEdits(t *testing.T) {
 	store := storage.New(profile)
 	defer store.Close()
 	w := New(profile, store)
+	if err := w.SetWindowCloseMode("minimize"); err != nil {
+		t.Fatal(err)
+	}
+	if mode, err := w.WindowCloseMode(); err != nil || mode != "minimize" {
+		t.Fatal(mode, err)
+	}
+	if err := w.SetWindowCloseMode("unknown"); err == nil {
+		t.Fatal("unknown close mode accepted")
+	}
 	tasks, err := w.Tasks()
 	if err != nil || len(tasks) != 1 {
 		t.Fatalf("import: %+v %v", tasks, err)
@@ -32,6 +41,12 @@ func TestLegacyImportAndPlannerEdits(t *testing.T) {
 	saved, err := w.SaveTask(task)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if details, e := w.Details(saved.ID); e != nil || details.UpdatedAt == "" || details.TerminalID != "" {
+		t.Fatal("task details lost provenance", details, e)
+	}
+	if _, e := w.Details("missing"); e == nil {
+		t.Fatal("missing task details accepted")
 	}
 	if _, err = w.SaveTask(task); err == nil {
 		t.Fatal("stale revision accepted")

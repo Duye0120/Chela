@@ -9,10 +9,10 @@ type DesktopBridge = {
 };
 
 declare global {
-  interface Window { mygo?: DesktopBridge }
+  interface Window { chelaDesktop?: DesktopBridge }
 }
 
-export const desktop = window.mygo;
+export const desktop = window.chelaDesktop;
 
 export async function serviceCall<T>(method:string,...args:unknown[]):Promise<T>{
   if(desktop)return desktop.call<T>(method,...args);

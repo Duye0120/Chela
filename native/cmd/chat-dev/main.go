@@ -1,4 +1,4 @@
-// chat-dev serves the Vite development process over private stdio. Desktop uses MyGo IPC.
+// chat-dev serves the Vite development process over private stdio. Desktop uses Electron IPC through the Go stdio service.
 package main
 
 import (
@@ -80,6 +80,62 @@ func dispatch(c *chat.Chat, r request) (any, error) {
 		return c.RefreshMagpie()
 	case "ModelRoles":
 		return c.ModelRoles()
+	case "CustomModel":
+		return c.CustomModel()
+	case "ExtractDocument":
+		if len(a) == 2 {
+			return c.ExtractDocument(a[0], a[1])
+		}
+	case "RuntimeSettings":
+		if len(a) == 1 {
+			return c.RuntimeSettings(a[0])
+		}
+	case "SetRuntimeSettings":
+		if len(a) == 2 {
+			return nil, c.SetRuntimeSettings(a[0], a[1])
+		}
+	case "SelectProject":
+		if len(a) == 2 {
+			return c.SelectProject(a[0], a[1])
+		}
+	case "References":
+		if len(a) == 2 {
+			return c.References(context.Background(), a[0], a[1])
+		}
+	case "ReferenceContent":
+		if len(a) == 2 {
+			return c.ReferenceContent(a[0], a[1])
+		}
+	case "GlobalRules":
+		return c.GlobalRules()
+	case "NetworkSettings":
+		return c.NetworkSettings()
+	case "SetNetworkSettings":
+		if len(a) == 1 {
+			return nil, c.SetNetworkSettings(a[0])
+		}
+	case "TestNetwork":
+		return c.TestNetwork()
+	case "Providers":
+		return c.Providers()
+	case "SetProviderEnabled":
+		if len(a) == 2 {
+			return nil, c.SetProviderEnabled(a[0], a[1])
+		}
+	case "TestProvider":
+		if len(a) == 1 {
+			return c.TestProvider(a[0])
+		}
+	case "AppInformation":
+		return c.AppInformation(), nil
+	case "Diagnostics":
+		return c.Diagnostics()
+	case "CheckUpdates":
+		return c.CheckUpdates()
+	case "SaveGlobalRules":
+		if len(a) == 2 {
+			return c.SaveGlobalRules(a[0], a[1])
+		}
 	case "Companion":
 		return c.Companion()
 	case "SetProjectQuiet":
@@ -141,6 +197,44 @@ func dispatch(c *chat.Chat, r request) (any, error) {
 	case "Submit":
 		if len(a) == 5 {
 			return c.Submit(a[0], a[1], a[2], a[3], a[4])
+		}
+	case "SubmitContext":
+		if len(a) == 5 {
+			return c.SubmitContext(a[0], a[1], a[2], a[3], a[4])
+		}
+	case "Attachment":
+		if len(a) == 3 {
+			return c.Attachment(a[0], a[1], a[2])
+		}
+	case "ConfigureModel":
+		if len(a) == 1 {
+			return nil, c.ConfigureModel(a[0])
+		}
+	case "GitRepositories":
+		if len(a) == 2 {
+			return c.GitRepositories(a[0], a[1])
+		}
+	case "GitDiff":
+		if len(a) == 3 {
+			return c.GitDiff(a[0], a[1], a[2])
+		}
+	case "GitRestorePreview":
+		if len(a) == 3 {
+			return c.GitRestorePreview(a[0], a[1], a[2])
+		}
+	case "GitRestore":
+		if len(a) == 4 {
+			return c.GitRestore(a[0], a[1], a[2], a[3])
+		}
+	case "DefaultDirectory":
+		return c.DefaultDirectory()
+	case "SetDefaultDirectory":
+		if len(a) == 1 {
+			return nil, c.SetDefaultDirectory(a[0])
+		}
+	case "AllowSessionApproval":
+		if len(a) == 1 {
+			return nil, c.AllowSessionApproval(a[0])
 		}
 	case "Steer":
 		if len(a) == 3 {
@@ -273,6 +367,19 @@ func dispatchWork(w *work.Work, r request) (any, error) {
 		}
 	case "Work.Tasks":
 		return w.Tasks()
+	case "Work.WindowCloseMode":
+		return w.WindowCloseMode()
+	case "Work.SetWindowCloseMode", "Work.Details":
+		if len(r.Args) == 1 {
+			var value string
+			if err := json.Unmarshal(r.Args[0], &value); err != nil {
+				return nil, err
+			}
+			if r.Method == "Work.Details" {
+				return w.Details(value)
+			}
+			return nil, w.SetWindowCloseMode(value)
+		}
 	case "Work.Notes":
 		return w.Notes()
 	case "Work.SaveTask":

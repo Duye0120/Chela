@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { ArrowUpRight, CalendarDays, SquareTerminal, Trash2, X } from "lucide-react";
 import { Button } from "../../ui/button";
 import { IconButton } from "../../ui/icon-button";
@@ -9,7 +9,10 @@ import { TaskReminders } from "../../ui/task-reminders";
 import { PlanDrafts } from "./plan-drafts";
 import * as Menu from "../../ui/menu";
 import { workApi, taskStatuses as statuses, taskPriorities as priorities, type WorkTask, type ScheduleBlock } from "../../data/work";
+import { NoteEditor } from "../notes/note-editor";
+import "../notes/notes.css";
 import "./calendar.css";
+import { routeTitle } from "../../ui/route-title";
 
 const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 const views = ["月视图", "周视图", "按状态分组", "近期安排"];
@@ -65,41 +68,77 @@ export function weekSegments(tasks: CalendarEntry[], days: Date[]) {
 
 function CalendarEditor({ task, tasks, busy, onSave, onDelete, onClose }: {
   task: WorkTask; tasks: WorkTask[]; busy: boolean;
-  onSave: (task: WorkTask) => Promise<void>; onDelete: (task: WorkTask) => Promise<void>; onClose: () => void;
+  onSave: (task: WorkTask) => Promise<WorkTask>; onDelete: (task: WorkTask) => Promise<void>; onClose: () => void;
 }) {
-  const [draft, setDraft] = useState(task);
-  const [error, setError] = useState("");
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const id = useId();
-  const field = (key: keyof WorkTask, value: string) => setDraft(previous => ({ ...previous, [key]: value }));
-  async function submit(event: FormEvent) {
-    event.preventDefault(); setError("");
-    try { await onSave({ ...draft, title: draft.title.trim(), project: draft.project.trim() }); }
-    catch (reason) { setError(message(reason)); }
+  const [draft, setDraft] = useState(task), [error, setError] = useState(""), [saving, setSaving] = useState(false), [confirmDelete, setConfirmDelete] = useState(false);
+  const latest = useRef(task), saved = useRef(task), queue = useRef(Promise.resolve(task));
+  const [recovered, setRecovered] = useState<WorkTask | null>(null);
+  useEffect(() => {
+    if (!task.id) return;
+    try { const value = JSON.parse(sessionStorage.getItem(`chela.calendar.draft.${task.id}`) || "null"); if (value?.id === task.id && typeof value.title === "string" && typeof value.description === "string" && Number.isInteger(value.revision)) setRecovered(value); }
+    catch { setError("无法读取本机草稿，原文档已保留。"); }
+  }, []);
+  const signature = (value: WorkTask) => JSON.stringify({ ...value, revision: 0 });
+  function change(value: WorkTask) { latest.current = value; setDraft(value); if (task.id) { try { sessionStorage.setItem(`chela.calendar.draft.${task.id}`, JSON.stringify(value)); } catch { setError("本机草稿缓存失败，请完成保存后再关闭。"); } } }
+  const field = (key: keyof WorkTask, value: string) => change({ ...latest.current, [key]: value });
+  function persist() {
+    const value = latest.current;
+    const pending = queue.current.catch(() => saved.current).then(async () => {
+      if (signature(value) === signature(saved.current)) return saved.current;
+      if (!value.title.trim()) throw Error("请输入日程名称。");
+      setSaving(true); setError("");
+      const result = await onSave({ ...value, title: value.title.trim(), revision: saved.current.revision });
+      saved.current = result;
+      if (latest.current === value) { latest.current = result; setDraft(result); if (task.id) { try { sessionStorage.removeItem(`chela.calendar.draft.${task.id}`); } catch { setError("文档已保存，本机草稿缓存暂未清除。"); } } }
+      else latest.current = { ...latest.current, revision: result.revision };
+      return result;
+    });
+    queue.current = pending;
+    void pending.catch(cause => setError(message(cause))).finally(() => { if (queue.current === pending) setSaving(false); });
+    return pending;
   }
-  return <section className="calendar-editor" aria-label={task.id ? "日程详情" : "新建日程"}>
-    <header><CalIcon name="file-text" /><strong>{task.id ? "日程详情" : "新建日程"}</strong><IconButton aria-label="关闭日程详情" disabled={busy} onClick={onClose}><X size={15} /></IconButton></header>
+  useEffect(() => {
+    if (!task.id || signature(draft) === signature(saved.current)) return;
+    const timer = setTimeout(() => { void persist().catch(() => {}); }, 500);
+    return () => clearTimeout(timer);
+  }, [draft]);
+  useEffect(() => () => { if (task.id) void persist().catch(() => {}); }, []);
+  async function back() {
+    try { if (task.id) await persist(); onClose(); } catch { /* Keep the unsaved document open. */ }
+  }
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    try { if (task.id) await persist(); else { if (!draft.title.trim()) throw Error("请输入日程名称。"); await onSave(draft); } }
+    catch (cause) { setError(message(cause)); }
+  }
+  return <section className="calendar-editor" data-new={!task.id} aria-label={task.id ? "日程文档" : "新建日程"}>
+    <header><Button onClick={() => void back()}>← 返回日历</Button><span className="calendar-document-route">日历 / {draft.date || "无日期"} / {draft.title || "新建日程"}</span>
+      <span className="calendar-document-status" role="status">{error ? "保存失败 · 草稿保留" : saving ? "正在保存…" : signature(draft) !== signature(saved.current) ? "待保存" : task.id ? "✓ 已保存 · 文档格式" : "新建文档"}</span>
+      {task.id && <a className="ui-button" href={`#board/${encodeURIComponent(task.id)}`}>打开关联任务</a>}
+    </header>
     <form onSubmit={submit}>
-      <div className="calendar-editor-fields">
-        <label htmlFor={id + "title"}>日程名称</label><Input id={id + "title"} required autoFocus value={draft.title} onChange={event => field("title", event.target.value)} />
-        <div className="calendar-field-pair">
-          <label>状态<Select value={draft.status} onChange={event => field("status", event.target.value)}>{[...new Set([...statuses, draft.status])].filter(Boolean).map(status => <option key={status}>{status}</option>)}</Select></label>
-          <label>优先级<Select value={draft.priority} onChange={event => field("priority", event.target.value)}>{[...new Set([...priorities, draft.priority])].filter(Boolean).map(priority => <option key={priority}>{priority}</option>)}</Select></label>
+      <div className="calendar-document-scroll"><article className="calendar-document">
+        {recovered && <div className="notes-recovery" role="status"><span>有一份未保存的本机草稿，原文档已保留。</span><Button onClick={() => { change({ ...recovered, revision: saved.current.revision }); setRecovered(null); }}>恢复草稿</Button><Button onClick={() => { sessionStorage.removeItem(`chela.calendar.draft.${task.id}`); setRecovered(null); }}>丢弃本机草稿</Button></div>}
+        <div className="calendar-document-additions">日程文档</div>
+        <Input className="calendar-document-title" aria-label="日程名称" placeholder="未命名日程" value={draft.title} onChange={event => field("title", event.target.value)} required autoFocus={!task.id} />
+        <div className="calendar-document-properties">
+          <label><span>日期</span><Input type="date" aria-label="日程日期" value={draft.date} onChange={event => field("date", event.target.value)} /><span className="calendar-hint">可拖动跨天或改为无日期</span></label>
+          <label><span>状态</span><Select aria-label="日程状态" value={draft.status} onChange={event => field("status", event.target.value)}>{[...new Set([...statuses, draft.status])].filter(Boolean).map(status => <option key={status}>{status}</option>)}</Select></label>
+          <label><span>关联项目</span><Input aria-label="日程所属项目" value={draft.project} onChange={event => field("project", event.target.value)} placeholder="未关联项目" /></label>
+          <div><span>关联任务</span>{task.id ? <a href={`#board/${encodeURIComponent(task.id)}`}>{task.parentId ? "父任务与当前事项" : "在看板查看"} ↗</a> : <span>创建后可在看板查看</span>}</div>
         </div>
-        <label htmlFor={id + "project"}>所属项目</label><Input id={id + "project"} list={id + "projects"} value={draft.project} onChange={event => field("project", event.target.value)} placeholder="选择或输入项目" />
-        <datalist id={id + "projects"}>{[...new Set(tasks.map(item => item.project).filter(Boolean))].map(project => <option key={project} value={project} />)}</datalist>
-        <TaskScheduleFields task={draft} onChange={setDraft} className="calendar-field-pair" />
-        {task.id&&<TaskReminders task={task}/>}
-        <p className="calendar-hint">留空日期后，日程会进入无日期列表。</p>
-        <label htmlFor={id + "content"}>文档内容</label><Textarea id={id + "content"} rows={14} value={draft.description} onChange={event => field("description", event.target.value)} placeholder="记录背景、计划、执行过程和验收要求…" />
-        {draft.parentId && <a href={`#board/${encodeURIComponent(draft.parentId)}`}>查看父任务 <ArrowUpRight size={12} /></a>}
-        {task.id && tasks.filter(item => item.parentId === task.id).map(child => <a key={child.id} href={`#board/${encodeURIComponent(child.id)}`}>子任务：{child.title} <ArrowUpRight size={12} /></a>)}
+        <NoteEditor content={draft.description} onChange={description => field("description", description)} notes={[]} targets={tasks.map(item => ({ id: item.id, title: item.title, kind: "task" as const, detail: item.status }))} onOpen={value => { location.hash = `board/${encodeURIComponent(value)}`; }}
+          onError={setError} onCreateTask={text => { void workApi.saveTask({ ...blankTask(""), title: text, parentId: task.id }).then(value => { location.hash = `board/${encodeURIComponent(value.id)}`; }).catch(cause => setError(message(cause))); }} />
+        <details className="calendar-document-advanced"><summary>排期、优先级与提醒</summary><TaskScheduleFields task={draft} onChange={change} className="calendar-field-pair" />
+          <label>优先级<Select aria-label="日程优先级" value={draft.priority} onChange={event => field("priority", event.target.value)}>{priorities.map(priority => <option key={priority}>{priority}</option>)}</Select></label>
+          {task.id && <TaskReminders task={draft} />}
+        </details>
         {error && <p role="alert" className="calendar-error">{error}</p>}
-        {confirmDelete && <div className="calendar-delete-confirm" role="alert"><p>删除“{task.title}”？此操作无法撤销。</p><Button disabled={busy} onClick={() => { void onDelete(task).catch(reason => setError(message(reason))); }}>确认删除</Button><Button disabled={busy} onClick={() => setConfirmDelete(false)}>取消</Button></div>}
-      </div>
-      <footer><Button type="submit" variant="primary" disabled={busy}>{busy ? "保存中…" : task.id ? "保存日程" : "创建日程"}</Button>
-        {task.id && <><a href={`#board/${encodeURIComponent(task.id)}`}>在看板打开 <ArrowUpRight size={13} /></a><a href={`#terminal/${encodeURIComponent(task.id)}`} aria-label="打开关联终端"><SquareTerminal size={15} /></a><IconButton aria-label="删除日程" disabled={busy} onClick={() => setConfirmDelete(true)}><Trash2 size={14} /></IconButton></>}
-      </footer>
+        {confirmDelete && <div className="calendar-delete-confirm" role="alert"><p>删除“{draft.title}”？此操作无法撤销。</p><Button disabled={busy || saving} onClick={() => void onDelete(saved.current).catch(cause => setError(message(cause)))}>确认删除</Button><Button onClick={() => setConfirmDelete(false)}>取消</Button></div>}
+        <footer><Button type="submit" variant="primary" disabled={busy || saving}>{saving ? "保存中…" : task.id ? "保存文档" : "创建并打开文档"}</Button>
+          {task.id && <IconButton aria-label="删除日程" disabled={busy || saving} onClick={() => setConfirmDelete(true)}><Trash2 size={14} /></IconButton>}
+        </footer>
+      </article></div>
     </form>
   </section>;
 }
@@ -118,6 +157,7 @@ export function CalendarWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpe
   const [project, setProject] = useState("");
   const [sort, setSort] = useState("date");
   const [editor, setEditor] = useState<WorkTask | null>(null);
+  useEffect(() => { routeTitle(editor?.title || view); }, [view, editor?.title]);
   const today = localDate(new Date());
   async function load() {
     setLoading(true); setError("");
@@ -145,7 +185,7 @@ export function CalendarWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpe
   function closeEditor() { setEditor(null); if (routedId()) location.hash = "calendar"; }
   async function save(task: WorkTask) {
     setBusy(true);
-    try { const saved = await workApi.saveTask(task); setTasks(previous => [...previous.filter(item => item.id !== saved.id), saved]); closeEditor(); }
+    try { const saved = await workApi.saveTask(task); setTasks(previous => [...previous.filter(item => item.id !== saved.id), saved]); if (!task.id) { setEditor(saved); location.hash = `calendar/${encodeURIComponent(saved.id)}`; } return saved; }
     finally { setBusy(false); }
   }
   async function remove(task: WorkTask) {
@@ -183,13 +223,14 @@ export function CalendarWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpe
   const periodTitle = `${anchor.getFullYear()} 年 ${anchor.getMonth() + 1} 月`;
   const upcoming = scheduled.filter(task => task.date && taskEnd(task) >= today);
   return <>
-    <aside id="calendar-unscheduled" className="calendar-unscheduled" hidden={!showUnscheduled || !sidebarOpen}>
+    <aside id="calendar-unscheduled" className="calendar-unscheduled" hidden={Boolean(editor) || !showUnscheduled || !sidebarOpen}>
       <header><strong>无日期文档（{unscheduled.length}）</strong><IconButton aria-label="收起无日期列表" onClick={onToggleSidebar}><X size={13} /></IconButton></header>
       <p className="calendar-hint">拖入日历即可排期，也可以打开文档设置日期。</p>
       {unscheduled.map(task => card(task))}{!unscheduled.length && <p className="calendar-hint">暂无无日期事项</p>}
       <Button variant="ghost" onClick={() => setEditor(blankTask(""))}><CalIcon name="plus" />新建无日期文档</Button>
     </aside>
     <main className="calendar-main">
+      <div className="calendar-overview" hidden={Boolean(editor)}>
       <header className="calendar-toolbar">
         <div className="calendar-tabs" aria-label="日历视图">{views.map(value => <Button key={value} variant="ghost" aria-pressed={view === value} onClick={() => changeView(value)}>{value}</Button>)}</div>
         <div className="calendar-toolbar-actions">
@@ -216,6 +257,7 @@ export function CalendarWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpe
         </div> : view === "周视图" ? <div className="calendar-week">{days.map((day, i) => { const key = localDate(day); return <section key={key} data-today={key === today} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); void dropTask(event.dataTransfer.getData("text/chela-task"), key,event.dataTransfer.getData("text/chela-block")); }}><header><span>{weekdays[i]} {day.getDate()}{key === today ? " · 今天" : ""}</span><IconButton aria-label={`${key} 新建日程`} onClick={() => setEditor(blankTask(key))}><CalIcon name="plus" /></IconButton></header>{scheduled.filter(task => onDate(task, key)).map(task => card(task, key))}</section>; })}</div>
           : view === "按状态分组" ? <div className="calendar-status-groups">{[...new Set([...statuses, ...visible.map(task => task.status)])].map(value => <section key={value}><h2>{value} <small>{visible.filter(task => task.status === value).length}</small></h2>{visible.filter(task => task.status === value).map(task => card(task))}<Button variant="ghost" onClick={() => setEditor({ ...blankTask(today), status: value })}><CalIcon name="plus" />新建</Button></section>)}</div>
           : <div className="calendar-upcoming">{upcoming.length ? upcoming.map(task => <section key={task.calendarKey||task.id}><time>{task.date}{task.endDate && task.endDate !== task.date ? ` — ${task.endDate}` : ""}</time>{card(task)}</section>) : <p className="calendar-empty"><CalendarDays size={24} />暂无近期安排</p>}</div>}
+      </div>
       </div>
       {editor && <CalendarEditor key={editor.id || "new"} task={editor} tasks={tasks} busy={busy} onSave={save} onDelete={remove} onClose={closeEditor} />}
     </main>

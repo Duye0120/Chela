@@ -18,6 +18,7 @@ export type Delivery = { id:string;text:string;status:string;purpose:string;crea
 export type PlanChange={itemId:string;title:string;date:string;endDate:string;timezone:string;estimateMinutes:number;blocks?:ScheduleBlock[]};
 export type PlanDraft={id:string;revision:number;state:string;sessionId:string;changes:PlanChange[];conflicts?:string[]};
 export const workApi={
+  details:(id:string)=>serviceCall<{workspace:string;updatedAt:string;executor:string;state:string;sessionId:string;terminalId:string}>("Work.Details",id),
   tasks:()=>serviceCall<WorkTask[]>("Work.Tasks"),
   saveTask:(task:WorkTask)=>serviceCall<WorkTask>("Work.SaveTask",{...task,timezone:task.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone}),
   deleteTask:(id:string)=>serviceCall<void>("Work.DeleteTask",id),

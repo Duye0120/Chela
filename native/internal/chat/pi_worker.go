@@ -214,6 +214,7 @@ func (c *Chat) piWorker(session string) (*piWorker, error) {
 }
 
 func (c *Chat) shutdown() {
+	defer c.network.Close()
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()

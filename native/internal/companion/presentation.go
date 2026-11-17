@@ -17,6 +17,13 @@ type PresentedDelivery struct {
 	Text    string          `json:"text"`
 	Purpose string          `json:"purpose"`
 	Actions json.RawMessage `json:"actions"`
+	Report  *ReportFacts    `json:"report,omitempty"`
+}
+
+type ReportFacts struct {
+	Today     []Fact `json:"today"`
+	Completed []Fact `json:"completed"`
+	Leftover  []Fact `json:"leftover"`
 }
 
 type Presentation struct {
@@ -132,7 +139,7 @@ func NextPresentation(tx *sql.Tx, assistant string, presence Presence, now time.
 }
 
 func presentationItems(tx *sql.Tx, id string, now time.Time) ([]PresentedDelivery, error) {
-	rows, err := tx.Query(`SELECT d.delivery_id,d.text,d.purpose,d.actions_json FROM presentation_deliveries p JOIN deliveries d ON d.delivery_id=p.delivery_id WHERE p.presentation_id=? AND d.status IN ('pending','deferred','presented') AND d.expires_at>? ORDER BY d.not_before,d.delivery_id`, id, stamp(now))
+	rows, err := tx.Query(`SELECT d.delivery_id,d.text,d.purpose,d.actions_json,d.source_refs_json FROM presentation_deliveries p JOIN deliveries d ON d.delivery_id=p.delivery_id WHERE p.presentation_id=? AND d.status IN ('pending','deferred','presented') AND d.expires_at>? ORDER BY d.not_before,d.delivery_id`, id, stamp(now))
 	if err != nil {
 		return nil, err
 	}
@@ -140,11 +147,17 @@ func presentationItems(tx *sql.Tx, id string, now time.Time) ([]PresentedDeliver
 	items := []PresentedDelivery{}
 	for rows.Next() {
 		var d PresentedDelivery
-		var raw string
-		if err = rows.Scan(&d.ID, &d.Text, &d.Purpose, &raw); err != nil {
+		var raw, facts string
+		if err = rows.Scan(&d.ID, &d.Text, &d.Purpose, &raw, &facts); err != nil {
 			return nil, err
 		}
 		d.Actions = json.RawMessage(raw)
+		if d.Purpose == "daily_report" {
+			d.Report = &ReportFacts{}
+			if err = json.Unmarshal([]byte(facts), d.Report); err != nil {
+				return nil, err
+			}
+		}
 		items = append(items, d)
 	}
 	return items, rows.Err()

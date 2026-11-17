@@ -1,9 +1,11 @@
 .workspace > .calendar-main { padding: 0; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.calendar-overview { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.calendar-overview[hidden] { display: none; }
 .calendar-main img, .calendar-unscheduled img { width: 12px; height: 12px; flex: none; }
 .calendar-toolbar { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 42px; padding: 6px 16px; border-bottom: 1px solid var(--chela-color-border-subtle); }
 .calendar-tabs, .calendar-toolbar-actions, .calendar-period-controls { display: flex; align-items: center; gap: 4px; }
 .calendar-toolbar-actions { margin-left: auto; flex-wrap: wrap; }
-.calendar-toolbar .ui-button { height: 28px; font-size: 12px; gap: 5px; padding-inline: 10px; white-space: nowrap; }
+.calendar-toolbar, .calendar-period-controls { --chela-control-height: var(--chela-size-control-small); --chela-control-font: var(--chela-type-caption); }
 .calendar-tabs .ui-button { border-radius: var(--chela-radius-pill); padding-inline: 12px; color: var(--chela-color-text-secondary); }
 .calendar-tabs [aria-pressed=true] { border-color: var(--chela-color-status-info-text); background: var(--chela-color-status-info-bg); color: var(--chela-color-text-primary); }
 .calendar-toolbar [data-variant=primary] img { filter: brightness(0) invert(1); }
@@ -13,8 +15,7 @@
 .calendar-period h1 small { font: inherit; }
 .calendar-summary { display: inline-flex; align-items: center; gap: 4px; color: var(--chela-color-text-secondary); background: var(--chela-color-selection-bg); border-radius: var(--chela-radius-xs); font-size: 11px; padding: 2px 7px; white-space: nowrap; }
 .calendar-period-controls { margin-left: auto; }
-.calendar-period-controls .ui-button { height: 26px; font-size: 12px; padding-inline: 10px; }
-.calendar-period-controls .ui-icon-button { width: 26px; padding: 0; border: 1px solid var(--chela-color-border-default); }
+.calendar-period-controls .ui-icon-button { border: 1px solid var(--chela-color-border-default); }
 .calendar-month, .calendar-week { border: 1px solid var(--chela-color-border-subtle); border-radius: var(--chela-radius-card); flex: 1; min-height: 0; overflow: auto; }
 .calendar-month { display: flex; flex-direction: column; min-width: 640px; }
 .calendar-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); min-height: 26px; border-bottom: 1px solid var(--chela-color-border-subtle); color: var(--chela-color-text-tertiary); font-size: 12px; text-align: center; align-items: center; flex: none; }
@@ -63,7 +64,7 @@
 .calendar-upcoming { overflow: auto; }
 .calendar-upcoming > section { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 12px; align-items: start; margin-bottom: 10px; }
 .calendar-upcoming time { color: var(--chela-color-text-secondary); font-size: 12px; padding-top: 10px; }
-.calendar-editor { position: absolute; inset: 0 0 0 auto; z-index: 3; width: min(560px, 100%); background: var(--chela-color-bg-surface); box-shadow: var(--chela-shadow-overlay); display: flex; flex-direction: column; }
+.calendar-editor { flex: 1; min-height: 0; width: 100%; background: var(--chela-color-bg-surface); display: flex; flex-direction: column; }
 .calendar-editor > header { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 16px; border-bottom: 1px solid var(--chela-color-border-subtle); }
 .calendar-editor > header strong { flex: 1; font-size: 13px; }
 .calendar-editor form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -75,6 +76,25 @@
 .calendar-editor textarea { min-height: 180px; flex: 1; font-size: 13px; line-height: 22px; }
 .calendar-editor a { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--chela-color-status-info-text); text-decoration: none; }
 .calendar-editor footer { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--chela-color-border-subtle); }
+.calendar-editor > header { min-height: 42px; flex: none; }
+.calendar-editor > header .ui-button { height: 28px; font-size: 12px; padding: 4px 10px; }
+.calendar-document-route { flex: 1; color: var(--chela-color-text-tertiary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-document-status { color: var(--chela-color-status-success-text); font-size: 11px; white-space: nowrap; }
+.calendar-document-scroll { flex: 1; min-height: 0; overflow: auto; padding: 32px 24px 28px; }
+.calendar-document { width: min(740px, 100%); margin-inline: auto; }
+.calendar-document-additions { color: var(--chela-color-text-tertiary); font-size: 12px; margin-bottom: 14px; }
+.calendar-document-title.ui-field { padding: 0; border: 0; border-radius: 0; height: auto; min-height: 36px; font: 500 28px/36px var(--chela-font-ui); width: 100%; background: transparent; }
+.calendar-document-title:focus-visible { outline: 1px solid var(--chela-color-border-default); }
+.calendar-document-properties { margin: 14px 0; padding: 10px 0; display: grid; gap: 8px; border-block: 1px solid var(--chela-color-border-subtle); }
+.calendar-document-properties > :is(label,div) { display: flex; align-items: center; gap: 14px; min-height: 24px; font-size: 13px; }
+.calendar-document-properties > :is(label,div) > span:first-child { flex: none; width: 84px; color: var(--chela-color-text-tertiary); }
+.calendar-document-properties .ui-field { min-height: 24px; height: 24px; width: min(240px, 50%); padding: 0; border: 0; background: transparent; font-size: 13px; }
+.calendar-document-properties .calendar-hint { margin: 0; }
+.calendar-document-advanced { color: var(--chela-color-text-secondary); font-size: 12px; margin-top: 24px; }
+.calendar-document-advanced > summary { cursor: pointer; padding: 8px 0; }
+.calendar-document-advanced .ui-field { border: 1px solid var(--chela-color-border-default); }
+.calendar-document footer { padding: 12px 0; margin-top: 24px; }
+.calendar-editor[data-new=true] .calendar-document { max-width: 560px; }
 .calendar-delete-confirm { padding: 12px; color: var(--chela-color-danger); background: var(--chela-color-status-error-bg); border-radius: var(--chela-radius-control); }
 .calendar-delete-confirm .ui-button + .ui-button { margin-left: 8px; }
 @media (max-width: 900px) {

@@ -1,0 +1,459 @@
+import { createHash } from "node:crypto";
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
+import type { ElectronAdapter } from "../adapter.ts";
+import { BUS_EVENTS, bus } from "../event-bus.ts";
+import { appLogger } from "../logger.ts";
+import { parallelManager, SIDE_EFFECT_FREE_TOOLS } from "../parallel-tools.ts";
+import { isPlannerToolSession } from "../tools/planner.ts";
+import { formatDateTimeInTimeZone, getSystemTimeZone } from "../../shared/timezone.ts";
+import { evaluateToolPolicy } from "./policy.ts";
+import { HarnessRunCancelledError, type HarnessRuntime } from "./runtime.ts";
+import type {
+  HarnessApprovalKind,
+  HarnessPolicyEvaluation,
+  HarnessRunScope,
+} from "./types.ts";
+
+type HarnessToolExecutionContext = {
+  workspacePath: string;
+  runtime: HarnessRuntime;
+  getAdapter: () => ElectronAdapter;
+  getRunScope: () => HarnessRunScope | null;
+};
+
+function buildPayloadHash(toolName: string, args: Record<string, unknown>): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ toolName, args }))
+    .digest("hex");
+}
+
+function inferApprovalKind(toolName: string): HarnessApprovalKind {
+  if (toolName === "planner_add_todo") return "planner";
+
+  if (toolName === "shell_exec") {
+    return "shell";
+  }
+
+  if (toolName === "file_write") {
+    return "file_write";
+  }
+
+  return "mcp";
+}
+
+function buildDecisionText(
+  toolName: string,
+  evaluation: HarnessPolicyEvaluation,
+  mode: "deny" | "reject-confirm",
+): string {
+  if (mode === "deny") {
+    return `操作被拒绝：${toolName} 未通过 Harness 策略校验。原因：${evaluation.decision.reason}`;
+  }
+
+  return `操作未执行：${toolName} 需要用户确认，但本次确认被拒绝。原因：${evaluation.decision.reason}`;
+}
+
+function buildConfirmDescription(
+  toolName: string,
+  args: Record<string, unknown>,
+): { title: string; description: string; detail: string } {
+  if (toolName === "planner_add_todo") {
+    const timeZone = getSystemTimeZone();
+    return {
+      title: "确认新增个人待办",
+      description: "批准后新增一条本机待办。",
+      detail: [
+        `标题：${String(args.title)}`,
+        `安排日期：${typeof args.date === "string" ? args.date : "未安排日期"}`,
+        `提醒时间：${typeof args.remindAt === "string" ? `${formatDateTimeInTimeZone(args.remindAt, timeZone)}（${timeZone}）` : "未设置"}`,
+        ...(args.content ? [`正文：${String(args.content)}`] : []),
+      ].join("\n"),
+    };
+  }
+
+  if (toolName === "shell_exec") {
+    return {
+      title: "确认执行命令",
+      description: "Agent 想执行一条未进入自动通过白名单的命令。",
+      detail: String(args.command ?? ""),
+    };
+  }
+
+  if (toolName === "file_write") {
+    return {
+      title: "确认覆盖文件",
+      description: "Agent 想覆盖一个已有文件。",
+      detail: String(args.path ?? ""),
+    };
+  }
+
+  return {
+    title: "确认调用外部工具",
+    description: `Agent 想调用 MCP 工具：${toolName}`,
+    detail: JSON.stringify(args, null, 2),
+  };
+}
+
+function buildApprovalRequestId(
+  scope: HarnessRunScope,
+  toolCallId: string,
+): string {
+  return `${scope.runId}:${toolCallId}`;
+}
+
+function ensureRunScope(
+  runtime: HarnessRuntime,
+  getRunScope: () => HarnessRunScope | null,
+): HarnessRunScope {
+  const runScope = getRunScope();
+  if (!runScope) {
+    throw new Error("当前工具调用没有关联到有效 run。");
+  }
+
+  runtime.assertRunActive(runScope);
+  return runScope;
+}
+
+async function executeWithHarness(
+  tool: AgentTool<any, any>,
+  context: HarnessToolExecutionContext,
+  toolCallId: string,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+  onUpdate?: (update: any) => void,
+): Promise<AgentToolResult<any>> {
+  const runScope = ensureRunScope(context.runtime, context.getRunScope);
+  const adapter = context.getAdapter();
+  const assertToolActive = () => {
+    context.runtime.assertRunActive(runScope);
+    if (signal?.aborted) {
+      throw new HarnessRunCancelledError();
+    }
+  };
+  assertToolActive();
+  const emitRunStateChanged = (state: string, reason?: string) => {
+    adapter.sendRunStateChanged({
+      sessionId: runScope.sessionId,
+      runId: runScope.runId,
+      state,
+      reason,
+      currentStepId: toolCallId,
+    });
+  };
+
+  const foreground = context.runtime.getActiveRunBySession(runScope.sessionId);
+  const isCurrentForeground = foreground?.runId === runScope.runId;
+  const evaluation: HarnessPolicyEvaluation = isCurrentForeground && foreground.metadata?.toolsDisabled === true
+    ? { toolName: tool.name, riskLevel: "guarded", decision: { type: "deny", reason: "本次仅整理建议，不执行工具。" } }
+    : evaluateToolPolicy({
+        workspacePath: context.workspacePath,
+        toolName: tool.name,
+        args,
+        plannerAllowed: isCurrentForeground && foreground.runKind === "chat" && foreground.runSource === "user"
+          && isPlannerToolSession(runScope.sessionId),
+      });
+
+  context.runtime.recordToolPolicyEvaluation(runScope, evaluation, {
+    toolCallId,
+  });
+
+  if (evaluation.decision.type === "deny") {
+    const nextRun = context.runtime.transitionState(runScope, "running", {
+      currentStepId: toolCallId,
+      reason: evaluation.decision.reason,
+      metadata: {
+        toolName: tool.name,
+        decision: evaluation.decision.type,
+      },
+    });
+    if (nextRun) {
+      emitRunStateChanged(nextRun.state, evaluation.decision.reason);
+    }
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: buildDecisionText(tool.name, evaluation, "deny"),
+        },
+      ],
+      details: {
+        harness: {
+          decision: "deny",
+          reason: evaluation.decision.reason,
+          toolName: tool.name,
+        },
+      },
+    };
+  }
+
+  if (evaluation.decision.type === "confirm") {
+    const normalizedArgs = evaluation.normalizedArgs ?? args;
+    const confirmCopy = buildConfirmDescription(tool.name, normalizedArgs);
+    const pendingApproval = {
+      requestId: buildApprovalRequestId(runScope, toolCallId),
+      kind: inferApprovalKind(tool.name),
+      payloadHash: buildPayloadHash(tool.name, normalizedArgs),
+      reason: evaluation.decision.reason,
+      createdAt: Date.now(),
+      title: confirmCopy.title,
+      description: confirmCopy.description,
+      detail: confirmCopy.detail,
+    } as const;
+    const pendingResponse = context.runtime.waitForApprovalResponse(
+      runScope,
+      pendingApproval,
+    );
+    bus.emit(BUS_EVENTS.APPROVAL_REQUESTED, {
+      sessionId: runScope.sessionId,
+      runId: runScope.runId,
+      requestId: pendingApproval.requestId,
+      toolName: tool.name,
+    });
+    const pendingRun = context.runtime.transitionState(runScope, "awaiting_confirmation", {
+      currentStepId: toolCallId,
+      pendingApproval,
+      reason: evaluation.decision.reason,
+      metadata: {
+        toolName: tool.name,
+        decision: evaluation.decision.type,
+        requestId: pendingApproval.requestId,
+      },
+    });
+    if (pendingRun) {
+      emitRunStateChanged(pendingRun.state, evaluation.decision.reason);
+    }
+
+    if (adapter.prefersInlineConfirmation()) {
+      void adapter.presentConfirmationRequest({
+        requestId: pendingApproval.requestId,
+        title: confirmCopy.title,
+        description: confirmCopy.description,
+        detail: confirmCopy.detail,
+      }).catch(() => {
+        context.runtime.resolvePendingApproval(
+          {
+            requestId: pendingApproval.requestId,
+            allowed: false,
+          },
+          "system",
+        );
+      });
+    } else {
+      void adapter
+        .presentConfirmationRequest({
+          requestId: pendingApproval.requestId,
+          title: confirmCopy.title,
+          description: confirmCopy.description,
+          detail: confirmCopy.detail,
+        })
+        .then((response) => {
+          if (!response) {
+            return;
+          }
+
+          context.runtime.resolvePendingApproval(response, "dialog");
+        })
+        .catch(() => {
+          context.runtime.resolvePendingApproval(
+            {
+              requestId: pendingApproval.requestId,
+              allowed: false,
+            },
+            "system",
+          );
+        });
+    }
+
+    let abortFailure: { error: unknown } | undefined;
+    const onAbort = () => {
+      try {
+        context.runtime.resolvePendingApproval(
+          { requestId: pendingApproval.requestId, allowed: false },
+          "system",
+        );
+      } catch (error) {
+        abortFailure = { error };
+      }
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) {
+      onAbort();
+    }
+    const approvalResolution = await pendingResponse.finally(() => {
+      signal?.removeEventListener("abort", onAbort);
+    });
+    if (abortFailure) {
+      throw abortFailure.error;
+    }
+    adapter.recordConfirmationResolution(approvalResolution);
+    const allowed = approvalResolution.allowed;
+    bus.emit(BUS_EVENTS.APPROVAL_RESOLVED, {
+      sessionId: runScope.sessionId,
+      runId: runScope.runId,
+      requestId: pendingApproval.requestId,
+      allowed,
+    });
+    assertToolActive();
+
+    if (!allowed) {
+      const denyReason =
+        approvalResolution.source === "system"
+          ? "当前操作在等待确认时被系统中断。"
+          : "用户拒绝了当前操作。";
+
+      const resumedRun = context.runtime.transitionState(runScope, "running", {
+        currentStepId: toolCallId,
+        pendingApproval: null,
+        reason: denyReason,
+        metadata: {
+          toolName: tool.name,
+          decision: "reject-confirm",
+          requestId: pendingApproval.requestId,
+          source: approvalResolution.source,
+        },
+      });
+      if (resumedRun) {
+        emitRunStateChanged(resumedRun.state, denyReason);
+      }
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: buildDecisionText(tool.name, evaluation, "reject-confirm"),
+          },
+        ],
+        details: {
+          harness: {
+            decision: "reject-confirm",
+            reason: evaluation.decision.reason,
+            toolName: tool.name,
+          },
+        },
+      };
+    }
+  }
+
+  const normalizedArgs = evaluation.normalizedArgs ?? args;
+  assertToolActive();
+
+  const executingRun = context.runtime.transitionState(runScope, "executing_tool", {
+    currentStepId: toolCallId,
+    pendingApproval: null,
+    reason: "Harness 已批准工具执行。",
+    metadata: {
+      toolName: tool.name,
+      decision: evaluation.decision.type,
+    },
+  });
+  if (executingRun) {
+    emitRunStateChanged(executingRun.state, "Harness 已批准工具执行。");
+  }
+  bus.emit(BUS_EVENTS.TOOL_EXECUTING, {
+    sessionId: runScope.sessionId,
+    runId: runScope.runId,
+    toolName: tool.name,
+    toolCallId,
+  });
+
+  // 触发同批次其他只读工具的并行预执行
+  if (SIDE_EFFECT_FREE_TOOLS.has(tool.name)) {
+    parallelManager.startPreExecution(runScope.runId, toolCallId);
+  }
+
+  try {
+    // 优先使用并行预执行的缓存结果
+    const cachedResult = await parallelManager.getCachedResult(toolCallId);
+    assertToolActive();
+    const result = cachedResult ?? await tool.execute(
+      toolCallId,
+      normalizedArgs,
+      signal,
+      onUpdate,
+    );
+
+    try {
+      const resumedRun = context.runtime.transitionState(runScope, "running", {
+        currentStepId: toolCallId,
+        pendingApproval: null,
+        reason: "工具执行完成，继续回到 agent loop。",
+        metadata: {
+          toolName: tool.name,
+        },
+      });
+      if (resumedRun) {
+        emitRunStateChanged(resumedRun.state, "工具执行完成，继续回到 agent loop。");
+      }
+    } catch (error) {
+      appLogger.warn({
+        scope: "harness.tool", message: "工具已执行成功，但运行状态同步失败",
+        data: { ...runScope, toolCallId, toolName: tool.name }, error,
+      });
+    }
+
+    bus.emit(BUS_EVENTS.TOOL_COMPLETED, {
+      sessionId: runScope.sessionId,
+      runId: runScope.runId,
+      toolName: tool.name,
+      toolCallId,
+    });
+
+    return result;
+  } catch (error) {
+    try {
+      const resumedRun = context.runtime.transitionState(runScope, "running", {
+        currentStepId: toolCallId,
+        pendingApproval: null,
+        reason: error instanceof Error ? error.message : "工具执行失败",
+        metadata: {
+          toolName: tool.name,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      if (resumedRun) {
+        emitRunStateChanged(
+          resumedRun.state,
+          error instanceof Error ? error.message : "工具执行失败",
+        );
+      }
+    } catch (syncError) {
+      appLogger.warn({
+        scope: "harness.tool", message: "工具失败后的运行状态同步失败，保留原执行错误",
+        data: { ...runScope, toolCallId, toolName: tool.name }, error: syncError,
+      });
+    }
+    bus.emit(BUS_EVENTS.TOOL_FAILED, {
+      sessionId: runScope.sessionId,
+      runId: runScope.runId,
+      toolName: tool.name,
+      toolCallId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+function wrapToolWithHarness(
+  tool: AgentTool<any, any>,
+  context: HarnessToolExecutionContext,
+): AgentTool<any, any> {
+  return {
+    ...tool,
+    async execute(toolCallId, params, signal, onUpdate) {
+      return executeWithHarness(
+        tool,
+        context,
+        toolCallId,
+        (params ?? {}) as Record<string, unknown>,
+        signal,
+        onUpdate,
+      );
+    },
+  };
+}
+
+export function wrapToolsWithHarness(
+  tools: AgentTool<any, any>[],
+  context: HarnessToolExecutionContext,
+): AgentTool<any, any>[] {
+  return tools.map((tool) => wrapToolWithHarness(tool, context));
+}

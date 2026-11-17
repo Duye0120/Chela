@@ -260,9 +260,11 @@ func projectMessage(tx *sql.Tx, run Run, entry piEntry) error {
 			if err != nil {
 				return err
 			}
-			if _, err := tx.Exec(`INSERT INTO tool_invocations(invocation_id,run_id,attempt_id,pi_tool_call_id,tool_id,tool_version,final_args_json,final_args_hash,resource_versions_json,effect_class,state,idempotency_key,created_at) VALUES(?,?,?,?,?,'1',?,?,'{}',?,'planned',?,?)`, rand.Text(), run.ID, run.AttemptID, block.ID, block.Name, string(args), storage.Hash(args), effect, run.AttemptID+":"+block.ID, storage.Now()); err != nil {
+			invocation := rand.Text()
+			if _, err := tx.Exec(`INSERT INTO tool_invocations(invocation_id,run_id,attempt_id,pi_tool_call_id,tool_id,tool_version,final_args_json,final_args_hash,resource_versions_json,effect_class,state,idempotency_key,created_at) VALUES(?,?,?,?,?,'1',?,?,'{}',?,'planned',?,?)`, invocation, run.ID, run.AttemptID, block.ID, block.Name, string(args), storage.Hash(args), effect, run.AttemptID+":"+block.ID, storage.Now()); err != nil {
 				return err
 			}
+			message.Tools = append(message.Tools, ToolActivity{ID: invocation, Name: block.Name, Arguments: string(args), State: "planned"})
 		}
 	}
 	if message.Role == "toolResult" {

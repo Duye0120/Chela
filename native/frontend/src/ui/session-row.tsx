@@ -1,14 +1,15 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import * as Menu from "./menu";
-import { Archive, Check, Ellipsis, Pencil, Pin, PinOff, Trash2, X } from "lucide-react";
+import { Archive, Check, Pencil, Pin, PinOff, Trash2, X } from "lucide-react";
 import { SidebarItem } from "./sidebar";
 import { IconButton } from "./icon-button";
 import { Input } from "./text-field";
+import { HighlightText } from "./highlight-text";
 import "./workspace-controls.css";
 
 type Props = {
   title: string;
+  query?: string;
   pinned: boolean;
   current?: boolean;
   meta?: ReactNode;
@@ -19,7 +20,7 @@ type Props = {
   onRename: (name: string) => void | Promise<void>;
 };
 
-export function SessionRow({ title, pinned, current, meta, onSelect, onPinnedChange, onArchive, onDelete, onRename }: Props) {
+export function SessionRow({ title, query, pinned, current, meta, onSelect, onPinnedChange, onArchive, onDelete, onRename }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
@@ -70,7 +71,7 @@ export function SessionRow({ title, pinned, current, meta, onSelect, onPinnedCha
           if (event.key === "Enter") { event.preventDefault(); void save(); }
           if (event.key === "Escape") { event.preventDefault(); setEditing(false); }
         }} />
-      <IconButton aria-label="确认重命名" disabled={saving} onClick={() => void save()}><Check size={14} /></IconButton>
+      <IconButton aria-label="确认重命名" disabled={saving||!draft.trim()} onClick={() => void save()}><Check size={14} /></IconButton>
       <IconButton aria-label="取消重命名" disabled={saving} onClick={() => setEditing(false)}><X size={14} /></IconButton>
     </div>
     {error && <small id={errorId} role="alert">{error}</small>}
@@ -82,10 +83,9 @@ export function SessionRow({ title, pinned, current, meta, onSelect, onPinnedCha
     { label: "重命名", Icon: Pencil, run: startRename },
     { label: "归档", Icon: Archive, run: onArchive },
   ];
-  function items(context: boolean) {
-    const { Item, Separator } = context ? ContextMenu : Menu;
-    return <>{actions.map(({ label, Icon, run }) => <Item key={label} onSelect={run}><Icon />{label}</Item>)}
-      <Separator /><Item className="ui-session-delete" onSelect={onDelete}><Trash2 />删除</Item></>;
+  function items() {
+    return <>{actions.map(({ label, Icon, run }) => <ContextMenu.Item key={label} onSelect={run}><Icon />{label}</ContextMenu.Item>)}
+      <ContextMenu.Separator /><ContextMenu.Item className="ui-session-delete" onSelect={onDelete}><Trash2 />删除</ContextMenu.Item></>;
   }
   function closeFocus(event: Event) {
     if (restoreFocus.current) event.preventDefault();
@@ -93,18 +93,14 @@ export function SessionRow({ title, pinned, current, meta, onSelect, onPinnedCha
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
       <div className="ui-session-row" data-current={current}>
-        <SidebarItem ref={row} aria-current={current ? "page" : undefined} onClick={onSelect} meta={meta}>{title}</SidebarItem>
+        <SidebarItem ref={row} aria-current={current ? "page" : undefined} onClick={onSelect} onDoubleClick={startRename} onKeyDown={event=>{if(event.key==="F2"){event.preventDefault();startRename()}}} meta={meta}><HighlightText text={title} query={query}/></SidebarItem>
         <div className="ui-session-tools">
-          <IconButton aria-label={actions[0].label} onClick={actions[0].run}><PinIcon size={14} /></IconButton>
-          <IconButton aria-label="归档" onClick={onArchive}><Archive size={14} /></IconButton>
-          <Menu.Root>
-            <Menu.Trigger asChild><IconButton aria-label="更多会话操作"><Ellipsis size={14} /></IconButton></Menu.Trigger>
-            <Menu.Content className="ui-session-menu" align="end" onCloseAutoFocus={closeFocus}>{items(false)}</Menu.Content>
-          </Menu.Root>
+          <IconButton aria-label={actions[0].label} tooltip={actions[0].label} onClick={actions[0].run}><PinIcon size={14} /></IconButton>
+          <IconButton aria-label="归档" tooltip="归档对话" onClick={onArchive}><Archive size={14} /></IconButton>
         </div>
       </div>
     </ContextMenu.Trigger>
     <ContextMenu.Portal><ContextMenu.Content className="ui-menu ui-session-menu" loop collisionPadding={8}
-      onCloseAutoFocus={closeFocus}>{items(true)}</ContextMenu.Content></ContextMenu.Portal>
+      onCloseAutoFocus={closeFocus}>{items()}</ContextMenu.Content></ContextMenu.Portal>
   </ContextMenu.Root>;
 }

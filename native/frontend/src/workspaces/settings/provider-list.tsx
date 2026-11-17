@@ -1,0 +1,12 @@
+import { useEffect, useState } from "react";
+import { serviceCall } from "../../platform/bridge";
+import { Button } from "../../ui/button";
+import { Toggle } from "./settings-controls";
+type Provider={id:string;name:string;url:string;kind:string;models:number;enabled:boolean;hasKey:boolean};
+export function ProviderList({refresh,onConfigure}:{refresh:()=>Promise<void>;onConfigure:(mode:"custom"|"magpie")=>void}){
+ const [items,setItems]=useState<Provider[]>([]),[busy,setBusy]=useState(""),[error,setError]=useState(""),[results,setResults]=useState<Record<string,string>>({});
+ async function load(){setItems(await serviceCall<Provider[]>("Chat.Providers"))}
+ useEffect(()=>{const update=()=>void load().catch(cause=>setError(String(cause)));update();window.addEventListener("chela-models-changed",update);return()=>window.removeEventListener("chela-models-changed",update)},[]);
+ async function act(id:string,action:()=>Promise<void>){setBusy(id);setError("");try{await action()}catch(cause){setError(String(cause))}finally{setBusy("")}}
+ return <div className="settings-card">{!items.length&&<div className="settings-row"><div><strong>尚未配置供应商</strong><p>连接网关或兼容 OpenAI 的接口</p></div><Button size="small" onClick={()=>onConfigure("magpie")}>配置</Button></div>}{items.map(item=><div className="settings-row" key={item.id}><div><strong>{item.name}</strong><p title={item.url}>{item.models} 个模型 · {item.hasKey?"凭据已保存":"免密或未填凭据"}{item.url&&` · ${item.url}`}</p></div><div className="settings-row-control"><span className="settings-tag" data-tone={results[item.id] ? "success" : undefined}>{results[item.id] && <i />}{results[item.id]||(item.enabled?"已启用 · 未测试":"已停用")}</span><Button size="small" disabled={!!busy} onClick={()=>void act(item.id,async()=>{const ms=await serviceCall<number>("Chat.TestProvider",item.id);setResults(values=>({...values,[item.id]:`连接成功 · ${ms} ms`}))})}>{busy===item.id?"处理中…":"测试"}</Button>{item.kind!=="imported"&&<Button size="small" disabled={!!busy} onClick={()=>onConfigure(item.kind==="custom"?"custom":"magpie")}>编辑</Button>}<Toggle label={`启用 ${item.name}`} checked={item.enabled} disabled={!!busy} onChange={enabled=>{void act(item.id,async()=>{await serviceCall("Chat.SetProviderEnabled",item.id,String(enabled));setResults(values=>{const next={...values};delete next[item.id];return next});await load();await refresh()})}}/></div></div>)}{error&&<p className="settings-error settings-inline-status" role="alert">{error}</p>}</div>;
+}

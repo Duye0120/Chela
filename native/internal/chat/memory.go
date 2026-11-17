@@ -99,6 +99,9 @@ func (c *Chat) ForgetMemory(session, id, revision string) error {
 }
 
 func (c *Chat) stateTool(ctx context.Context, run Run, request toolRequest) (any, error) {
+	if request.Name == "memory_save" && run.Policy.Permission != "" && !run.Policy.MemoryEnabled {
+		return nil, errors.New("用户已关闭自动提取偏好记忆")
+	}
 	var vector *memory.QueryVector
 	if request.Name == "memory_search" {
 		var q struct {

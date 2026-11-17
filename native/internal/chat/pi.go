@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/Duye0120/Chela/native/internal/companion"
@@ -42,7 +43,7 @@ func runContext(run Run) bridgeContext {
 func (c *Chat) performRun(ctx context.Context, run Run) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	_, configs, _, _, err := c.catalog()
+	infos, configs, _, _, err := c.catalog()
 	if err != nil {
 		return err
 	}
@@ -59,6 +60,7 @@ func (c *Chat) performRun(ctx context.Context, run Run) error {
 	if err != nil {
 		return err
 	}
+	run.Policy = snapshot["settings"].(RunSettings).Policy
 	installed, err := c.freezeCapabilities(ctx, run)
 	if err != nil {
 		return err
@@ -98,6 +100,25 @@ func (c *Chat) performRun(ctx context.Context, run Run) error {
 	}()
 	payload := map[string]any{"source": cfg.Source, "entry": cfg.Entry, "key": cfg.Key, "effort": run.Effort, "text": run.Text, "workspace": run.Workspace, "agent_dir": filepath.Join(c.profile, "worker"), "snapshot": snapshot, "lease_token": run.LeaseToken, "branch_generation": run.Generation, "operation": run.Operation}
 	payload["capabilities"] = installed
+	address, token, err := c.network.Relay()
+	if err != nil {
+		return err
+	}
+	payload["network"] = map[string]string{"address": address, "token": token}
+	for _, info := range infos {
+		if info.ID == run.ModelID {
+			payload["fast_mode"] = run.Policy.FastMode && info.Fast
+			break
+		}
+	}
+	payload["text"] = promptAttachments(run.Text, run.Attachments)
+	images := []map[string]string{}
+	for _, item := range run.Attachments {
+		if item.Data != "" {
+			images = append(images, map[string]string{"type": "image", "mimeType": item.MIME, "data": item.Data})
+		}
+	}
+	payload["images"] = images
 	mcpTools, err := c.freezeMCP(ctx, run)
 	if err != nil {
 		return err
@@ -113,6 +134,12 @@ func (c *Chat) performRun(ctx context.Context, run Run) error {
 	if err != nil {
 		return err
 	}
+	payload["auto_compaction"] = roles["compactionEnabled"] != "false"
+	threshold, err := strconv.Atoi(roles["compactionThreshold"])
+	if err != nil || threshold < 50 || threshold > 90 {
+		threshold = 72
+	}
+	payload["compaction_threshold"] = float64(threshold) / 100
 	if ref := roles["compaction"]; ref != "" {
 		compact, ok := configs[ref]
 		if !ok {
@@ -160,6 +187,11 @@ func (c *Chat) openPi(run Run, w *piWorker) (map[string]any, error) {
 		if err := validateLease(tx, run); err != nil {
 			return err
 		}
+		settings, err := c.freezeRunSettings(tx, run)
+		if err != nil {
+			return err
+		}
+		snapshot["settings"] = settings
 		var revision int64
 		var leaf sql.NullString
 		if err := tx.QueryRow("SELECT canonical_revision,active_leaf_id FROM branches WHERE branch_id=?", run.BranchID).Scan(&revision, &leaf); err != nil {
@@ -170,7 +202,7 @@ func (c *Chat) openPi(run Run, w *piWorker) (map[string]any, error) {
 			snapshot["active_leaf_id"] = leaf.String
 		}
 		var header string
-		err := tx.QueryRow("SELECT header_json FROM pi_sessions WHERE session_id=?", run.SessionID).Scan(&header)
+		err = tx.QueryRow("SELECT header_json FROM pi_sessions WHERE session_id=?", run.SessionID).Scan(&header)
 		if err == nil {
 			snapshot["header"] = json.RawMessage(header)
 		} else if !errors.Is(err, sql.ErrNoRows) {

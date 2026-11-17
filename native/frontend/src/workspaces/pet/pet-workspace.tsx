@@ -1,52 +1,92 @@
 import { useEffect, useRef, useState } from "react";
-import { EyeOff, Grip, MoveHorizontal, Pause, Play, X } from "lucide-react";
+import * as ContextMenu from "@radix-ui/react-context-menu";
 import { desktop } from "../../platform/bridge";
 import { Button } from "../../ui/button";
-import { IconButton } from "../../ui/icon-button";
+import { ChelaAvatar, type AvatarExpression } from "../../ui/chela-avatar";
 import type { Delivery } from "../../data/work";
-import logo from "../../assets/icons/Chela24Px.svg";
+import { applyAppearance, readAppearance } from "../settings/appearance";
 import "./pet.css";
 
-type Presentation={id:string;acknowledged:boolean;items:Pick<Delivery,"id"|"text"|"purpose"|"actions">[]};
-type Snapshot={state:string;side:string;emotion:string;motion:boolean;presentation:Presentation|null};
-const call=<T,>(method:string,...args:unknown[])=>desktop?desktop.call<T>(`Pet.${method}`,...args):Promise.reject(new Error("桌宠需要 Chela 桌面窗口"));
-const states:Record<string,string>={hidden:"已隐藏",peeking:"在这里",idle:"在这里",thinking:"正在处理",listening:"等待你的确认",speaking:"有新的进展"};
-const emotions:Record<string,string>={joy:"轻松",pride:"有成就感",playful_irritation:"有点调皮",concern:"有点担心",curiosity:"好奇",disappointment:"有点失落",attentive:"专注",neutral:"平静"};
+type ReportFact = { id:string;title:string;dueAt:string;dueDate:string;timezone:string };
+type Presentation = { id: string; acknowledged: boolean; items: (Pick<Delivery, "id" | "text" | "purpose" | "actions"> & {report?:{today:ReportFact[];completed:ReportFact[];leftover:ReportFact[]}})[] };
+type Snapshot = { state: string; side: string; emotion: string; motion: boolean; presentation: Presentation | null };
+const call = <T,>(method: string, ...args: unknown[]) => desktop ? desktop.call<T>(`Pet.${method}`, ...args) : Promise.reject(new Error("桌宠需要 Chela 桌面窗口"));
+const expressions: Record<string, AvatarExpression> = { joy: "speaking", pride: "speaking", playful_irritation: "wink", concern: "alert", curiosity: "peeking", disappointment: "sleepy", attentive: "thinking" };
 
-export function PetWorkspace(){
-  const [snapshot,setSnapshot]=useState<Snapshot>({state:"idle",side:"right",emotion:"neutral",motion:false,presentation:null}),[error,setError]=useState(""),[busy,setBusy]=useState(false),[hover,setHover]=useState(false);
-  const root=useRef<HTMLDivElement>(null),ack=useRef("");
-  useEffect(()=>{
-    document.documentElement.classList.add("pet-window");let disposed=false;let timer:ReturnType<typeof setTimeout>;
-    async function refresh(){try{const next=await call<Snapshot>("Snapshot");if(!disposed){setSnapshot(next);setError("")}}catch(e){if(!disposed)setError(String(e))}finally{if(!disposed)timer=setTimeout(()=>void refresh(),1000)}}
-    void refresh();return()=>{disposed=true;clearTimeout(timer);document.documentElement.classList.remove("pet-window")};
-  },[]);
-  const presentation=snapshot.presentation;
-  useEffect(()=>{
-    if(!presentation||snapshot.state==="hidden"||document.visibilityState!=="visible"||ack.current===presentation.id)return;
-    // An acknowledgement follows a painted frame; reloads keep the same presentation ID.
-    let second=0;const frame=requestAnimationFrame(()=>{second=requestAnimationFrame(()=>{
-      if(document.visibilityState!=="visible")return;
-      void call("Acknowledge",presentation.id).then(()=>{ack.current=presentation.id}).catch(e=>setError(String(e)));
-    })});return()=>{cancelAnimationFrame(frame);cancelAnimationFrame(second)};
-  },[presentation,snapshot.state]);
-  useEffect(()=>{
-    if(!root.current)return;
-    const update=()=>{const rects=Array.from(root.current!.querySelectorAll<HTMLElement>("[data-pet-hit]")).map(el=>{const r=el.getBoundingClientRect(),X=Math.max(0,Math.min(360,Math.floor(r.left))),Y=Math.max(0,Math.min(360,Math.floor(r.top)));return {X,Y,Width:Math.max(0,Math.min(360,Math.ceil(r.right))-X),Height:Math.max(0,Math.min(360,Math.ceil(r.bottom))-Y)}});void call("SetRegions",JSON.stringify(rects)).catch(e=>setError(String(e)))};
-    const observer=new ResizeObserver(update);observer.observe(root.current);for(const child of root.current.children)observer.observe(child);update();return()=>observer.disconnect();
-  },[presentation?.id,error,snapshot.state,snapshot.side,hover]);
-  async function act(method:string,...args:unknown[]){setBusy(true);setError("");try{await call(method,...args);setSnapshot(await call<Snapshot>("Snapshot"))}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
-  return <main ref={root} className="pet" data-state={snapshot.state} data-side={snapshot.side} data-expanded={hover} data-motion={snapshot.motion} data-emotion={snapshot.emotion} aria-label="Chela 陪伴" onPointerEnter={()=>setHover(true)} onPointerLeave={()=>setHover(false)} onFocus={()=>setHover(true)} onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))setHover(false)}}>
-    {presentation&&<section data-pet-hit className="pet-bubble" aria-label="新的提醒与进展" aria-live="polite">
-      <header><strong>{presentation.items.length>1?`${presentation.items.length} 条提醒与进展`:"Chela"}</strong><IconButton aria-label="收起这条气泡" disabled={busy} onClick={()=>void act("Dismiss",presentation.id)}><X size={14}/></IconButton></header>
-      <div className="pet-items">{presentation.items.map(item=><article key={item.id}><p>{item.text}</p><div>{item.actions.map(action=><Button type="button" key={action.action_id} disabled={busy} onClick={()=>void act("Open",item.id,action.action_id)}>{action.label}</Button>)}</div></article>)}</div>
+export function PetWorkspace() {
+  const [snapshot, setSnapshot] = useState<Snapshot>({ state: "idle", side: "right", emotion: "neutral", motion: false, presentation: null });
+  const [error, setError] = useState(""), [busy, setBusy] = useState(false), [hover, setHover] = useState(false), [menu, setMenu] = useState(false), [wink, setWink] = useState(false);
+  const ack = useRef(""), winkTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const presentation = snapshot.presentation;
+  const collapsed = snapshot.state === "peeking" && !hover && !menu && !presentation;
+  const morning = presentation?.items.some(item => item.purpose === "daily_report") || false;
+  const expression: AvatarExpression = wink ? "wink" : snapshot.state === "thinking" ? "thinking" : snapshot.state === "listening" ? "alert" : expressions[snapshot.emotion] || (hover && snapshot.state === "peeking" ? "peeking" : "idle");
+  useEffect(() => {
+    document.documentElement.classList.add("pet-window");
+    const appearance = () => applyAppearance(readAppearance());
+    appearance(); window.addEventListener("storage", appearance);
+    let disposed = false, timer: ReturnType<typeof setTimeout>;
+    async function refresh() {
+      try { const next = await call<Snapshot>("Snapshot"); if (!disposed) { setSnapshot(next); setError(""); } }
+      catch (cause) { if (!disposed) setError(String(cause)); }
+      finally { if (!disposed) timer = setTimeout(() => void refresh(), 1000); }
+    }
+    void refresh();
+    return () => { disposed = true; clearTimeout(timer); clearTimeout(winkTimer.current); window.removeEventListener("storage", appearance); document.documentElement.classList.remove("pet-window"); };
+  }, []);
+  useEffect(() => {
+    if (!presentation || snapshot.state === "hidden" || document.visibilityState !== "visible" || ack.current === presentation.id) return;
+    let second = 0;
+    const frame = requestAnimationFrame(() => { second = requestAnimationFrame(() => {
+      if (document.visibilityState !== "visible") return;
+      void call("Acknowledge", presentation.id).then(() => { ack.current = presentation.id; }).catch(cause => setError(String(cause)));
+    }); });
+    return () => { cancelAnimationFrame(frame); cancelAnimationFrame(second); };
+  }, [presentation, snapshot.state]);
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const regions = Array.from(document.querySelectorAll<HTMLElement>("[data-pet-hit]")).filter(element => element.getClientRects().length).map(element => {
+          const rect = element.getBoundingClientRect(), X = Math.max(0, Math.floor(rect.left)), Y = Math.max(0, Math.floor(rect.top));
+          return { X, Y, Width: Math.max(0, Math.min(innerWidth, Math.ceil(rect.right)) - X), Height: Math.max(0, Math.min(innerHeight, Math.ceil(rect.bottom)) - Y) };
+        });
+        void call("SetRegions", JSON.stringify(regions)).catch(cause => setError(String(cause)));
+      });
+    };
+    const observer = new ResizeObserver(update);
+    document.querySelectorAll<HTMLElement>("[data-pet-hit]").forEach(element => observer.observe(element));
+    update(); window.addEventListener("resize", update);
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); window.removeEventListener("resize", update); };
+  }, [presentation?.id, error, collapsed, menu, snapshot.side]);
+  async function act(method: string, ...args: unknown[]) {
+    setBusy(true); setError("");
+    try { await call(method, ...args); setSnapshot(await call<Snapshot>("Snapshot")); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(false); }
+  }
+  function touch() { setWink(true); clearTimeout(winkTimer.current); winkTimer.current = setTimeout(() => setWink(false), 900); }
+  const dismiss = () => presentation && void act("Dismiss", presentation.id);
+  return <main className="pet" data-state={snapshot.state} data-side={snapshot.side} data-collapsed={collapsed} data-motion={snapshot.motion} aria-label="Chela 陪伴"
+    onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)} onFocus={() => setHover(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setHover(false); }}>
+    {presentation && <section data-pet-hit className="pet-bubble" data-morning={morning} aria-label="新的提醒与进展" aria-live="polite">
+      <header>{morning ? new Date().toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" }) : "Chela · 新的进展"}</header>
+      {morning && <h2>今天的安排</h2>}
+      <div className="pet-items">{presentation.items.map(item => <article key={item.id}>{item.report?<><p className="pet-report-summary">昨天完成 {item.report.completed?.length||0} 项 · 遗留 {item.report.leftover?.length||0} 项</p>{item.report.today?.length?<ul className="pet-report-agenda">{item.report.today.map(fact=><li key={fact.id}><time>{fact.dueAt?new Date(fact.dueAt).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit",timeZone:fact.timezone||undefined}):fact.dueDate||"今日"}</time><span>{fact.title}</span></li>)}</ul>:<p>今天暂无安排</p>}</>:<p>{item.text}</p>}{!morning&&<div className="pet-bubble-actions">{item.actions.map(action => <Button variant="primary" key={action.action_id} disabled={busy} onClick={() => void act("Open", item.id, action.action_id)}>{action.label}</Button>)}{!morning && <Button variant="ghost" disabled={busy} onClick={dismiss}>收起</Button>}</div>}</article>)}</div>
+      {morning && <footer><div className="pet-bubble-actions">{presentation.items.flatMap(item=>item.actions.map(action=><Button variant="primary" key={`${item.id}:${action.action_id}`} disabled={busy} onClick={()=>void act("Open",item.id,action.action_id)}>{action.label}</Button>))}</div><Button variant="ghost" disabled={busy} onClick={dismiss}>收起</Button></footer>}
     </section>}
-    <div data-pet-hit className="pet-body">
-      <div className="pet-drag" title="拖动 Chela" aria-hidden="true"><Grip size={14}/></div>
-      <button type="button" className="pet-face" aria-label={`打开 Chela，${states[snapshot.state]||"在这里"}，${emotions[snapshot.emotion]||"平静"}`} onClick={()=>void act("Open","","")}><img src={logo} alt="" draggable={false}/></button>
-      <small role="status">{states[snapshot.state]||"在这里"}</small>
-      <div className="pet-controls"><IconButton aria-label={snapshot.motion?"暂停待机动作":"开启待机动作"} title={snapshot.motion?"暂停待机动作":"开启待机动作"} onClick={()=>void act("SetMotion",!snapshot.motion)}>{snapshot.motion?<Pause size={13}/>:<Play size={13}/>}</IconButton><IconButton aria-label="靠近屏幕边缘" title="靠近屏幕边缘" onClick={()=>void act("Dock")}><MoveHorizontal size={13}/></IconButton><IconButton aria-label="隐藏桌宠" title="隐藏桌宠，可从系统托盘打开" onClick={()=>void act("SetHidden",true)}><EyeOff size={13}/></IconButton></div>
+    <div className="pet-anchor" data-pet-hit={collapsed ? undefined : ""}>
+      {collapsed ? <button data-pet-hit className="pet-edge" aria-label="展开 Chela" onClick={() => setHover(true)}><i /><i /></button> : <ContextMenu.Root onOpenChange={setMenu}>
+        <ContextMenu.Trigger asChild><button type="button" className="pet-face" aria-label="轻碰 Chela，让它眨眼回应" onClick={touch}><ChelaAvatar expression={expression} interactive motion={snapshot.motion} /><span className="pet-drag-zone" title="拖动 Chela" /></button></ContextMenu.Trigger>
+        <ContextMenu.Portal><ContextMenu.Content data-pet-hit className="ui-menu pet-menu" collisionPadding={12}>
+          <ContextMenu.Item onSelect={() => void act("Open", "", "")}>打开 Chela</ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => void act("SetMotion", !snapshot.motion)}>{snapshot.motion ? "暂停待机动作" : "开启待机动作"}</ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => void act("Dock")}>靠近屏幕边缘</ContextMenu.Item>
+          <ContextMenu.Separator /><ContextMenu.Item onSelect={() => void act("SetHidden", true)}>隐藏桌宠</ContextMenu.Item>
+        </ContextMenu.Content></ContextMenu.Portal>
+      </ContextMenu.Root>}
     </div>
-    {error&&<p data-pet-hit className="pet-error" role="alert">{error}</p>}
+    {error && <p data-pet-hit className="pet-error" role="alert">{error}</p>}
   </main>;
 }

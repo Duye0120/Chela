@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/Duye0120/Chela/native/internal/storage"
@@ -15,7 +16,7 @@ func (c *Chat) ModelRoles() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.Query("SELECT preference_key,value_json FROM preferences WHERE scope_type='assistant' AND preference_key IN ('model.chat','model.compaction','model.consolidation','model.proactivity','model.embedding')")
+	rows, err := db.Query("SELECT preference_key,value_json FROM preferences WHERE scope_type='assistant' AND preference_key IN ('model.chat','model.compaction','model.consolidation','model.proactivity','model.embedding','model.effort','model.compactionThreshold','model.compactionEnabled')")
 	if err != nil {
 		return nil, err
 	}
@@ -35,6 +36,17 @@ func (c *Chat) ModelRoles() (map[string]string, error) {
 }
 
 func (c *Chat) SetModelRole(role, model string) error {
+	if role == "effort" || role == "compactionThreshold" || role == "compactionEnabled" {
+		valid := role == "effort" && (model == "off" || model == "low" || model == "medium" || model == "high" || model == "xhigh") || role == "compactionEnabled" && (model == "true" || model == "false")
+		if role == "compactionThreshold" {
+			value, err := strconv.Atoi(model)
+			valid = err == nil && value >= 50 && value <= 90
+		}
+		if !valid {
+			return errors.New("模型默认设置无效")
+		}
+		return c.saveModelPreference(role, model)
+	}
 	if role == "embedding" {
 		return c.configureEmbedding(model)
 	}
@@ -50,6 +62,10 @@ func (c *Chat) SetModelRole(role, model string) error {
 			return errors.New("模型不在当前目录中")
 		}
 	}
+	return c.saveModelPreference(role, model)
+}
+
+func (c *Chat) saveModelPreference(role, model string) error {
 	assistant, err := c.store.Identity()
 	if err != nil {
 		return err

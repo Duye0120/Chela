@@ -10,6 +10,8 @@ import { Sidebar, SidebarItem, SidebarToggle } from "../../ui/sidebar";
 import * as Menu from "../../ui/menu";
 import { workApi, taskStatuses as statuses, taskPriorities as priorities, type WorkTask } from "../../data/work";
 import "./board.css";
+import { routeTitle } from "../../ui/route-title";
+import { TaskDetails } from "./task-details";
 
 const views = ["状态看板", "优先级看板", "任务列表"];
 const statusIcons = [Circle, CircleDot, Clock, CircleCheck];
@@ -103,11 +105,14 @@ export function BoardWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpen: 
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState(() => sessionStorage.getItem("chela.board.view") || views[0]);
+  useEffect(() => { routeTitle(view === "状态看板" ? "我的任务" : view); }, [view]);
   const [filter, setFilter] = useState("all");
   const [project, setProject] = useState("");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("原始顺序");
   const [selectedId, setSelectedId] = useState(routeTask);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => setEditing(false), [selectedId]);
   const [creating, setCreating] = useState(false);
   const [newDraft, setNewDraft] = useState(blankTask);
   const [draggedId, setDraggedId] = useState("");
@@ -149,6 +154,7 @@ export function BoardWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpen: 
       const saved = await workApi.saveTask(task);
       setTasks(previous => previous.some(item => item.id === saved.id) ? previous.map(item => item.id === saved.id ? saved : item) : [...previous, saved]);
       setCreating(false);
+      setEditing(false);
       if (openTerminal) location.hash = `terminal/${encodeURIComponent(saved.id)}`;
       else { setSelectedId(saved.id); location.hash = `board/${encodeURIComponent(saved.id)}`; }
     } finally { setBusy(false); }
@@ -184,7 +190,7 @@ export function BoardWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpen: 
     return <article key={task.id} className="board-card" data-selected={selectedId === task.id} data-dragging={draggedId === task.id}
       draggable={!busy} onDragStart={event => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", task.id); setDraggedId(task.id); }}
       onDragEnd={() => { setDraggedId(""); setDropColumn(""); }}>
-      <div className="board-card-meta"><span className="board-id">{task.id}</span>{task.priority === priorities[0] ? <span className="board-badge" data-tone="error">{task.priority}</span> : task.status !== "待办" && <TaskStatus task={task} />}</div>
+      <div className="board-card-meta"><span className="board-id" title={task.id}>{task.id.length > 14 ? task.id.slice(0, 8) : task.id}</span>{task.status !== "待办" ? <TaskStatus task={task} /> : task.priority === priorities[0] && <span className="board-badge" data-tone="error">{task.priority}</span>}</div>
       <a className="board-card-title" href={`#board/${encodeURIComponent(task.id)}`}>{task.title}</a>
       {task.replyPending&&task.status==="待办"&&<span className="board-badge" data-tone="info">有新回复</span>}
       {task.description && <p className="board-card-description">{task.description}</p>}
@@ -210,7 +216,7 @@ export function BoardWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpen: 
       <div className="board-side-bottom"><SidebarItem aria-current={filter === "已归档" ? "page" : undefined} meta={String(tasks.filter(task => task.status === "已归档").length)}
         onClick={() => { setFilter("已归档"); setProject(""); }}><Archive size={14} /><span>已归档</span></SidebarItem></div>
     </Sidebar>
-    <main className="board-workspace" aria-label="看板工作区" aria-busy={loading || busy}>
+    <main className="board-workspace" data-detail={creating || Boolean(selected)} aria-label="看板工作区" aria-busy={loading || busy}>
       <div className="board-toolbar">
         <SidebarToggle controls="board-sidebar" open={sidebarOpen} onToggle={onToggleSidebar} />
         <div className="board-view-switch" aria-label="看板视图">{views.map(name => <Button key={name} variant="ghost" aria-pressed={view === name} onClick={() => switchView(name)}>{name}</Button>)}</div>
@@ -251,7 +257,7 @@ export function BoardWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpen: 
             {!tasks.length && <div className="board-first-task"><span>从一个任务开始</span><Button onClick={newTask}><Plus size={14} />新建任务</Button></div>}
           </div>}
         </div>
-        {(creating || selected) && <TaskEditor key={creating ? "new" : selected!.id} task={creating ? newDraft : selected!} projects={projects} tasks={tasks} busy={busy} onSave={saveTask} onClose={closeDetail} onDelete={setDeleting} />}
+        {(creating || selected) && (creating || editing ? <TaskEditor key={creating ? "new" : selected!.id} task={creating ? newDraft : selected!} projects={projects} tasks={tasks} busy={busy} onSave={saveTask} onClose={closeDetail} onDelete={setDeleting} /> : <TaskDetails task={selected!} busy={busy} onClose={closeDetail} onEdit={() => setEditing(true)} onComplete={() => void saveTask({ ...selected!, status: "已完成" }).catch(cause => setError(message(cause)))} />)}
         {selectedId && !selected && !loading && !creating && <section className="board-detail"><header>任务不存在<IconButton aria-label="关闭任务详情" onClick={closeDetail}><X size={14} /></IconButton></header><p className="board-empty">任务可能已删除。</p></section>}
       </div>
     </main>

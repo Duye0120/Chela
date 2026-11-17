@@ -85,7 +85,7 @@ export function chatDev(): Plugin {
           let body = "";
           for await (const chunk of req) {
             body += chunk;
-            if (Buffer.byteLength(body) > 1024 * 1024) throw Error("消息过长");
+            if (Buffer.byteLength(body) > 64 * 1024 * 1024) throw Error("消息及附件过长");
           }
           const { method, args } = JSON.parse(body);
           if (typeof method !== "string" || !Array.isArray(args))

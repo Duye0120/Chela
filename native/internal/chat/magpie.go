@@ -62,6 +62,19 @@ func (c *Chat) ConnectMagpie(endpoint, key string) (MagpieStatus, error) {
 		u.Path = strings.TrimRight(u.Path, "/") + "/v1"
 	}
 	if key == "" {
+		var existing magpieCatalog
+		if err := readOptional(filepath.Join(c.profile, "magpie-catalog.json"), &existing); err != nil {
+			return MagpieStatus{}, err
+		}
+		if existing.URL == u.String() {
+			saved, err := unseal(existing.Secret)
+			if err != nil {
+				return MagpieStatus{}, err
+			}
+			key = string(saved)
+		}
+	}
+	if key == "" {
 		if u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1" {
 			return MagpieStatus{}, errors.New("远程 Magpie 需要网关密钥")
 		}
@@ -72,7 +85,7 @@ func (c *Chat) ConnectMagpie(endpoint, key string) (MagpieStatus, error) {
 		return MagpieStatus{}, err
 	}
 	cache := magpieCatalog{URL: u.String(), Secret: secret}
-	if err := fetchMagpie(&cache, key); err != nil {
+	if err := fetchMagpie(&cache, key, c.network.Transport()); err != nil {
 		return MagpieStatus{}, err
 	}
 	c.mu.Lock()
@@ -83,7 +96,7 @@ func (c *Chat) ConnectMagpie(endpoint, key string) (MagpieStatus, error) {
 	return magpieStatus(cache), nil
 }
 
-func fetchMagpie(cache *magpieCatalog, key string) error {
+func fetchMagpie(cache *magpieCatalog, key string, transports ...http.RoundTripper) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, cache.URL+"/models", nil)
@@ -96,6 +109,9 @@ func fetchMagpie(cache *magpieCatalog, key string) error {
 		request.Header.Set("If-None-Match", cache.ETag)
 	}
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("模型目录重定向已拒绝") }}
+	if len(transports) > 0 {
+		client.Transport = transports[0]
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		return errors.New("无法连接 Magpie 网关，请确认网关已启动且地址正确")
@@ -150,7 +166,7 @@ func (c *Chat) RefreshMagpie() (MagpieStatus, error) {
 	if err != nil {
 		return MagpieStatus{}, err
 	}
-	if err := fetchMagpie(&cache, string(key)); err != nil {
+	if err := fetchMagpie(&cache, string(key), c.network.Transport()); err != nil {
 		return magpieStatus(cache), err
 	}
 	c.mu.Lock()
@@ -180,6 +196,13 @@ func (c *Chat) MagpieStatus() (MagpieStatus, error) {
 }
 
 func (c *Chat) magpieModels() (infos []modelInfo, configs map[string]modelConfig, err error) {
+	overrides, e := c.providerOverrides()
+	if e != nil {
+		return nil, nil, e
+	}
+	if !enabled(overrides, "magpie", true) {
+		return []modelInfo{}, map[string]modelConfig{}, nil
+	}
 	var cache magpieCatalog
 	if err = readOptional(filepath.Join(c.profile, "magpie-catalog.json"), &cache); err != nil {
 		return
@@ -231,7 +254,7 @@ func (c *Chat) magpieModels() (infos []modelInfo, configs map[string]modelConfig
 		}
 		entry, _ := json.Marshal(map[string]any{"id": id, "name": label, "modelId": m.ID, "capabilities": map[string]any{}, "detectedCapabilities": map[string]any{"reasoning": m.Reasoning, "toolCalling": m.Tools, "vision": vision}, "limits": limits, "detectedLimits": map[string]int{}, "providerOptions": map[string]any{"pricing": m.Pricing, "compat": map[string]any{"supportsReasoningEffort": true}}})
 		configs[id] = modelConfig{source, entry, string(key)}
-		infos = append(infos, modelInfo{ID: id, Label: label, Provider: "Magpie", Reasoning: m.Reasoning != nil && *m.Reasoning, Efforts: m.Efforts, ContextWindow: m.Context, MaxOutputTokens: m.Output, Source: "Magpie", FetchedAt: cache.FetchedAt, Stale: magpieStatus(cache).Stale})
+		infos = append(infos, modelInfo{ID: id, Label: label, Provider: "Magpie", ProviderID: "magpie", Reasoning: m.Reasoning != nil && *m.Reasoning, Vision: vision != nil && *vision, Efforts: m.Efforts, ContextWindow: m.Context, MaxOutputTokens: m.Output, Source: "Magpie", FetchedAt: cache.FetchedAt, Stale: magpieStatus(cache).Stale})
 	}
 	return
 }

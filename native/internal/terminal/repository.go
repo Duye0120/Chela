@@ -25,7 +25,7 @@ func (t *Terminal) initialize() error {
 	if err != nil {
 		return err
 	}
-	rows, err := db.Query(`SELECT s.terminal_session_id,s.executor_kind,s.cwd,COALESCE(l.item_id,''),s.process_state,COALESCE(s.executor_version,''),s.exit_code,COALESCE(o.next_offset,0),s.mode,s.generation,COALESCE(s.external_session_id,''),COALESCE(json_extract(s.capabilities_json,'$.observable'),0),COALESCE(json_extract(s.capabilities_json,'$.resumable'),0) FROM terminal_sessions s LEFT JOIN execution_links l ON l.terminal_session_id=s.terminal_session_id LEFT JOIN terminal_output o ON o.terminal_session_id=s.terminal_session_id ORDER BY s.created_at`)
+	rows, err := db.Query(`SELECT s.terminal_session_id,s.executor_kind,s.cwd,COALESCE(l.item_id,''),s.process_state,COALESCE(s.executor_version,''),s.exit_code,COALESCE(o.next_offset,0),s.mode,s.generation,COALESCE(s.external_session_id,''),COALESCE(json_extract(s.capabilities_json,'$.observable'),0),COALESCE(json_extract(s.capabilities_json,'$.resumable'),0),COALESCE(json_extract(p.value_json,'$'),'') FROM terminal_sessions s LEFT JOIN execution_links l ON l.terminal_session_id=s.terminal_session_id LEFT JOIN terminal_output o ON o.terminal_session_id=s.terminal_session_id LEFT JOIN preferences p ON p.assistant_id=s.assistant_id AND p.scope_type='assistant' AND p.scope_id=s.assistant_id AND p.preference_key='terminal.name.'||CASE WHEN l.item_id IS NOT NULL THEN 'task:'||l.item_id ELSE 'terminal:'||s.terminal_session_id END ORDER BY s.created_at`)
 	if err != nil {
 		return err
 	}
@@ -34,7 +34,7 @@ func (t *Terminal) initialize() error {
 	for rows.Next() {
 		s := &terminalSession{done: make(chan struct{})}
 		var code sql.NullInt64
-		if err = rows.Scan(&s.info.ID, &s.info.Program, &s.info.Directory, &s.info.TaskID, &s.info.State, &s.info.Version, &code, &s.next, &s.info.Mode, &s.info.Generation, &s.info.ExternalSessionID, &s.info.Observable, &s.info.Resumable); err != nil {
+		if err = rows.Scan(&s.info.ID, &s.info.Program, &s.info.Directory, &s.info.TaskID, &s.info.State, &s.info.Version, &code, &s.next, &s.info.Mode, &s.info.Generation, &s.info.ExternalSessionID, &s.info.Observable, &s.info.Resumable, &s.info.Name); err != nil {
 			return err
 		}
 		if s.info.Program == "terminal" {

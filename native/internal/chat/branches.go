@@ -87,7 +87,7 @@ func (c *Chat) Recover(runID, command string) (SubmitReceipt, error) {
 	if err != nil {
 		return SubmitReceipt{}, err
 	}
-	return c.submit(run.SessionID, "从中断处继续", run.ModelID, run.Effort, command, "prompt", runID, "")
+	return c.submit(run.SessionID, "从中断处继续", run.ModelID, run.Effort, command, "prompt", runID, "", run.Attachments...)
 }
 
 func (c *Chat) EditMessage(sessionID, messageID, text, model, effort, command string) (SubmitReceipt, error) {

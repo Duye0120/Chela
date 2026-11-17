@@ -38,7 +38,7 @@ description: Use for Chela change-log records, docs/changes entries, prior-day w
 
 ## 回看历史
 
-- 用户指定日期时，先读当天 `docs/changes/<date>/changes.md`，再看 `docs/todos/*` 和 `git status`。
+- 用户指定日期时，先查 `docs/changes/<date>/`。旧版记录按原日期归到 `history/electron/docs/changes/`，旧待办索引在 `history/electron/docs/todos/README.md`。
 - 区分“已完成记录”和“明确的后续计划”；不要把完成日志改写成假的今日计划。
 - 引用仍然开放的事项时，尽量使用文档里的原话或明确文件路径。
 

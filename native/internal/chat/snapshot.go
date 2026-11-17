@@ -129,6 +129,7 @@ func readApprovals(db interface {
 			_ = json.Indent(&pretty, []byte(raw), "", "  ")
 			a.Preview = pretty.String()
 		}
+		a.CanAllowSession = name == "write_file"
 		result = append(result, a)
 	}
 	return result, rows.Err()

@@ -166,9 +166,18 @@ func sessionMessages(db queryer, session *ChatSession) error {
 			return err
 		}
 		message.Delivery = delivery
+		for i := range message.Attachments {
+			message.Attachments[i].Data = ""
+			message.Attachments[i].Text = ""
+		}
 		session.Messages = append(session.Messages, message)
 	}
-	return rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	return fillToolActivity(db, session)
 }
 
 func (c *Chat) find(id string) (ChatSession, error) {

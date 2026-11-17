@@ -9,6 +9,7 @@ import { streamSimple as anthropic } from "@earendil-works/pi-ai/api/anthropic-m
 import { streamSimple as google } from "@earendil-works/pi-ai/api/google-generative-ai";
 import { buildProviderModel, getApiKeyForSource } from "./provider-model-builder.ts";
 import { capabilityResources, extensionUI, invocation } from "./capabilities.mjs";
+import { relayFetch } from "./network.mjs";
 
 const adapters = { "openai-completions": completions, "openai-responses": responses, "anthropic-messages": anthropic, "google-generative-ai": google };
 const worker = process.env.CHELA_WORKER_ID;
@@ -92,7 +93,7 @@ async function run(state, request) {
         const maxTokens=request.operation==="review"?512:options.maxTokens || resolvedModel.maxTokens;
         const prepared = await host(state, "model.request.prepare", { provider_request_id: id, model: `${resolvedModel.provider}/${resolvedModel.id}`, context_window: resolvedModel.contextWindow, capacity_source: selected.entry.limits?.contextWindow || selected.entry.detectedLimits?.contextWindow ? "catalog" : "local_limit_unknown_capacity", max_output_tokens: maxTokens, request_kind: state.safeCut ? "compaction" : "agent", context });
         if (state.cancelled || options.signal?.aborted) throw new Error("运行已取消");
-        const upstream = adapters[resolvedModel.api](resolvedModel, prepared.context, { ...options, maxTokens, apiKey:selectedKey, maxRetries: 0, onResponse: async response => {
+        const upstream = adapters[resolvedModel.api](resolvedModel, prepared.context, { ...options, fetch:request.network?relayFetch(request.network.address,request.network.token):options.fetch, maxTokens, apiKey:selectedKey, maxRetries: 0, onPayload:async(payload,model)=>{if(request.fast_mode&&!state.safeCut)payload.service_tier="priority";return await options.onPayload?.(payload,model)??payload}, onResponse: async response => {
           actualModel = response.headers["x-magpie-model"] || "";
           await options.onResponse?.(response,resolvedModel);
         } });
@@ -112,13 +113,16 @@ async function run(state, request) {
   };
   runtime.registerProvider(model.provider, { baseUrl: model.baseUrl, api: model.api, models: [model], streamSimple: guardedStream });
   const inputBudget = model.contextWindow - model.maxTokens - Math.max(1024, model.contextWindow*.02) - Math.max(2048, model.contextWindow*.05);
-  const settings = SettingsManager.inMemory({ compaction: { enabled: true, reserveTokens: Math.ceil(model.contextWindow-inputBudget*.72), keepRecentTokens: Math.max(2048,Math.floor(inputBudget*.55/4)-2048) }, retry: { enabled: true, maxRetries: 2, baseDelayMs: 1000 }, cacheWarming: "off" });
+  const threshold = Number.isFinite(request.compaction_threshold) && request.compaction_threshold >= .5 && request.compaction_threshold <= .9 ? request.compaction_threshold : .72;
+  // shortcut: Go caps uploads; enable SDK resizing when its worker is packaged.
+  const settings = SettingsManager.inMemory({ images: { autoResize: false }, compaction: { enabled: request.auto_compaction !== false, reserveTokens: Math.ceil(model.contextWindow-inputBudget*threshold), keepRecentTokens: Math.max(2048,Math.floor(inputBudget*.55/4)-2048) }, retry: { enabled: true, maxRetries: 2, baseDelayMs: 1000 }, cacheWarming: "off" });
   const installed=request.capabilities||[];
   const capabilities=capabilityResources(installed,
     async tool=>{await checkpoint("before_extension_tool");return host(state,"extension.tool.start",tool)},
     async tool=>{try{await host(state,"extension.tool.finish",tool)}catch(error){state.fatal=error;state.session?.agent.abort();throw error}},
   );
-  const resources = new DefaultResourceLoader({ cwd, agentDir: request.agent_dir, settingsManager: settings, noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true, ...capabilities.options, systemPrompt: snapshot.persona.system_prompt, extensionFactories: [pi => {
+  const rulePrompt=(snapshot.settings?.rules||[]).map(rule=>`\n\n工作区协作规则（${rule.path}，版本 ${rule.hash}）：\n${rule.text}`).join("");
+  const resources = new DefaultResourceLoader({ cwd, agentDir: request.agent_dir, settingsManager: settings, noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true, ...capabilities.options, systemPrompt: snapshot.persona.system_prompt+rulePrompt, extensionFactories: [pi => {
     pi.on("session_before_compact", async event => {
       await checkpoint("before_compaction");
       const cut = await host(state, "context.safe_cut", { first_kept_entry_id: event.preparation.firstKeptEntryId, automatic: event.reason !== "manual" });
@@ -141,7 +145,7 @@ async function run(state, request) {
     ...(resources.getSkills().skills.length ? [{ name: "read", label: "读取技能资料", description: "读取本轮已安装 skill 的文件及其包内引用，path 使用 skill location 或包内引用的绝对路径。最多返回 128 KiB。项目文件使用 read_file。", parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false } }] : []),
     { name: "write_file", label: "写入项目文件", description: "经过用户审批后写入当前项目内的 UTF-8 文本文件。", parameters: { type: "object", properties: { path: { type: "string" }, content: { type: "string" } }, required: ["path", "content"], additionalProperties: false } },
     ...(request.mcp_tools||[]).map(tool=>({...tool,label:tool.name,exposure:"deferred"})),
-  ]).map(tool => ({ ...tool, execute: async (id, args) => {
+  ]).filter(tool=>snapshot.settings?.policy.memoryEnabled!==false||tool.name!=="memory_save").map(tool => ({ ...tool, execute: async (id, args) => {
     await checkpoint("before_tool");
     try { return await host(state, "tool.request", { ...invocation(id), name: tool.name, arguments: args }, 6 * 60 * 1000); }
     catch (error) {
@@ -186,7 +190,7 @@ async function run(state, request) {
       return;
     }
     const command=text.startsWith("/")&&session.extensionRunner.getCommand(text.slice(1).split(/\s/,1)[0]);
-    await session.prompt(text, { expandPromptTemplates: true });
+    await session.prompt(text, { expandPromptTemplates: true, images: request.images || [] });
     if(command){await checkpoint("extension_command");await Promise.all(uiPending);return}
     await session.waitForIdle();
     if (!settled) throw new Error("AgentSession did not settle");

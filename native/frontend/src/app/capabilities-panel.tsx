@@ -4,22 +4,22 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/text-field";
 import "./capabilities.css";
 
-export function CapabilitiesPanel({open,onClose}:{open:boolean;onClose:()=>void}){
+export function CapabilitiesPanel({open=false,onClose,embedded=false,initialItem="",importing=false}:{open?:boolean;onClose?:()=>void;embedded?:boolean;initialItem?:string;importing?:boolean}){
   const dialog=useRef<HTMLDialogElement>(null),id=useId();
   const [items,setItems]=useState<Capability[]>([]),[source,setSource]=useState(""),[project,setProject]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState("");
-  useEffect(()=>{if(open){dialog.current?.showModal();void chatApi.capabilities().then(setItems).catch(e=>setError(String(e)))}else dialog.current?.close()},[open]);
+  useEffect(()=>{if(open||embedded){if(!embedded)dialog.current?.showModal();void chatApi.capabilities().then(setItems).catch(e=>setError(String(e)))}else dialog.current?.close()},[open,embedded]);
   async function act(action:()=>Promise<unknown>){setBusy(true);setError("");try{await action();setItems(await chatApi.capabilities())}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
-  return <dialog ref={dialog} className="capabilities-panel" aria-labelledby={`${id}-title`} onClose={onClose}>
-    <header><h2 id={`${id}-title`}>应用与扩展</h2><Button type="button" autoFocus onClick={()=>dialog.current?.close()}>关闭</Button></header>
+  const content=<>
+    {!embedded&&<header><h2 id={`${id}-title`}>应用与扩展</h2><Button type="button" autoFocus onClick={()=>dialog.current?.close()}>关闭</Button></header>}
     <p>从本机安装 Pi 资源包。安装后默认停用；启停与重载需等正在运行的会话结束。</p>
-    <form aria-label="安装扩展" onSubmit={e=>{e.preventDefault();void act(async()=>{await chatApi.installCapability(source,project);setSource("")})}}>
+    <details open={!embedded||importing}><summary>导入技能或扩展</summary><form aria-label="安装扩展" onSubmit={e=>{e.preventDefault();void act(async()=>{await chatApi.installCapability(source,project);setSource("")})}}>
       <label htmlFor={`${id}-source`}>扩展包目录（必填）</label><Input id={`${id}-source`} name="source" value={source} onChange={e=>setSource(e.target.value)} required spellCheck={false}/>
       <label htmlFor={`${id}-project`}>仅在此项目使用（可选，留空为用户范围）</label><Input id={`${id}-project`} name="project" value={project} onChange={e=>setProject(e.target.value)} spellCheck={false}/>
       <Button type="submit" disabled={busy}>安装到 Chela</Button>
-    </form>
+    </form></details>
     {error&&<p role="alert">{error}</p>}
     {!items.length&&<p>尚未安装扩展。</p>}
-    {items.map(item=><article key={item.id}>
+    {items.filter(item=>!initialItem||item.id===initialItem).map(item=><article key={item.id}>
       <h3>{item.name} <small>{item.version}</small></h3>
       <p>{item.compatibility} 级 · {item.enabled?"已启用":"已停用"} · {{loaded:"已加载",ready:"待下轮加载",failed:"加载失败",disabled:"未加载",unsupported:"需要适配"}[item.health]||item.health}</p>
       <p>{item.trust==="trusted-native"?"原生扩展：可直接访问本机文件、网络和进程，权限不受 Go 工具网关限制。":"文档资源：按需读取说明；不会因说明内容增加工具权限。"}</p>
@@ -32,5 +32,6 @@ export function CapabilitiesPanel({open,onClose}:{open:boolean;onClose:()=>void}
         {!item.enabled&&<Button type="button" disabled={busy} onClick={()=>void act(()=>chatApi.changeCapability(item.id,"remove"))}>移除登记</Button>}
       </div>
     </article>)}
-  </dialog>;
+  </>;
+  return embedded?<section className="capabilities-content">{content}</section>:<dialog ref={dialog} className="capabilities-panel" aria-labelledby={`${id}-title`} onClose={onClose}>{content}</dialog>;
 }

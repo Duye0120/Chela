@@ -1,0 +1,34 @@
+.settings-font-setting + .settings-font-setting { border-top: 1px solid var(--chela-color-border-subtle); }
+.settings-typography .settings-row { flex-wrap: wrap; gap: var(--chela-gap-sm); }
+.settings-typography .settings-row-control { max-width: 100%; flex-wrap: wrap; }
+.settings-font-trigger.ui-button { width: 200px; max-width: 100%; min-width: 0; justify-content: space-between; font: var(--chela-type-control); }
+.settings-font-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-font-trigger[data-state=open] > svg { rotate: 180deg; }
+.settings-typography .settings-row-control > .ui-select:only-child, .settings-typography .settings-row-control > .ui-select:last-child:not(:first-child) { width: 96px; }
+.settings-font-preview { margin: 0 var(--chela-gap-lg) var(--chela-gap-md); border: 1px solid var(--chela-color-border-default); border-radius: var(--chela-radius-control); background: var(--chela-color-bg-canvas); color: var(--chela-color-text-primary); overflow-wrap: anywhere; }
+.settings-interface-preview { padding: var(--chela-gap-sm); font: 400 var(--chela-type-body-size)/1.7 var(--chela-type-family-ui); }
+.settings-code-preview { padding-bottom: var(--chela-gap-xs); font: 400 var(--chela-type-code-size)/1.6 var(--chela-type-family-code); }
+.settings-code-preview header { display: flex; justify-content: space-between; gap: var(--chela-gap-sm); padding: var(--chela-gap-sm); }
+.settings-code-preview b { font-weight: 400; }
+.settings-code-preview > div { display: grid; grid-template-columns: 3ch minmax(0,1fr); gap: var(--chela-gap-sm); padding-inline: var(--chela-gap-sm); }
+.settings-code-preview > div > span { text-align: end; color: var(--chela-color-text-tertiary); user-select: none; }
+.settings-code-preview code { font: inherit; white-space: pre-wrap; }
+.settings-code-preview [data-change=removed] { background: color-mix(in oklab,var(--chela-color-status-error-text) 14%,transparent); }
+.settings-code-preview [data-change=added] { background: color-mix(in oklab,var(--chela-color-status-success-text) 14%,transparent); }
+.settings-terminal-preview { padding: var(--chela-gap-sm); white-space: pre-wrap; font: 400 var(--chela-type-terminal-size)/1.6 var(--chela-type-family-terminal); }
+.settings-preview-info { color: var(--chela-color-status-info-text); }
+.settings-preview-keyword { color: var(--chela-color-accent-default); }
+.settings-preview-added { color: var(--chela-color-status-success-text); }
+.settings-preview-deleted { color: var(--chela-color-status-error-text); }
+.settings-preview-warning { color: var(--chela-color-status-warning-text); }
+.settings-preview-comment { color: var(--chela-color-text-tertiary); }
+.settings-font-picker.ui-picker { display: flex; flex-direction: column; width: 288px; max-width: min(360px,calc(100vw - 16px)); max-height: var(--radix-popover-content-available-height); padding: var(--chela-gap-sm); gap: var(--chela-gap-sm); }
+.settings-font-picker > .ui-field { flex: none; height: var(--chela-size-control-toolbar); min-height: var(--chela-size-control-toolbar); }
+.settings-font-options { max-height: 288px; overflow: auto; min-height: 0; overscroll-behavior: contain; }
+.settings-font-options > .ui-button { width: 100%; min-height: var(--chela-size-control-default); height: auto; justify-content: space-between; text-align: start; padding: var(--chela-gap-xs) var(--chela-gap-sm); white-space: normal; border: 0; }
+.settings-font-options > .ui-button > span { min-width: 0; overflow-wrap: anywhere; }
+.settings-font-options > .ui-button[data-highlighted] { background: var(--chela-color-state-hover); }
+.settings-font-options > .ui-button[aria-selected=true] { background: var(--chela-color-accent-subtle-hover); }
+.settings-font-options > p, .settings-font-picker > small { margin: 0; color: var(--chela-color-text-secondary); font: var(--chela-type-caption); padding: var(--chela-gap-sm); }
+@media (min-width: 901px) { .settings-typography .settings-row { flex-wrap: nowrap; gap: var(--chela-gap-lg); } }
+@media (forced-colors: active) { .settings-font-options > [aria-selected=true] { outline: 1px solid Highlight; } }

@@ -1,6 +1,8 @@
 import { desktop } from "../../platform/bridge";
 
 export type ChatMessage = {
+  tools?: {id:string;name:string;arguments:string;state:string;result?:string;milliseconds?:number}[];
+  attachments?: ChatAttachment[];
 	id: string;
   role: "user" | "assistant";
   content: string;
@@ -9,6 +11,8 @@ export type ChatMessage = {
   tokens?: number;
   limit?: number;
 };
+export type RuntimeSettings={permission:"ask"|"auto"|"full";projectRules:boolean;memoryEnabled:boolean;fastMode:boolean};
+export type ChatAttachment = { id: string; name: string; mime: string; text?: string; data?: string; size?:number;uploading?:boolean;progress?:number };
 export type ChatSession = {
   id: string;
   branchId?: string;
@@ -29,12 +33,14 @@ export type ChatSnapshot = {
   snapshot_cursor?: string;
   runtimeError?: string;
   runs?: ChatRun[];
-  approvals?: {id: string; sessionId: string; runId: string; title: string; description: string; preview: string}[];
+  approvals?: {id: string; sessionId: string; runId: string; title: string; description: string; preview: string;canAllowSession?:boolean}[];
   models?: {
     id: string;
     label: string;
     provider: string;
     reasoning: boolean;
+    vision?: boolean;
+    fast?: boolean;
     efforts?:string[];
     contextWindow?:number;
     source?:string;
@@ -84,7 +90,13 @@ export const chatApi = {
   memories:(session:string,query="")=>call<MemoryItem[]>("Memories",session,query),
   saveMemory:(proposal:Record<string,unknown>)=>call<MemoryItem>("SaveMemory",JSON.stringify(proposal)),
   forgetMemory:(session:string,id:string,revision:number)=>call<void>("ForgetMemory",session,id,String(revision)),
+  runtimeSettings:(session="")=>call<RuntimeSettings>("RuntimeSettings",session),
+  setRuntimeSettings:(session:string,value:RuntimeSettings)=>call<void>("SetRuntimeSettings",session,JSON.stringify(value)),
+  globalRules:()=>call<{path:string;text:string;hash:string}>("GlobalRules"),
+  saveGlobalRules:(text:string,hash:string)=>call<{path:string;text:string;hash:string}>("SaveGlobalRules",text,hash),
   modelRoles:()=>call<Record<string,string>>("ModelRoles"),
+  customModel:()=>call<{url:string;model:string;vision:boolean;fast:boolean;hasKey:boolean}>("CustomModel"),
+  extractDocument:(name:string,data:string)=>call<string>("ExtractDocument",name,data),
   setModelRole:(role:string,model:string)=>call<void>("SetModelRole",role,model),
   magpie:()=>call<{url:string;fetchedAt:string;count:number;stale:boolean}>("MagpieStatus"),
   connectMagpie:(url:string,key:string)=>call<void>("ConnectMagpie",url,key),
@@ -98,11 +110,20 @@ export const chatApi = {
         ? call<ChatSession>("Pin", id, p.pinned)
         : call<ChatSession>("Archive", id, p.archived),
   chooseProject: (id: string) => call<ChatSession>("ChooseProject", id),
+  selectProject:(id:string,path:string)=>call<ChatSession>("SelectProject",id,path),
+  references:(session:string,query:string)=>call<{path:string;name:string;kind:string}[]>("References",session,query),
+  referenceContent:(session:string,path:string)=>call<string>("ReferenceContent",session,path),
   openProject: (id: string) => call<void>("OpenProject", id),
+  openEditor:(id:string,editor:string)=>call<void>("OpenEditor",id,editor),
+  defaultDirectory:()=>call<string>("DefaultDirectory"),
+  setDefaultDirectory:(value:string)=>call<void>("SetDefaultDirectory",value),
+  chooseDefaultDirectory:()=>call<string>("ChooseDefaultDirectory"),
   group: (id: string, name: string) => call<ChatSession>("Group", id, name),
   remove: (id: string) => call<void>("Delete", id),
   submit: (id: string, text: string, model: string, effort: string, command: string) =>
     call<{run_id: string; event_cursor: string}>("Submit", id, text, model, effort, command),
+  submitContext:(id:string,text:string,attachments:ChatAttachment[],model:string,effort:string,command:string,editOf?:string)=>call<{run_id:string}>("SubmitContext",id,JSON.stringify({text,attachments:attachments.map(({id,name,mime,text,data,size})=>({id,name,mime,text,data,size})),editOf}),model,effort,command),
+  attachment:(session:string,message:string,id:string)=>call<ChatAttachment>("Attachment",session,message,id),
   observe: (cursor: string) => call<{events: {seq: string}[]; progress: ChatProgress; runtimeError?: string}>("Observe", cursor),
   cancel: (id: string) => call<void>("Cancel", id),
   compact: (id: string, command: string) => call<{run_id: string}>("Compact", id, command),
@@ -112,9 +133,10 @@ export const chatApi = {
   branches: (id: string) => call<{id: string; current: boolean; parent: string; createdAt: string}[]>("Branches", id),
   switchBranch: (id: string, branch: string) => call<ChatSession>("SwitchBranch", id, branch),
   resolveApproval: (id: string, approved: boolean) => call<void>("ResolveApproval", id, approved),
+  allowSessionApproval:(id:string)=>call<void>("AllowSessionApproval",id),
   progress: (id: string) =>
     call<{ text: string; thinking: string } | null>("Progress", id),
   stop: (id: string) => call<void>("Stop", id),
-  configure: (url: string, model: string, key: string) =>
-    call<void>("Configure", url, model, key),
+  configure: (url: string, model: string, key: string, vision=false, keepKey=false,fast=false) =>
+    call<void>("ConfigureModel", JSON.stringify({url,model,key,vision,keepKey,fast})),
 };

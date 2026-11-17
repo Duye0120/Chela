@@ -84,15 +84,21 @@ func TestOfficialResultIdentityResumeAndSeen(t *testing.T) {
 	if tasks[0].ReplyPending || tasks[0].Status != "进行中" {
 		t.Fatal(tasks)
 	}
+	if err = term.Rename(info.ID, "核验终端"); err != nil {
+		t.Fatal(err)
+	}
+	if err = term.Rename(info.ID, "\n"); err == nil {
+		t.Fatal("empty terminal name accepted")
+	}
 	stop()
 	term, stop = New(store)
 	defer stop()
 	items, err = term.List()
-	if err != nil || !items[0].Resumable {
+	if err != nil || !items[0].Resumable || items[0].Name != "核验终端" {
 		t.Fatal(items, err)
 	}
 	resumed, err := term.Resume(info.ID, "继续原现场")
-	if err != nil || resumed.ID != info.ID || resumed.Generation != 2 {
+	if err != nil || resumed.ID != info.ID || resumed.Generation != 2 || resumed.Name != "核验终端" {
 		t.Fatal(resumed, err)
 	}
 	wait()

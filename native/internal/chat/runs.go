@@ -17,6 +17,7 @@ import (
 )
 
 type Run struct {
+	Attachments []Attachment    `json:"-"`
 	ID          string          `json:"run_id"`
 	AssistantID string          `json:"assistant_id"`
 	SessionID   string          `json:"session_id"`
@@ -40,6 +41,7 @@ type Run struct {
 	LeaseToken  int64           `json:"lease_token"`
 	Generation  int64           `json:"branch_generation"`
 	Operation   string          `json:"operation"`
+	Policy      RuntimeSettings `json:"-"`
 }
 
 type SubmitReceipt struct {
@@ -65,6 +67,7 @@ func scanRun(row interface{ Scan(...any) error }) (Run, error) {
 		return run, err
 	}
 	run.Text = input.Content
+	run.Attachments = input.Attachments
 	return run, nil
 }
 
@@ -169,7 +172,7 @@ func (c *Chat) Compact(id, commandID string) (SubmitReceipt, error) {
 	return c.submit(id, "整理当前对话上下文", "", "off", commandID, "compact", "", "")
 }
 
-func (c *Chat) submit(id, text, modelID, effort, commandID, operation, recoveryOf, editOf string) (SubmitReceipt, error) {
+func (c *Chat) submit(id, text, modelID, effort, commandID, operation, recoveryOf, editOf string, attachments ...Attachment) (SubmitReceipt, error) {
 	text = strings.TrimSpace(text)
 	if text == "" || len(text) > 512*1024 {
 		return SubmitReceipt{}, errors.New("消息不能为空，且应小于 512 KiB")
@@ -183,6 +186,12 @@ func (c *Chat) submit(id, text, modelID, effort, commandID, operation, recoveryO
 		return SubmitReceipt{}, errors.New("不支持的推理强度")
 	}
 	request, _ := json.Marshal([]string{id, text, modelID, effort, operation, recoveryOf, editOf})
+	if len(attachments) > 0 {
+		if err := validateAttachments(attachments); err != nil {
+			return SubmitReceipt{}, err
+		}
+		request, _ = json.Marshal([]any{id, text, modelID, effort, operation, recoveryOf, editOf, attachments})
+	}
 	hash := storage.Hash(request)
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -235,9 +244,24 @@ func (c *Chat) submit(id, text, modelID, effort, commandID, operation, recoveryO
 	if _, ok := configs[modelID]; !ok {
 		return SubmitReceipt{}, errors.New("请先配置聊天模型")
 	}
+	for _, item := range attachments {
+		if item.Data != "" {
+			var entry struct{ Capabilities, DetectedCapabilities struct{ Vision *bool } }
+			if err := json.Unmarshal(configs[modelID].Entry, &entry); err != nil {
+				return SubmitReceipt{}, err
+			}
+			vision := entry.Capabilities.Vision
+			if vision == nil {
+				vision = entry.DetectedCapabilities.Vision
+			}
+			if vision == nil || !*vision {
+				return SubmitReceipt{}, errors.New("当前模型未声明图片输入能力，请切换支持图片的模型")
+			}
+		}
+	}
 	now := storage.Now()
 	receipt := SubmitReceipt{MessageID: rand.Text(), RunID: rand.Text(), State: "queued"}
-	input := ChatMessage{ID: receipt.MessageID, Role: "user", Content: text, CreatedAt: now}
+	input := ChatMessage{ID: receipt.MessageID, Role: "user", Content: text, CreatedAt: now, Attachments: attachments}
 	message, _ := json.Marshal(input)
 	budget, _ := json.Marshal(map[string]any{"max_input_tokens": 128000, "max_output_tokens": 8192, "max_model_requests": 32, "max_tool_calls": 64, "deadline_at": time.Now().UTC().Add(10 * time.Minute).Format("2006-01-02T15:04:05.000Z")})
 	err = c.store.Update(context.Background(), func(tx *sql.Tx) error {

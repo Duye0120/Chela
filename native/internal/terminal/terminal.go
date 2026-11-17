@@ -13,12 +13,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Duye0120/Chela/native/internal/desktop"
 	"github.com/Duye0120/Chela/native/internal/storage"
-	"github.com/egoist/mygo"
 )
 
 type terminalInfo struct {
 	ID                string  `json:"id"`
+	Name              string  `json:"name,omitempty"`
 	Program           string  `json:"program"`
 	Directory         string  `json:"directory"`
 	TaskID            string  `json:"taskId"`
@@ -104,9 +105,7 @@ func (t *Terminal) List() ([]terminalInfo, error) {
 }
 
 func (*Terminal) ChooseDirectory() (string, error) {
-	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-		Parent: mygo.FocusedWindow(), Title: "选择终端工作目录", Directory: true,
-	})
+	paths, err := desktop.ChooseDirectory("选择终端工作目录")
 	if err != nil || len(paths) == 0 {
 		return "", err
 	}
@@ -180,6 +179,12 @@ func (t *Terminal) launch(program, directory, taskID, prompt, resume string) (te
 		return terminalInfo{}, errors.New("最多同时运行 4 个外部终端，请先结束一个终端")
 	}
 	info := terminalInfo{ID: rand.Text(), Program: program, Directory: directory, TaskID: taskID, State: "starting", Version: version, Mode: "terminal", Generation: 1}
+	for _, existing := range t.sessions {
+		if taskID != "" && existing.info.TaskID == taskID {
+			info.Name = existing.info.Name
+			break
+		}
+	}
 	if prompt != "" {
 		info.Mode = "observed"
 	}

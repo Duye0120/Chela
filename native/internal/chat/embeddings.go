@@ -70,6 +70,13 @@ func (c *Chat) configureEmbedding(model string) error {
 }
 
 func (c *Chat) embed(ctx context.Context, e encoder, text, purpose string) (*memory.QueryVector, error) {
+	overrides, err := c.providerOverrides()
+	if err != nil {
+		return nil, err
+	}
+	if !enabled(overrides, "magpie", true) {
+		return nil, errors.New("Magpie 已停用，使用词法检索")
+	}
 	var cache magpieCatalog
 	if err := readOptional(filepath.Join(c.profile, "magpie-catalog.json"), &cache); err != nil {
 		return nil, err
@@ -106,6 +113,7 @@ func (c *Chat) embed(ctx context.Context, e encoder, text, purpose string) (*mem
 	request.Header.Set("Authorization", "Bearer "+string(key))
 	request.Header.Set("User-Agent", "Chela")
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("向量请求拒绝重定向") }}
+	client.Transport = c.network.Transport()
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, errors.New("向量服务未响应，已保留词法检索")

@@ -1,5 +1,7 @@
 # Chela 整体架构
 
+2026-11-16 宿主更新：默认采用 Electron + React，Go 后端与 Pi worker 保留，具体实施以 [Electron 宿主边界](electron-host.md) 为准。下文的 MyGo 路径保留为旧基线记录。
+
 2026-11-15 更新。重建的目标与验收采用 [架构包 v1](chela-architecture-v1/README.md)，实施基线见 [实际工作区盘点](../migration/workspace-baseline.md)。Chela 的稳定身份、人格和持续心情由后台统一维护，多会话保有各自的工作上下文、工具、审批和取消归属。下文记录此前实现与讨论，具体设计以 v1 契约为准。
 
 **2026-11-13 · Windows 桌面工作台与个人助手**

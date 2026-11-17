@@ -104,7 +104,7 @@ func (c *Chat) executeMCPTool(ctx context.Context, run Run, request toolRequest)
 	}
 	var result json.RawMessage
 	outcome := "succeeded"
-	if !cfg.AutoApprove {
+	if !cfg.AutoApprove && run.Policy.Permission != "full" {
 		versions, _ := json.Marshal(map[string]any{"connection": tool.Server, "revision": revision, "tool_version": tool.Version})
 		if err = c.awaitToolApproval(ctx, run, invocation, hash, versions, "调用 "+tool.Name, "将向已配置的 MCP 服务发送以下参数；此服务有独立的文件、网络及外部系统权限。"); err != nil {
 			outcome = "denied"

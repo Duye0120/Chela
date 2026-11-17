@@ -5,68 +5,30 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/url"
-	"sync/atomic"
 	"time"
 
 	"github.com/Duye0120/Chela/native/internal/companion"
+	"github.com/Duye0120/Chela/native/internal/desktop"
 	"github.com/Duye0120/Chela/native/internal/storage"
 	"github.com/Duye0120/Chela/native/internal/work"
-	"github.com/egoist/mygo"
 )
 
 type Pet struct {
-	store        *storage.Store
-	work         *work.Work
-	window, main *mygo.Window
-	locked       atomic.Bool
-	quitting     atomic.Bool
-	off          []func()
+	store *storage.Store
+	work  *work.Work
+}
+type rectangle struct{ X, Y, Width, Height int }
+type surface struct {
+	Ready, Locked, Busy, Focused, Visible bool
+	Bounds, Area                          rectangle
 }
 
-func New(store *storage.Store, work *work.Work) (*Pet, func(*mygo.Window), func()) {
-	p := &Pet{store: store, work: work}
-	return p, p.start, p.stop
-}
-
-func GuardPage(w *mygo.Window) {
-	page := w.Page()
-	page.SetWindowOpenHandler(func(mygo.WindowOpenRequest) *mygo.WindowOptions { return nil })
-	page.OnWillNavigate(func(event *mygo.NavigateEvent) {
-		current, e := url.Parse(page.URL())
-		next, err := url.Parse(event.URL)
-		if e != nil || err != nil || current.Scheme != next.Scheme || current.Host != next.Host {
-			event.PreventDefault()
-		}
-	})
-}
-
-func (p *Pet) start(main *mygo.Window) {
-	p.main = main
-	area := mygo.Screen.PrimaryDisplay().WorkArea
-	p.window = mygo.NewWindow(mygo.WindowOptions{Title: "Chela · 陪伴", URL: "/?pet=1", Width: 360, Height: 360, X: area.X + area.Width - 380, Y: area.Y + area.Height - 380, Hidden: true, Frameless: true, Transparent: true, AlwaysOnTop: true, SkipTaskbar: true, DisableResize: true, DisableMaximize: true, DisableMinimize: true, DisableShadow: true, StateKey: "pet"})
-	GuardPage(p.window)
-	p.window.SetInputRegion([]mygo.Rectangle{})
-	p.window.OnClose(func(e *mygo.CloseEvent) {
-		if !p.quitting.Load() {
-			e.PreventDefault()
-			go func() {
-				if err := p.SetHidden(true); err != nil {
-					log.Print("隐藏桌宠失败: ", err)
-				}
-			}()
-		}
-	})
-	p.off = append(p.off, mygo.Power.OnLockScreen(func() { p.locked.Store(true); p.window.Hide() }), mygo.Power.OnUnlockScreen(func() { p.locked.Store(false) }), mygo.Screen.OnDisplaysChanged(func() { p.clamp(false) }))
-	p.clamp(false)
-}
-
-func (p *Pet) stop() {
-	p.quitting.Store(true)
-	for _, off := range p.off {
-		off()
-	}
+func New(store *storage.Store, work *work.Work) *Pet { return &Pet{store: store, work: work} }
+func (p *Pet) surface() (surface, error) {
+	var state surface
+	err := desktop.Invoke("Pet.Presence", &state)
+	return state, err
 }
 
 type Snapshot struct {
@@ -77,25 +39,21 @@ type Snapshot struct {
 	Presentation *companion.Presentation `json:"presentation"`
 }
 
-func (p *Pet) presence() companion.Presence {
-	locked, fullscreen := systemPresence()
-	busy := false
-	if p.main != nil && p.window != nil {
-		busy = p.main.IsFocused() && !p.window.IsFocused() && mygo.Power.IdleTime() < 3*time.Second
-	}
-	return companion.Presence{Locked: locked || p.locked.Load(), Fullscreen: fullscreen, Busy: busy}
-}
-
 func (p *Pet) Snapshot() (Snapshot, error) {
 	result := Snapshot{State: "hidden", Emotion: "neutral"}
-	if p.window == nil || p.quitting.Load() {
+	state, err := p.surface()
+	if err != nil {
+		return result, err
+	}
+	if !state.Ready {
 		return result, nil
 	}
 	assistant, err := p.store.Identity()
 	if err != nil {
 		return result, err
 	}
-	presence := p.presence()
+	locked, fullscreen := systemPresence()
+	presence := companion.Presence{Locked: locked || state.Locked, Fullscreen: fullscreen, Busy: state.Busy}
 	var cfg companion.Settings
 	err = p.store.Update(context.Background(), func(tx *sql.Tx) error {
 		var e error
@@ -141,20 +99,19 @@ func (p *Pet) Snapshot() (Snapshot, error) {
 	if err != nil {
 		return result, err
 	}
-	bounds := p.window.Bounds()
-	area := mygo.Screen.DisplayMatching(bounds).WorkArea
+	bounds, area := state.Bounds, state.Area
 	result.Side = "right"
 	if bounds.X+bounds.Width/2 < area.X+area.Width/2 {
 		result.Side = "left"
 	}
-	if result.State == "idle" && !p.window.IsFocused() && (bounds.X <= area.X+2 || bounds.X+bounds.Width >= area.X+area.Width-2) {
+	if result.State == "idle" && !state.Focused && (bounds.X <= area.X+2 || bounds.X+bounds.Width >= area.X+area.Width-2) {
 		result.State = "peeking"
 	}
 	if presence.Locked || cfg.PetHidden || (presence.Fullscreen && result.Presentation == nil) {
 		result.State = "hidden"
-		p.window.Hide()
-	} else if !p.window.IsVisible() {
-		p.window.ShowInactive()
+	}
+	if err := desktop.Invoke("Pet.Visibility", nil, result.State == "hidden"); err != nil {
+		return result, err
 	}
 	return result, nil
 }
@@ -188,12 +145,8 @@ func (p *Pet) SetHidden(hidden bool) error {
 		_, e = companion.SaveSettings(tx, assistant, cfg)
 		return e
 	})
-	if err == nil && p.window != nil {
-		if hidden {
-			p.window.Hide()
-		} else {
-			p.clamp(false)
-		}
+	if err == nil {
+		err = desktop.Invoke("Pet.Visibility", nil, hidden)
 	}
 	return err
 }
@@ -215,7 +168,7 @@ func (p *Pet) SetMotion(motion bool) error {
 }
 
 func (p *Pet) SetRegions(raw string) error {
-	var rects []mygo.Rectangle
+	var rects []rectangle
 	if len(raw) > 2048 {
 		return errors.New("命中区域过大")
 	}
@@ -225,43 +178,20 @@ func (p *Pet) SetRegions(raw string) error {
 	if len(rects) > 8 {
 		return errors.New("命中区域过多")
 	}
+	width, height := 480, 360
+
 	for _, r := range rects {
-		if r.X < 0 || r.Y < 0 || r.Width < 0 || r.Height < 0 || r.X+r.Width > 360 || r.Y+r.Height > 360 {
+		if r.X < 0 || r.Y < 0 || r.Width < 0 || r.Height < 0 || r.Width > width || r.Height > height || r.X > width-r.Width || r.Y > height-r.Height {
 			return errors.New("命中区域越界")
 		}
 	}
-	if p.window != nil {
-		p.window.SetInputRegion(rects)
-	}
-	return nil
+	return desktop.Invoke("Pet.SetRegions", nil, rects)
 }
 
-func (p *Pet) Dock() { p.clamp(true) }
-func (p *Pet) clamp(dock bool) {
-	if p.window == nil {
-		return
-	}
-	r := p.window.Bounds()
-	area := mygo.Screen.DisplayMatching(r).WorkArea
-	x := max(area.X, min(r.X, area.X+area.Width-r.Width))
-	y := max(area.Y, min(r.Y, area.Y+area.Height-r.Height))
-	if dock {
-		if r.X+r.Width/2 < area.X+area.Width/2 {
-			x = area.X
-		} else {
-			x = max(area.X, area.X+area.Width-r.Width)
-		}
-	}
-	if x != r.X || y != r.Y {
-		p.window.SetPosition(x, y)
-	}
-}
+func (p *Pet) Dock() error { return desktop.Invoke("Pet.Dock", nil) }
 
 // Open resolves saved actions rather than accepting an arbitrary URL from the pet page.
 func (p *Pet) Open(delivery, action string) error {
-	if p.main == nil {
-		return errors.New("主窗口尚未就绪")
-	}
 	hash := "#chat"
 	if delivery != "" {
 		db, err := p.store.DB()
@@ -314,15 +244,9 @@ func (p *Pet) Open(delivery, action string) error {
 			return errors.New("提示操作已改变")
 		}
 	}
-	encoded, _ := json.Marshal(hash)
-	if _, err := p.main.Page().Eval("location.hash=" + string(encoded)); err != nil {
+	if err := desktop.Invoke("Pet.Open", nil, hash); err != nil {
 		return err
 	}
-	p.main.Show()
-	if p.main.IsMinimized() {
-		p.main.Restore()
-	}
-	p.main.Focus()
 	if delivery != "" {
 		return p.work.RespondNotification(delivery, "seen", "pet-open:"+delivery+":"+action)
 	}
