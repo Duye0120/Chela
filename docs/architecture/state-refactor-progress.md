@@ -1,6 +1,6 @@
 # 第一轮状态与组件整理进度
 
-更新时间：2026-11-17（America/Los_Angeles）。恢复工作时先读本文，再检查 `git status`、HEAD 与相关 diff。本次回归修复基线及新增验证见下方「2026-11-17：生命周期回归修复」；第一轮的验证记录保留其原范围。
+更新时间为 2026-11-18（Asia/Singapore）。恢复工作时先读本文，再检查 `git status`、HEAD 与相关 diff。当前增量见「2026-11-18 WorkTask 共享读取与写后同步」，前两轮的验证记录保留其原范围。
 
 ## 实施基线
 
@@ -100,9 +100,29 @@ modern-web-guidance：已查阅 `js` 的异步协调指南；IPC 无 AbortSignal
 
 三类回归已修复，下一阶段任务范围与依赖保持下方原记录，不在本次继续实施。
 
-## 后续独立任务（本轮只记录）
+## 2026-11-18 WorkTask 共享读取与写后同步
 
-1. Work 查询镜像：从 `data/work.ts` 和 Board / Calendar / Terminal 的任务写入口开始；统一 task 列表、写后失效与 Notes 关联索引，保留 Calendar revision、有序保存及草稿恢复。依赖本轮同步 store / 异步 action 约定，不依赖 Chat UI。
+本轮基线为 `codex/chela-figma-restart` / `eea5383`。确认了 Go 的 Work.Tasks 返回完整任务及派生字段，Work.SaveTask 校验来稿 revision，删除父任务会清空子项 parentId 并增加其 revision。
+
+- `state/work-tasks.ts` 保存列表、首次读取是否成功和读取错误。 `state/work-task-actions.ts` 合并同一有效读取代次的请求，统一消费者挂载、焦点恢复、重新可见及重试入口。最后消费者离开后移除监听，迟到的读取不会写回。
+- 保存成功立即返回 Go 确认的完整记录。写后重读单独维护失败状态，保留最后确认的数据和重试入口。删除成功重新读取全量列表接收子项关联及 revision。写前请求与释放后旧请求都不能回写，同 revision 的 `replyPending` 变化照常接收。
+- Board 读取、保存、拖动状态或优先级、完成、归档、删除均接入。编辑器沿用任务 ID 边界，同 ID 刷新保留草稿和基线。
+- Calendar 读取、排期、删除、文档内创建子任务均接入。深链只在待打开时解析共享列表，后续刷新保留已打开的编辑会话。500ms 自动保存及卸载保存继续走原队列。只有本编辑会话已确认的保存能推进后续输入的基线，恢复草稿保留本机 revision，Go 冲突后保留输入。
+- 采用计划在 `commitPlan` 成功后立即失效并重读任务，独立于随后的 `plans()` 结果。Terminal 改为从共享列表找关联任务并通过 action 标记完成。Notes 任务关联从镜像派生，「转任务」通过同一 action。
+
+### 验证结果
+
+| 检查 | 结果 |
+| --- | --- |
+| 隔离运行 `node output/work-tasks-2026-11-18/check-work-tasks.mjs` | 通过。使用真实 store、action 与组件回调，模拟 IPC 回包、React hook 生命周期、计时器和草稿存储。覆盖并发合并、焦点与可见性、重进、写前及卸载的迟到读取、同 revision 派生字段、父任务删除后的回读、保存成功但刷新失败、Board 草稿、Calendar 串行及卸载保存、恢复冲突、深链、创建子任务、Notes 转任务、Terminal 完成，以及草案列表读取失败时计划照常同步任务 |
+| `go test ./internal/work -run '^(TestLegacyImportAndPlannerEdits\|TestPlanReviewConflictAndCommit)$' -count=1`（`native/`） | 两个现有 Go 测试通过，验证临时数据库中的父子删除行为和计划采用 |
+| `pnpm exec tsc -p native/frontend --pretty false`、`git diff --check` | 静态检查通过 |
+
+隔离脚本留在 Git 忽略的本地 `output/` 下。实际 Electron 页面、DOM 交互、端到端 IPC 与真实应用恢复草稿未运行。前台持续停留时外部 Go / CLI 修改暂不保证实时推送。
+
+## 后续独立任务
+
+1. WorkTask 剩余入口包括 Companion 的任务列表和 Chat 补全。终端结果的已读反馈及外部 Go / CLI 修改的前台实时同步另行评估。
 2. Notes：单独处理 useNotes 的 drafts/base、模块 writes、恢复副本与编辑块；先列清冲突与卸载 flush 合同，不能用一个 persisted store 替换保存队列。共享 Markdown 完成后只读渲染已可独立复用。
 3. Settings：按 Go 运行配置、provider/MCP/capability 配置、纯 UI 偏好拆领域；逐个迁移写入口和既有通知消费者，不整页搬进万能 hook。
 4. Go 应用层：从 `main.go` 的 ready barrier、`chat/runs.go` 的 Start/startLocked 与 `chat/pi_worker.go` 的 shutdown 出发，保护启动恢复、schedule/indexMemories 与退出语义，再独立抽应用服务；不让服务分发绕过 ready 屏障。

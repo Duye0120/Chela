@@ -8,7 +8,8 @@ import { Input, Textarea } from "../../ui/text-field";
 import { Select } from "../../ui/select";
 import { Sidebar, SidebarGroup, SidebarToggle } from "../../ui/sidebar";
 import { terminalApi, type TerminalInfo, type TerminalProgram } from "./api";
-import { workApi, type WorkTask } from "../../data/work";
+import type { WorkTask } from "../../data/work";
+import { refreshWorkTasks, saveWorkTask, useWorkTasks } from "../../state/work-task-actions";
 import "@xterm/xterm/css/xterm.css";
 import "./terminal.css";
 import { ExecutionResults } from "./execution-results";
@@ -173,7 +174,7 @@ function CreateTerminal({ tasks, taskId, initialDirectory, initialProgram, busy,
 
 export function TerminalWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpen: boolean; onToggleSidebar: () => void }) {
   const [sessions, setSessions] = useState<TerminalInfo[]>([]);
-  const [tasks, setTasks] = useState<WorkTask[]>([]);
+  const { tasks, error: taskError } = useWorkTasks();
   const [selectedId, setSelectedId] = useState("");
   const [paneIds, setPaneIds] = useState<string[]>([]);
   const [taskId, setTaskId] = useState(routeTask);
@@ -218,9 +219,9 @@ export function TerminalWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpe
       const current = ++request;
       setLoading(true);
       try {
-        const [items, work] = await Promise.all([terminalApi.list(), workApi.tasks()]);
+        const items = await terminalApi.list();
         if (!mounted.current || current !== request) return;
-        setSessions(items); setTasks(work);
+        setSessions(items);
         const linkedId = routeTask();
         setTaskId(linkedId);
         const active = routeTerminal() ? items.find(item => item.id === routeTerminal()) : linkedId ? items.find(item => item.taskId === linkedId && !item.ended) || [...items].reverse().find(item => item.taskId === linkedId) : items.find(item => item.id === sessionStorage.getItem("chela.terminal.selected"));
@@ -231,7 +232,11 @@ export function TerminalWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpe
       } catch (reason) { if (mounted.current && current === request) setError(message(reason)); }
       finally { if (mounted.current && current === request) setLoading(false); }
     }
-    const hash = () => { if (location.hash.startsWith("#terminal")) void load(); };
+    const hash = () => {
+      if (!location.hash.startsWith("#terminal")) return;
+      void refreshWorkTasks();
+      void load();
+    };
     void load(); window.addEventListener("hashchange", hash);
     return () => { mounted.current = false; window.removeEventListener("hashchange", hash); };
   }, []);
@@ -300,7 +305,7 @@ export function TerminalWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpe
   async function completeTask() {
     if (!task || busy) return;
     setBusy(true); setError("");
-    try { const saved = await workApi.saveTask({ ...task, status: "已完成" }); if (mounted.current) setTasks(previous => previous.map(item => item.id === saved.id ? saved : item)); }
+    try { await saveWorkTask({ ...task, status: "已完成" }); }
     catch (reason) { if (mounted.current) setError(message(reason)); }
     finally { if (mounted.current) setBusy(false); }
   }
@@ -324,6 +329,7 @@ export function TerminalWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpe
         {!creating && selected && <Button className="terminal-close" onClick={() => void close(selected)} disabled={busy || selected.ended}>结束终端</Button>}
       </header>
       {!creating && error && <div className="terminal-error" role="alert">{error}</div>}
+      {taskError && <div className="terminal-error" role="alert">任务列表读取失败：{taskError}<Button variant="ghost" onClick={refreshWorkTasks}>重新加载</Button></div>}
       {notice && <p className="terminal-notice" role="status">{notice}</p>}
       <div className="terminal-body" data-empty={creating || !panes.length}>
         {creating ? <CreateTerminal key={`${taskId}:${program}`} tasks={tasks} taskId={taskId} initialDirectory={selected?.directory || ""} initialProgram={program} busy={busy} error={error}

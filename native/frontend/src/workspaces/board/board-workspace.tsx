@@ -8,7 +8,8 @@ import { TaskScheduleFields } from "../../ui/task-schedule-fields";
 import { TaskReminders } from "../../ui/task-reminders";
 import { Sidebar, SidebarItem, SidebarToggle } from "../../ui/sidebar";
 import * as Menu from "../../ui/menu";
-import { workApi, taskStatuses as statuses, taskPriorities as priorities, type WorkTask } from "../../data/work";
+import { taskStatuses as statuses, taskPriorities as priorities, type WorkTask } from "../../data/work";
+import { deleteWorkTask, refreshWorkTasks, saveWorkTask, useWorkTasks } from "../../state/work-task-actions";
 import "./board.css";
 import { routeTitle } from "../../ui/route-title";
 import { TaskDetails } from "./task-details";
@@ -43,7 +44,6 @@ function TaskEditor({ task, projects, tasks, busy, onSave, onClose, onDelete }: 
   const [draft, setDraft] = useState(task);
   const [error, setError] = useState("");
   const [terminal, setTerminal] = useState(false);
-  useEffect(() => setDraft(task), [task]);
   const id = useId();
   const field = (name: keyof WorkTask, value: string) => setDraft(previous => ({ ...previous, [name]: value }));
   const children = tasks.filter(item => item.parentId === task.id && task.id);
@@ -100,8 +100,8 @@ function TaskEditor({ task, projects, tasks, busy, onSave, onClose, onDelete }: 
 }
 
 export function BoardWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpen: boolean; onToggleSidebar: () => void }) {
-  const [tasks, setTasks] = useState<WorkTask[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { tasks, loaded, error: taskError } = useWorkTasks();
+  const loading = !loaded && !taskError && !tasks.length;
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState(() => sessionStorage.getItem("chela.board.view") || views[0]);
@@ -122,15 +122,13 @@ export function BoardWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpen: 
   const dialogTitle = useId();
 
   function load() {
-    setLoading(true); setError("");
-    workApi.tasks().then(setTasks).catch(reason => setError(message(reason))).finally(() => setLoading(false));
+    setError("");
+    void refreshWorkTasks();
   }
   useEffect(() => {
-    let active = true;
-    workApi.tasks().then(value => { if (active) setTasks(value); }).catch(reason => { if (active) setError(message(reason)); }).finally(() => { if (active) setLoading(false); });
     const hash = () => { setSelectedId(routeTask()); setCreating(false); };
     window.addEventListener("hashchange", hash);
-    return () => { active = false; window.removeEventListener("hashchange", hash); };
+    return () => window.removeEventListener("hashchange", hash);
   }, []);
   useEffect(() => { if (deleting) deleteDialog.current?.showModal(); }, [deleting]);
 
@@ -151,8 +149,7 @@ export function BoardWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpen: 
   async function saveTask(task: WorkTask, openTerminal = false) {
     setBusy(true); setError("");
     try {
-      const saved = await workApi.saveTask(task);
-      setTasks(previous => previous.some(item => item.id === saved.id) ? previous.map(item => item.id === saved.id ? saved : item) : [...previous, saved]);
+      const saved = await saveWorkTask(task);
       setCreating(false);
       setEditing(false);
       if (openTerminal) location.hash = `terminal/${encodeURIComponent(saved.id)}`;
@@ -165,8 +162,7 @@ export function BoardWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpen: 
     if (!task || busy || task[grouping] === column) return;
     setBusy(true); setError("");
     try {
-      const saved = await workApi.saveTask({ ...task, [grouping]: column });
-      setTasks(previous => previous.map(item => item.id === saved.id ? saved : item));
+      await saveWorkTask({ ...task, [grouping]: column });
     } catch (reason) { setError(message(reason)); }
     finally { setBusy(false); }
   }
@@ -174,8 +170,7 @@ export function BoardWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpen: 
     if (!deleting || busy) return;
     setBusy(true); setError("");
     try {
-      await workApi.deleteTask(deleting.id);
-      setTasks(previous => previous.filter(task => task.id !== deleting.id));
+      await deleteWorkTask(deleting.id);
       deleteDialog.current?.close();
       if (selectedId === deleting.id) { setSelectedId(""); location.hash = "board"; }
     } catch (reason) { setError(message(reason)); }
@@ -231,7 +226,7 @@ export function BoardWorkspace({ sidebarOpen, onToggleSidebar }: { sidebarOpen: 
         <Menu.Root><Menu.Trigger asChild><Button><ArrowUpDown size={13} />排序</Button></Menu.Trigger><Menu.Content><Menu.Choices label="任务排序" value={sort} onChange={setSort} options={["原始顺序", "按截止日期最近", "按优先级从高到低", "按任务名称"].map(value => ({ value, label: value }))} /></Menu.Content></Menu.Root>
         <Button variant="primary" onClick={newTask}><Plus size={13} />新建任务</Button>
       </div>
-      {error && <div className="board-error-bar" role="alert">{error}<Button variant="ghost" onClick={load}>重新加载</Button></div>}
+      {(error || taskError) && <div className="board-error-bar" role="alert">{error || `任务列表读取失败：${taskError}`}<Button variant="ghost" onClick={load}>重新加载</Button></div>}
       <div className="board-body">
         <div className="board-content">
           {loading ? <div className="board-empty" role="status">正在读取任务…</div> : view === "任务列表" ? <div className="board-list">

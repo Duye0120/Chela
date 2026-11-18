@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 import { workApi, type PlanDraft, type WorkTask } from "../../data/work";
+import { invalidateWorkTasks } from "../../state/work-task-actions";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/text-field";
 import { ScheduleBlockFields } from "../../ui/schedule-block-fields";
 
-export function PlanDrafts({tasks,onCommitted}:{tasks:WorkTask[];onCommitted:()=>void}){
+export function PlanDrafts({tasks}:{tasks:WorkTask[]}){
   const dialog=useRef<HTMLDialogElement>(null),[plans,setPlans]=useState<PlanDraft[]>([]),[edit,setEdit]=useState<PlanDraft|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState("");
   async function action(fn:()=>Promise<void>){setBusy(true);setError("");try{await fn()}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
   function open(){dialog.current?.showModal();void action(async()=>{setPlans(await workApi.plans());setEdit(null)})}
@@ -18,7 +19,7 @@ export function PlanDrafts({tasks,onCommitted}:{tasks:WorkTask[];onCommitted:()=
         <label>排期结束<Input type="date" value={change.endDate||""} min={change.date} onChange={e=>setEdit({...current,changes:current.changes.map((c,i)=>i===index?{...c,endDate:e.target.value}:c)})}/></label><small>{change.timezone}</small>
         <Button onClick={()=>setEdit({...current,changes:current.changes.map((c,i)=>i===index?{...c,date:"",endDate:"",blocks:[]}:c)})}>改用多个时间块</Button></>}
       </fieldset>)}<div>
-        {edit?.id===plan.id?<Button disabled={busy} onClick={()=>void action(async()=>{const saved=await workApi.updatePlan(edit);setPlans(plans.map(p=>p.id===saved.id?saved:p));setEdit(null)})}>保存草案修改</Button>:<Button variant="primary" disabled={busy||Boolean(plan.conflicts?.length)} onClick={()=>void action(async()=>{await workApi.commitPlan(plan);setPlans(await workApi.plans());onCommitted()})}>采用这个计划</Button>}
+        {edit?.id===plan.id?<Button disabled={busy} onClick={()=>void action(async()=>{const saved=await workApi.updatePlan(edit);setPlans(plans.map(p=>p.id===saved.id?saved:p));setEdit(null)})}>保存草案修改</Button>:<Button variant="primary" disabled={busy||Boolean(plan.conflicts?.length)} onClick={()=>void action(async()=>{await workApi.commitPlan(plan);invalidateWorkTasks();setPlans(await workApi.plans())})}>采用这个计划</Button>}
         {!edit&&<Button disabled={busy} onClick={()=>setEdit({...plan})}>检查并修改</Button>}
         <Button disabled={busy} onClick={()=>void action(async()=>{await workApi.discardPlan(plan);setPlans(await workApi.plans());setEdit(null)})}>放弃草案</Button>
       </div>{plan.conflicts?.map((conflict,i)=><p role="status" key={i}>{conflict}</p>)}</article>})}

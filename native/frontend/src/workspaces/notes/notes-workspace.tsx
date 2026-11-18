@@ -7,7 +7,8 @@ import { Input, SearchField, Textarea } from "../../ui/text-field";
 import { Select } from "../../ui/select";
 import { Sidebar, SidebarItem, SidebarToggle } from "../../ui/sidebar";
 import * as Menu from "../../ui/menu";
-import { workApi, type WorkNote } from "../../data/work";
+import type { WorkNote } from "../../data/work";
+import { refreshWorkTasks, saveWorkTask, useWorkTasks } from "../../state/work-task-actions";
 import { chatApi } from "../../data/chat";
 import { MarkdownNote } from "./markdown";
 import { NoteEditor, noteLinks, type NoteTarget } from "./note-editor";
@@ -36,6 +37,7 @@ function Modal({ title, children, onClose, className = "" }: { title: string; ch
 export function NotesWorkspace({ sidebarOpen, onToggleSidebar }: Props) {
   const data = useNotes();
   const { notes } = data;
+  const { tasks, error: taskError } = useWorkTasks();
   const [selected, setSelected] = useState(routeNote);
   const [view, setView] = useState<View>(routeNote() ? "page" : "inbox");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -63,7 +65,11 @@ export function NotesWorkspace({ sidebarOpen, onToggleSidebar }: Props) {
   const favorites = notes.filter(item => item.favorite && !item.archived);
   const archived = notes.filter(item => item.archived);
   const pages = notes.filter(item => !item.inbox && !item.archived);
-  const targets: NoteTarget[] = [...notes.map(item => ({ id: item.id, title: item.title, kind: "note" as const, detail: item.folder ? "目录" : item.inbox ? "Inbox" : item.archived ? "已归档" : "笔记" })), ...related];
+  const targets: NoteTarget[] = [
+    ...notes.map(item => ({ id: item.id, title: item.title, kind: "note" as const, detail: item.folder ? "目录" : item.inbox ? "Inbox" : item.archived ? "已归档" : "笔记" })),
+    ...related,
+    ...tasks.map(item => ({ id: item.id, title: item.title, kind: "task" as const, detail: `看板 · ${item.status}` })),
+  ];
   const queryLower = query.trim().toLocaleLowerCase();
   const results = targets.filter(target => {
     const targetNote = target.kind === "note" ? notes.find(item => item.id === target.id) : undefined;
@@ -87,13 +93,11 @@ export function NotesWorkspace({ sidebarOpen, onToggleSidebar }: Props) {
 
   useEffect(() => {
     let active = true;
-    void Promise.allSettled([chatApi.load(), workApi.tasks()]).then(([chats, tasks]) => {
+    void chatApi.load().then(chats => {
       if (!active) return;
-      const items: NoteTarget[] = [];
-      if (chats.status === "fulfilled") items.push(...chats.value.sessions.map(item => ({ id: item.id, title: item.title, kind: "chat" as const, detail: "历史对话" })));
-      if (tasks.status === "fulfilled") items.push(...tasks.value.map(item => ({ id: item.id, title: item.title, kind: "task" as const, detail: `看板 · ${item.status}` })));
-      setRelated(items);
-      if (chats.status === "rejected" || tasks.status === "rejected") setRelationError("部分对话或任务未读取成功，可重新进入笔记重试。");
+      setRelated(chats.sessions.map(item => ({ id: item.id, title: item.title, kind: "chat", detail: "历史对话" })));
+    }).catch(() => {
+      if (active) setRelationError("对话未读取成功，可重新进入笔记重试。");
     });
     return () => { active = false; };
   }, []);
@@ -213,6 +217,7 @@ export function NotesWorkspace({ sidebarOpen, onToggleSidebar }: Props) {
         </>}
       </header>
       {(error || data.error) && <div className="notes-error" role="alert"><span>{error || data.error}</span>{data.error && <Button variant="ghost" onClick={() => void data.flush()}>重试保存</Button>}<IconButton aria-label="关闭操作提示" onClick={() => setError("")}><X size={14} /></IconButton></div>}
+      {taskError && <div className="notes-error" role="alert"><span>任务列表读取失败：{taskError}</span><Button variant="ghost" onClick={refreshWorkTasks}>重新加载</Button></div>}
       {data.recovered.map((draft, index) => <div className="notes-recovery" key={draft.id + ":" + index} role="status"><span>“{draft.title}”有一份与当前页面不同的本地草稿，原页面已保留。</span><Button disabled={busy} onClick={() => void run(async () => { const restored = await data.restoreRecovered(draft); openNote(restored.id); })}>恢复为新页面</Button></div>)}
       <div className="notes-body">
         <div className="notes-scroll"><article className="notes-document">
@@ -286,7 +291,7 @@ export function NotesWorkspace({ sidebarOpen, onToggleSidebar }: Props) {
     </Modal>}
     {taskText !== null && <Modal title="转入任务看板" onClose={() => setTaskText(null)}><form onSubmit={event => { event.preventDefault(); void run(async () => {
       if (!taskText.trim()) throw new Error("请输入任务名称。");
-      const task = await workApi.saveTask({ id: "", title: taskText.trim().split("\n")[0].slice(0, 200), description: taskText, status: "待办", priority: "不重要不紧急", project: "", date: "", endDate: "", parentId: "" });
+      const task = await saveWorkTask({ id: "", title: taskText.trim().split("\n")[0].slice(0, 200), description: taskText, status: "待办", priority: "不重要不紧急", project: "", date: "", endDate: "", parentId: "" });
       setTaskText(null); location.hash = `board/${encodeURIComponent(task.id)}`;
     }); }}><h2>转入任务看板</h2><Textarea aria-label="任务内容" autoFocus value={taskText} onChange={event => setTaskText(event.target.value)} rows={4} required />{error && <p className="notes-danger" role="alert">{error}</p>}<footer><Button onClick={() => setTaskText(null)}>取消</Button><Button type="submit" variant="primary" disabled={busy}>创建任务</Button></footer></form></Modal>}
   </>;
